@@ -1,0 +1,207 @@
+"use server";
+
+import { db } from "@/lib/db";
+import { formatBRL } from "@/lib/money";
+import { formatQty } from "@/lib/units";
+
+// ─── Histórico de produções ───────────────────────────────────────────────────
+
+export type ProductionBatchItem = Awaited<ReturnType<typeof getProductionBatches>>[number];
+
+export async function getProductionBatches() {
+  return db.productionBatch.findMany({
+    orderBy: { producedAt: "desc" },
+    include: {
+      product: { select: { id: true, name: true } },
+      flavor: { select: { id: true, name: true } },
+      recipe: { select: { id: true, name: true, yieldQty: true } },
+      fillings: {
+        include: { flavor: { select: { id: true, name: true } } },
+      },
+    },
+  });
+}
+
+// ─── Estoque atual de cookies ─────────────────────────────────────────────────
+
+export type CookieStockEntry = {
+  productId: string;
+  productName: string;
+  flavorId: string | null;
+  flavorName: string | null;
+  produced: number;
+  sold: number;
+  current: number;
+};
+
+export async function getCookieStock(): Promise<CookieStockEntry[]> {
+  const movements = await db.stockMovement.groupBy({
+    by: ["productId", "flavorId"],
+    _sum: { quantity: true },
+  });
+
+  const products = await db.product.findMany({
+    select: { id: true, name: true },
+  });
+  const flavors = await db.flavor.findMany({
+    select: { id: true, name: true },
+  });
+
+  const productMap = new Map(products.map((p) => [p.id, p.name]));
+  const flavorMap = new Map(flavors.map((f) => [f.id, f.name]));
+
+  const produced = await db.stockMovement.groupBy({
+    by: ["productId", "flavorId"],
+    where: { type: "PRODUCTION" },
+    _sum: { quantity: true },
+  });
+  const sold = await db.stockMovement.groupBy({
+    by: ["productId", "flavorId"],
+    where: { type: "SALE" },
+    _sum: { quantity: true },
+  });
+
+  const producedMap = new Map(
+    produced.map((r) => [`${r.productId}|${r.flavorId}`, r._sum.quantity ?? 0]),
+  );
+  const soldMap = new Map(
+    sold.map((r) => [`${r.productId}|${r.flavorId}`, Math.abs(r._sum.quantity ?? 0)]),
+  );
+
+  const keys = new Set([
+    ...producedMap.keys(),
+    ...soldMap.keys(),
+  ]);
+
+  return Array.from(keys)
+    .map((key) => {
+      const [productId, flavorIdRaw] = key.split("|");
+      const flavorId = flavorIdRaw === "null" ? null : flavorIdRaw;
+      const p = producedMap.get(key) ?? 0;
+      const s = soldMap.get(key) ?? 0;
+      return {
+        productId,
+        productName: productMap.get(productId) ?? productId,
+        flavorId,
+        flavorName: flavorId ? (flavorMap.get(flavorId) ?? flavorId) : null,
+        produced: p,
+        sold: s,
+        current: p - s,
+      };
+    })
+    .sort((a, b) => a.productName.localeCompare(b.productName));
+}
+
+// ─── Estoque de ingredientes (despensa) ───────────────────────────────────────
+
+export type PantryEntry = {
+  ingredientId: string;
+  ingredientName: string;
+  baseUnit: string;
+  purchased: number;
+  consumed: number;
+  current: number;
+  minStock: number | null;
+  belowMin: boolean;
+  latestPriceCents: number | null;    // preço por unidade base (centavos)
+  latestMarket: string | null;
+};
+
+export async function getPantryStock(): Promise<PantryEntry[]> {
+  const ingredients = await db.ingredient.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      purchases: {
+        orderBy: { purchasedAt: "desc" },
+        take: 1,
+        include: { market: { select: { name: true } } },
+      },
+    },
+  });
+
+  // Total comprado por ingrediente
+  const purchaseSums = await db.ingredientPurchase.groupBy({
+    by: ["ingredientId"],
+    _sum: { quantity: true },
+  });
+  const purchaseMap = new Map(
+    purchaseSums.map((r) => [r.ingredientId, r._sum.quantity ?? 0]),
+  );
+
+  // Total consumido em produções (via IngredientConsumption — calculado abaixo)
+  // Para calcular o consumo real precisamos percorrer as produções com receita
+  const consumptionMap = await buildConsumptionMap();
+
+  return ingredients.map((ing) => {
+    const purchased = purchaseMap.get(ing.id) ?? 0;
+    const consumed = consumptionMap.get(ing.id) ?? 0;
+    const current = purchased - consumed;
+    const lastPurchase = ing.purchases[0];
+    const pricePerUnit =
+      lastPurchase && lastPurchase.quantity > 0
+        ? lastPurchase.pricePaidCents / lastPurchase.quantity
+        : null;
+
+    return {
+      ingredientId: ing.id,
+      ingredientName: ing.name,
+      baseUnit: ing.baseUnit,
+      purchased,
+      consumed,
+      current,
+      minStock: ing.minStock ?? null,
+      belowMin: ing.minStock != null && current < ing.minStock,
+      latestPriceCents: pricePerUnit !== null ? Math.round(pricePerUnit) : null,
+      latestMarket: lastPurchase?.market.name ?? null,
+    };
+  });
+}
+
+/** Constrói mapa ingredientId → quantidade consumida em produções */
+async function buildConsumptionMap(): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+
+  const batches = await db.productionBatch.findMany({
+    where: { recipeId: { not: null } },
+    include: {
+      recipe: {
+        include: { ingredients: true },
+      },
+      fillings: {
+        include: {
+          flavor: {
+            include: {
+              fillingRecipe: { include: { ingredients: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  for (const batch of batches) {
+    if (!batch.recipe) continue;
+    const yieldQty = batch.recipe.yieldQty || 1;
+    // Quantos "lotes de receita" foram feitos
+    const batches_count = batch.quantity / yieldQty;
+
+    // Consumo base
+    for (const ri of batch.recipe.ingredients) {
+      const prev = map.get(ri.ingredientId) ?? 0;
+      map.set(ri.ingredientId, prev + ri.quantity * batches_count);
+    }
+
+    // Consumo de recheios
+    for (const filling of batch.fillings) {
+      const fillingRecipe = filling.flavor.fillingRecipe;
+      if (!fillingRecipe) continue;
+      for (const ri of fillingRecipe.ingredients) {
+        const prev = map.get(ri.ingredientId) ?? 0;
+        // filling.quantity cookies recheados × ingrediente por cookie
+        map.set(ri.ingredientId, prev + ri.quantity * filling.quantity);
+      }
+    }
+  }
+
+  return map;
+}

@@ -1,0 +1,425 @@
+// Cookies App — Prisma schema
+// Dinheiro sempre em CENTAVOS (Int). Snapshots de preço garantem métricas históricas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// AUTH (BetterAuth)
+// ─────────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  role          Role     @default(USER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions         Session[]
+  accounts         Account[]
+  sales            Sale[]
+  productionBatches ProductionBatch[]
+  ingredientPurchases IngredientPurchase[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// Pré-cadastro / allowlist: só e-mails aqui podem acessar o app.
+// O role definido aqui é aplicado ao usuário no primeiro login.
+model AllowedEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role     @default(USER)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("allowed_email")
+}
+
+// ─────────────────────────────────────────────
+// CATÁLOGO ("Valores"): produtos, sabores, preços
+// ─────────────────────────────────────────────
+
+model Product {
+  id        String   @id @default(cuid())
+  name      String // ex.: "Cookie"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  flavors        Flavor[]
+  priceListItems PriceListItem[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  productionBatches ProductionBatch[]
+
+  @@unique([name])
+  @@map("product")
+}
+
+model Flavor {
+  id        String   @id @default(cuid())
+  name      String // ex.: "Chocolate"
+  active    Boolean  @default(true)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Receita de recheio (ingredientes por unidade deste sabor)
+  fillingRecipeId String?
+  fillingRecipe   Recipe? @relation("FlavorFillingRecipe", fields: [fillingRecipeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  priceListItems PriceListItem[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  productionBatches ProductionBatch[]
+  productionFillings ProductionFilling[]
+
+  @@unique([productId, name])
+  @@map("flavor")
+}
+
+// Preço de venda ATUAL por produto+sabor.
+model PriceListItem {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  flavorId   String?
+  flavor     Flavor?  @relation(fields: [flavorId], references: [id], onDelete: Cascade)
+  priceCents Int // preço unitário atual em centavos
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  history PriceHistory[]
+
+  @@unique([productId, flavorId])
+  @@map("price_list_item")
+}
+
+model PriceHistory {
+  id              String        @id @default(cuid())
+  priceListItemId String
+  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  priceCents      Int
+  changedAt       DateTime      @default(now())
+
+  @@map("price_history")
+}
+
+// ─────────────────────────────────────────────
+// CLIENTES
+// ─────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  sector    String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales Sale[]
+
+  @@map("customer")
+}
+
+// ─────────────────────────────────────────────
+// VENDAS
+// ─────────────────────────────────────────────
+
+enum SaleStatus {
+  PAID
+  PENDING
+}
+
+enum ForecastPreset {
+  DAY_FIVE
+  FIFTH_BUSINESS_DAY
+  CUSTOM
+}
+
+model Sale {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  customerId   String?
+  customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName String?    // snapshot do nome no momento da venda
+  soldAt       DateTime   @default(now())
+  status       SaleStatus @default(PAID)
+  paidAt       DateTime?
+
+  // Previsão de recebimento (apenas quando PENDING)
+  paymentForecastDate DateTime?
+  forecastPreset      ForecastPreset?
+
+  // Snapshot do total (soma dos itens) em centavos
+  totalCents Int @default(0)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items SaleItem[]
+
+  @@index([status, paymentForecastDate])
+  @@index([soldAt])
+  @@map("sale")
+}
+
+model SaleItem {
+  id       String  @id @default(cuid())
+  saleId   String
+  sale     Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  flavorId  String?
+  flavor    Flavor? @relation(fields: [flavorId], references: [id])
+
+  quantity Int
+
+  // SNAPSHOTS — congelados no momento da venda
+  unitPriceSnapshot  Int // centavos
+  flavorNameSnapshot String?
+  productNameSnapshot String
+
+  @@map("sale_item")
+}
+
+// ─────────────────────────────────────────────
+// INGREDIENTES, MERCADOS E COMPRAS
+// ─────────────────────────────────────────────
+
+enum BaseUnit {
+  G // grama
+  ML // mililitro
+  UN // unidade
+}
+
+model Ingredient {
+  id        String   @id @default(cuid())
+  name      String // ex.: "Açúcar"
+  baseUnit  BaseUnit @default(G)
+  minStock  Float?   @default(0) // estoque mínimo na unidade base (para alertas)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases         IngredientPurchase[]
+  recipeIngredients RecipeIngredient[]
+  shoppingItems     ShoppingListItem[]
+
+  @@unique([name])
+  @@map("ingredient")
+}
+
+model Market {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases IngredientPurchase[]
+
+  @@unique([name])
+  @@map("market")
+}
+
+// Compra de ingrediente: base para custo por unidade.
+model IngredientPurchase {
+  id           String     @id @default(cuid())
+  marketId     String
+  market       Market     @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+
+  quantity   Float // quantidade comprada na unidade abaixo
+  unit       BaseUnit // unidade da compra (ex.: comprei em KG -> normalizar p/ base)
+  pricePaidCents Int // valor pago em centavos
+  purchasedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([ingredientId, purchasedAt])
+  @@map("ingredient_purchase")
+}
+
+// ─────────────────────────────────────────────
+// RECEITAS
+// ─────────────────────────────────────────────
+
+model Recipe {
+  id        String   @id @default(cuid())
+  name      String
+  yieldQty  Int      @default(1) // quantos cookies a receita rende (para receitas base)
+  steps     Json? // blocos do editor (BlockNote), estilo Notion
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients RecipeIngredient[]
+  productionBatches ProductionBatch[]
+  // Sabores que usam esta receita como recheio
+  flavorFillings Flavor[] @relation("FlavorFillingRecipe")
+
+  @@unique([name])
+  @@map("recipe")
+}
+
+model RecipeIngredient {
+  id           String     @id @default(cuid())
+  recipeId     String
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  quantity     Float // quantidade na unidade base do ingrediente
+
+  @@unique([recipeId, ingredientId])
+  @@map("recipe_ingredient")
+}
+
+// ─────────────────────────────────────────────
+// ESTOQUE (event sourcing)
+// ─────────────────────────────────────────────
+
+model ProductionBatch {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  flavorId  String?
+  flavor    Flavor?  @relation(fields: [flavorId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  // Receita base usada (para dedução de ingredientes e cálculo de custo)
+  recipeId  String?
+  recipe    Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  quantity  Int // quantos cookies foram feitos (base)
+  notes     String?
+  producedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  movement  StockMovement?
+  fillings  ProductionFilling[] // recheios aplicados neste lote
+
+  @@map("production_batch")
+}
+
+// Recheios aplicados dentro de um lote de produção
+model ProductionFilling {
+  id                String          @id @default(cuid())
+  productionBatchId String
+  productionBatch   ProductionBatch @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
+  flavorId          String
+  flavor            Flavor          @relation(fields: [flavorId], references: [id])
+  quantity          Int             // quantos cookies deste lote receberam este recheio
+
+  @@map("production_filling")
+}
+
+enum StockMovementType {
+  PRODUCTION // +
+  SALE // -
+  ADJUSTMENT // ±
+}
+
+model StockMovement {
+  id        String            @id @default(cuid())
+  productId String
+  product   Product           @relation(fields: [productId], references: [id])
+  flavorId  String?
+  flavor    Flavor?           @relation(fields: [flavorId], references: [id])
+  type      StockMovementType
+  quantity  Int // positivo ou negativo
+  reason    String?
+
+  // vínculos opcionais com a origem
+  productionBatchId String?          @unique
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  saleId            String?
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, flavorId])
+  @@map("stock_movement")
+}
+
+model ShoppingListItem {
+  id           String      @id @default(cuid())
+  ingredientId String?
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  label        String // texto livre caso não seja um ingrediente cadastrado
+  quantity     Float?
+  unit         BaseUnit?
+  done         Boolean     @default(false)
+  autoGenerated Boolean    @default(false) // gerado por estoque baixo
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("shopping_list_item")
+}

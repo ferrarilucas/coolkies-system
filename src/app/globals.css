@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 33% 97%;
+    --foreground: 25 30% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 30% 15%;
+
+    /* marrom cookie */
+    --primary: 25 45% 38%;
+    --primary-foreground: 36 40% 97%;
+
+    /* creme / caramelo */
+    --secondary: 33 45% 90%;
+    --secondary-foreground: 25 35% 25%;
+
+    --muted: 33 25% 92%;
+    --muted-foreground: 25 12% 45%;
+
+    /* chocolate */
+    --accent: 22 40% 28%;
+    --accent-foreground: 36 40% 97%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 142 55% 38%;
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 25 35% 15%;
+
+    --border: 30 20% 86%;
+    --input: 30 20% 86%;
+    --ring: 25 45% 38%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 25 18% 10%;
+    --foreground: 36 30% 94%;
+
+    --card: 25 16% 13%;
+    --card-foreground: 36 30% 94%;
+
+    --popover: 25 16% 13%;
+    --popover-foreground: 36 30% 94%;
+
+    --primary: 25 50% 55%;
+    --primary-foreground: 25 30% 12%;
+
+    --secondary: 25 12% 20%;
+    --secondary-foreground: 36 30% 94%;
+
+    --muted: 25 12% 20%;
+    --muted-foreground: 33 12% 65%;
+
+    --accent: 22 35% 35%;
+    --accent-foreground: 36 30% 94%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 142 50% 45%;
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 85% 55%;
+    --warning-foreground: 25 30% 12%;
+
+    --border: 25 12% 24%;
+    --input: 25 12% 24%;
+    --ring: 25 50% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* valores monetários alinhados */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ─── BlockNote editor ─── */
+/* Reduz o padding lateral padrão (54px) para ficar alinhado com o card */
+.bn-editor {
+  padding-inline: 1rem !important;
+  padding-block: 0.75rem !important;
+  font-size: 0.9375rem !important;
+}
+
+/* Garante que o container não adicione fundo extra */
+.bn-container {
+  background-color: transparent !important;
+}
+
+/* Side menu (drag handle) mais discreto */
+.bn-side-menu {
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.bn-side-menu:hover {
+  opacity: 1;
+}
