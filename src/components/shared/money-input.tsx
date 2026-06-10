@@ -65,39 +65,20 @@ export function MoneyInput({
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  // Extrai apenas os dígitos do que está no campo e interpreta como centavos.
+  // Funciona com teclado virtual (mobile) e físico, pois reage ao evento
+  // `input`/`change` em vez de `keydown` — e o campo NÃO é readOnly, então o
+  // teclado numérico abre normalmente no celular.
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (disabled) return;
-    if (e.ctrlKey || e.metaKey) return;
-
-    if (e.key >= "0" && e.key <= "9") {
-      e.preventDefault();
-      const digit = Number(e.key);
-      setCents((prev) => {
-        const next = prev * 10 + digit;
-        return next > MAX_CENTS ? prev : next;
-      });
-    } else if (e.key === "Backspace") {
-      e.preventDefault();
-      setCents((prev) => Math.floor(prev / 10));
-    } else if (e.key === "Delete") {
-      e.preventDefault();
-      setCents(() => 0);
-    } else {
-      e.preventDefault();
-    }
+    const digits = e.target.value.replace(/\D/g, "");
+    const parsed = digits ? Number.parseInt(digits, 10) : 0;
+    setCents(() => (parsed > MAX_CENTS ? cents : parsed));
   }
 
-  function handleBeforeInput(e: InputEvent) {
-    if (disabled) return;
-    e.preventDefault();
-    const char = e.data;
-    if (char && char >= "0" && char <= "9") {
-      const digit = Number(char);
-      setCents((prev) => {
-        const next = prev * 10 + digit;
-        return next > MAX_CENTS ? prev : next;
-      });
-    }
+  // Seleciona tudo ao focar: digitar substitui o valor de forma previsível.
+  function handleFocus(e: React.FocusEvent<HTMLInputElement>) {
+    e.target.select();
   }
 
   return (
@@ -107,16 +88,16 @@ export function MoneyInput({
         id={id}
         type="text"
         inputMode="numeric"
-        readOnly
+        autoComplete="off"
         disabled={disabled}
         value={formatDisplay(cents)}
-        onKeyDown={handleKeyDown}
-        onBeforeInput={handleBeforeInput as unknown as React.FormEventHandler<HTMLInputElement>}
+        onChange={handleChange}
+        onFocus={handleFocus}
         autoFocus={autoFocus}
         className={cn(
           "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
           "ring-offset-background focus-visible:outline-none focus-visible:ring-2",
-          "focus-visible:ring-ring focus-visible:ring-offset-2 tabular-nums cursor-text",
+          "focus-visible:ring-ring focus-visible:ring-offset-2 tabular-nums",
           "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
