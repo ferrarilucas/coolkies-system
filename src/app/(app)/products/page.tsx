@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, ChefHat, Trash2 } from "lucide-react";
+import { Plus, ChefHat, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export default async function CookiesPage() {
   return (
     <div>
       <PageHeader
-        title="Cookies"
+        title="Coolkies"
         description="Estoque de produto final e histórico de produções."
         action={
           <Button asChild size="sm">
@@ -106,7 +106,15 @@ export default async function CookiesPage() {
                       {b.notes && ` · ${b.notes}`}
                     </p>
                   </div>
-                  <DeleteProductionButton id={b.id} />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                      <Link href={`/products/${b.id}/edit`}>
+                        <Pencil className="size-4" />
+                        <span className="sr-only">Editar</span>
+                      </Link>
+                    </Button>
+                    <DeleteProductionButton id={b.id} />
+                  </div>
                 </div>
               ))}
             </div>

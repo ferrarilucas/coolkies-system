@@ -10,42 +10,72 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { createProductionBatch } from "@/server/actions/production";
+import { createProductionBatch, updateProductionBatch } from "@/server/actions/production";
 
 interface Product { id: string; name: string }
 interface Flavor { id: string; name: string; productId: string; fillingRecipeId: string | null }
 interface Recipe { id: string; name: string; yieldQty: number }
 
 interface Props {
+  batchId?: string; // se presente, é edição
   products: Product[];
   flavors: Flavor[];
   recipes: Recipe[];
+  initial?: {
+    productId: string;
+    flavorId: string | null;
+    recipeId: string | null;
+    quantity: number;
+    notes: string;
+    producedAt: string;
+    fillings: { flavorId: string; quantity: number }[];
+  };
 }
 
 type FillingLine = { key: string; flavorId: string; quantity: number };
 
-export function ProductionForm({ products, flavors, recipes }: Props) {
+const NO_RECIPE = "__none__";
+const NO_FLAVOR = "__none__";
+
+export function ProductionForm({ batchId, products, flavors, recipes, initial }: Props) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
 
-  const [productId, setProductId] = useState(products.length === 1 ? products[0].id : "");
-  const NO_RECIPE = "__none__";
-  const [recipeId, setRecipeId] = useState(NO_RECIPE);
-  const [quantity, setQuantity] = useState("12");
-  const [notes, setNotes] = useState("");
-  const [producedAt, setProducedAt] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [fillings, setFillings] = useState<FillingLine[]>([]);
+  const [productId, setProductId] = useState(
+    initial?.productId ?? (products.length === 1 ? products[0].id : "")
+  );
+  const [flavorId, setFlavorId] = useState<string>(initial?.flavorId ?? NO_FLAVOR);
+  const [recipeId, setRecipeId] = useState(initial?.recipeId ?? NO_RECIPE);
+  const [quantity, setQuantity] = useState(String(initial?.quantity ?? 12));
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [producedAt, setProducedAt] = useState(
+    initial?.producedAt ?? format(new Date(), "yyyy-MM-dd")
+  );
+  const [fillings, setFillings] = useState<FillingLine[]>(
+    initial?.fillings.map((f) => ({ ...f, key: crypto.randomUUID() })) ?? []
+  );
 
+  // Sabores do produto selecionado
   const productFlavors = flavors.filter((f) => f.productId === productId);
+  // Sabores "base" = sem receita de recheio (ex: Tradicional)
+  const baseFlavors = productFlavors.filter((f) => !f.fillingRecipeId);
+  // Sabores com recheio = só aparecem na seção de recheios
+  const flavorsWithFilling = productFlavors.filter((f) => f.fillingRecipeId);
+
   const selectedRecipe = recipeId !== NO_RECIPE ? recipes.find((r) => r.id === recipeId) : undefined;
 
+  function handleProductChange(pid: string) {
+    setProductId(pid);
+    setFlavorId(NO_FLAVOR);
+    setFillings([]);
+  }
+
   function addFilling() {
-    const available = productFlavors.filter(
-      (f) => f.fillingRecipeId && !fillings.some((l) => l.flavorId === f.id),
+    const available = flavorsWithFilling.filter(
+      (f) => !fillings.some((l) => l.flavorId === f.id),
     );
     if (available.length === 0) return;
     setFillings((prev) => [
@@ -65,15 +95,21 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
   const totalQty = parseInt(quantity) || 0;
   const fillingsTotal = fillings.reduce((s, f) => s + (f.quantity || 0), 0);
   const unfilled = totalQty - fillingsTotal;
+  // Quando há recheios, todos os cookies devem ser distribuídos
+  const fillingsIncomplete = fillings.length > 0 && fillingsTotal < totalQty;
+  const fillingsExceeded = fillingsTotal > totalQty;
+  const selectedFillingIds = new Set(fillings.map((f) => f.flavorId));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!productId) { toast.error("Selecione um produto."); return; }
     if (totalQty <= 0) { toast.error("Quantidade deve ser maior que zero."); return; }
-    if (fillingsTotal > totalQty) { toast.error("Total de recheados excede a quantidade produzida."); return; }
+    if (fillingsExceeded) { toast.error("Total de recheados excede a quantidade produzida."); return; }
+    if (fillingsIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre os recheios (faltam ${unfilled}).`); return; }
 
     const fd = new FormData();
     fd.set("productId", productId);
+    fd.set("flavorId", flavorId === NO_FLAVOR ? "" : flavorId);
     fd.set("recipeId", recipeId === NO_RECIPE ? "" : recipeId);
     fd.set("quantity", String(totalQty));
     fd.set("notes", notes);
@@ -83,30 +119,31 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
     ));
 
     startSave(async () => {
-      const res = await createProductionBatch(fd);
+      const res = batchId
+        ? await updateProductionBatch(batchId, fd)
+        : await createProductionBatch(fd);
+
       if (res.ok) {
-        toast.success("Produção registrada.");
+        toast.success(batchId ? "Produção atualizada." : "Produção registrada.");
         router.push("/products");
         router.refresh();
       } else {
-        toast.error(res.error ?? "Erro ao registrar.");
+        toast.error(res.error ?? "Erro ao salvar.");
       }
     });
   }
 
-  const flavorsWithFilling = productFlavors.filter((f) => f.fillingRecipeId);
-  const selectedFillingIds = new Set(fillings.map((f) => f.flavorId));
-
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
 
-      {/* Produto + Receita + Data */}
+      {/* ── Produção ──────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Produção</h2>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Produto</Label>
-            <Select value={productId} onValueChange={(v) => { setProductId(v); setFillings([]); }}>
+            <Select value={productId} onValueChange={handleProductChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o produto…" />
               </SelectTrigger>
@@ -117,6 +154,27 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Sabor base — só aparece se o produto tem sabores sem recheio */}
+          {productId && baseFlavors.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                Sabor <span className="text-muted-foreground">(opcional)</span>
+              </Label>
+              <Select value={flavorId} onValueChange={setFlavorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sabor…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_FLAVOR}>Sem sabor específico</SelectItem>
+                  {baseFlavors.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>
               Receita base <span className="text-muted-foreground">(opcional)</span>
@@ -136,6 +194,7 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
             </Select>
           </div>
         </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="qty">Quantidade produzida</Label>
@@ -163,36 +222,37 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
             />
           </div>
         </div>
+
         <div className="space-y-2">
           <Label htmlFor="notes">Observações <span className="text-muted-foreground">(opcional)</span></Label>
           <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </div>
       </section>
 
-      <Separator />
+      {/* ── Recheios — só aparece se há sabores com recheio ──────────── */}
+      {productId && flavorsWithFilling.length > 0 && (
+        <>
+          <Separator />
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Recheios
+              </h2>
+              {totalQty > 0 && (
+                <span className="text-xs tabular-nums">
+                  {fillingsExceeded ? (
+                    <span className="text-destructive">Excede em {-unfilled}</span>
+                  ) : fillingsIncomplete ? (
+                    <span className="text-warning-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
+                  ) : fillingsTotal === totalQty ? (
+                    <span className="text-success">Todos distribuídos ✓</span>
+                  ) : (
+                    <span className="text-muted-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
+                  )}
+                </span>
+              )}
+            </div>
 
-      {/* Recheios */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Recheios
-          </h2>
-          {totalQty > 0 && (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {unfilled >= 0
-                ? `${unfilled} sem recheio · ${fillingsTotal} recheados`
-                : <span className="text-destructive">Excede em {-unfilled}</span>}
-            </span>
-          )}
-        </div>
-
-        {flavorsWithFilling.length === 0 && productId ? (
-          <p className="text-sm text-muted-foreground py-2">
-            Nenhum sabor com receita de recheio cadastrada para este produto.{" "}
-            Configure em <strong>Cadastros → Catálogo</strong>.
-          </p>
-        ) : (
-          <>
             <div className="space-y-2">
               {fillings.map((line) => (
                 <div key={line.key} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
@@ -242,18 +302,18 @@ export function ProductionForm({ products, flavors, recipes }: Props) {
                 Adicionar recheio
               </Button>
             )}
-          </>
-        )}
-      </section>
+          </section>
+        </>
+      )}
 
-      {/* Ações */}
+      {/* ── Ações ─────────────────────────────────────────────────────── */}
       <div className="flex justify-end gap-3 pb-8">
         <Button type="button" variant="outline" onClick={() => router.push("/products")} disabled={saving}>
           Cancelar
         </Button>
         <Button type="submit" disabled={saving || !productId || totalQty <= 0}>
           <ChefHat className="size-4" />
-          {saving ? "Registrando…" : "Registrar produção"}
+          {saving ? "Salvando…" : batchId ? "Salvar produção" : "Registrar produção"}
         </Button>
       </div>
     </form>

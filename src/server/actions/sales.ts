@@ -25,6 +25,24 @@ type SaleItemInput = {
   unitPriceCents: number;
 };
 
+type DiscountType = "PERCENTAGE" | "FIXED";
+
+/** Calcula o valor do desconto em centavos a partir do subtotal bruto. */
+function calcDiscountCents(subtotal: number, type: DiscountType | null, value: number): number {
+  if (!type || value <= 0) return 0;
+  if (type === "PERCENTAGE") return Math.round(subtotal * value / 100);
+  return Math.min(value, subtotal); // FIXED — não pode ser negativo
+}
+
+// ─── Parsear campos comuns ────────────────────────────────────────────────────
+
+function parseDiscount(formData: FormData): { discountType: DiscountType | null; discountValue: number } {
+  const raw = String(formData.get("discountType") ?? "").trim();
+  const discountType = (raw === "PERCENTAGE" || raw === "FIXED") ? raw as DiscountType : null;
+  const discountValue = discountType ? Math.max(0, parseInt(String(formData.get("discountValue") ?? "0")) || 0) : 0;
+  return { discountType, discountValue };
+}
+
 // ─── Criar venda ─────────────────────────────────────────────────────────────
 
 export async function createSale(formData: FormData): Promise<ActionResult<{ id: string }>> {
@@ -41,6 +59,8 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
   const forecastDateRaw = String(formData.get("forecastDate") ?? "").trim();
   const paymentForecastDate = forecastDateRaw ? new Date(`${forecastDateRaw}T12:00:00`) : null;
 
+  const { discountType, discountValue } = parseDiscount(formData);
+
   const itemsRaw = String(formData.get("items") ?? "[]");
   let items: SaleItemInput[] = [];
   try {
@@ -51,7 +71,9 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
 
   if (items.length === 0) return { ok: false, error: "Adicione pelo menos um item." };
 
-  const totalCents = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  const subtotalCents = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
+  const totalCents = subtotalCents - discountCents;
 
   try {
     const sale = await db.$transaction(async (tx) => {
@@ -66,6 +88,8 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
           paidAt: status === "PAID" ? new Date() : null,
           paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
           forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
+          discountType,
+          discountValue,
           totalCents,
           items: {
             create: items.map((item) => ({
@@ -80,7 +104,6 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
         },
       });
 
-      // Gera StockMovement negativo para cada item
       await tx.stockMovement.createMany({
         data: items.map((item) => ({
           productId: item.productId,
@@ -117,6 +140,8 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const forecastDateRaw = String(formData.get("forecastDate") ?? "").trim();
   const paymentForecastDate = forecastDateRaw ? new Date(`${forecastDateRaw}T12:00:00`) : null;
 
+  const { discountType, discountValue } = parseDiscount(formData);
+
   const itemsRaw = String(formData.get("items") ?? "[]");
   let items: SaleItemInput[] = [];
   try {
@@ -126,14 +151,13 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   }
   if (items.length === 0) return { ok: false, error: "Adicione pelo menos um item." };
 
-  const totalCents = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  const subtotalCents = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
+  const totalCents = subtotalCents - discountCents;
 
   try {
     await db.$transaction(async (tx) => {
-      // Remove movimentações antigas
       await tx.stockMovement.deleteMany({ where: { saleId: id } });
-
-      // Recria itens e movimentações
       await tx.saleItem.deleteMany({ where: { saleId: id } });
 
       await tx.sale.update({
@@ -147,6 +171,8 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
           paidAt: status === "PAID" ? new Date() : null,
           paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
           forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
+          discountType,
+          discountValue,
           totalCents,
           items: {
             create: items.map((item) => ({

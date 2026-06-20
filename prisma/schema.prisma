@@ -205,6 +205,11 @@ enum ForecastPreset {
   CUSTOM
 }
 
+enum DiscountType {
+  PERCENTAGE // valor em inteiro, ex: 10 = 10%
+  FIXED      // valor em centavos
+}
+
 model Sale {
   id           String     @id @default(cuid())
   userId       String
@@ -220,7 +225,11 @@ model Sale {
   paymentForecastDate DateTime?
   forecastPreset      ForecastPreset?
 
-  // Snapshot do total (soma dos itens) em centavos
+  // Desconto aplicado à venda
+  discountType  DiscountType? // PERCENTAGE ou FIXED
+  discountValue Int           @default(0) // % inteiro (ex: 10) ou centavos
+
+  // Snapshot do total (soma dos itens menos desconto) em centavos
   totalCents Int @default(0)
 
   notes     String?

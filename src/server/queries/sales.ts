@@ -1,24 +1,36 @@
 import { db } from "@/lib/db";
 
-// ─── Lista de vendas ─────────────────────────────────────────────────────────
+// ─── Lista de vendas (paginada) ───────────────────────────────────────────────
 
-export type SaleListItem = Awaited<ReturnType<typeof getSales>>[number];
+export const SALES_PAGE_SIZE = 20;
 
-export async function getSales(filter?: "PAID" | "PENDING") {
-  return db.sale.findMany({
-    where: filter ? { status: filter } : undefined,
-    orderBy: { soldAt: "desc" },
-    include: {
-      items: {
-        select: {
-          quantity: true,
-          unitPriceSnapshot: true,
-          productNameSnapshot: true,
-          flavorNameSnapshot: true,
+export type SaleListItem = Awaited<ReturnType<typeof getSales>>["items"][number];
+
+export async function getSales(filter?: "PAID" | "PENDING", page = 1) {
+  const where = filter ? { status: filter } : undefined;
+  const skip = (page - 1) * SALES_PAGE_SIZE;
+
+  const [items, total] = await Promise.all([
+    db.sale.findMany({
+      where,
+      orderBy: { soldAt: "desc" },
+      skip,
+      take: SALES_PAGE_SIZE,
+      include: {
+        items: {
+          select: {
+            quantity: true,
+            unitPriceSnapshot: true,
+            productNameSnapshot: true,
+            flavorNameSnapshot: true,
+          },
         },
       },
-    },
-  });
+    }),
+    db.sale.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize: SALES_PAGE_SIZE, pageCount: Math.ceil(total / SALES_PAGE_SIZE) };
 }
 
 // ─── Detalhe de uma venda (para edição) ──────────────────────────────────────
@@ -73,7 +85,6 @@ export async function getCatalogForSale() {
   return products.map((p) => ({
     id: p.id,
     name: p.name,
-    // preço genérico do produto (sem sabor)
     genericPriceCents: p.priceListItems[0]?.priceCents ?? null,
     flavors: p.flavors.map((f) => ({
       id: f.id,

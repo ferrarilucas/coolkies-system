@@ -7,17 +7,42 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Pagination } from "@/components/ui/pagination";
 import { getSales } from "@/server/queries/sales";
 import { formatBRL } from "@/lib/money";
 import { MarkAsPaidButton } from "@/components/sales/mark-as-paid-button";
 import { DeleteSaleButton } from "@/components/sales/delete-sale-button";
 
-export default async function SalesPage() {
-  const [all, paid, pending] = await Promise.all([
-    getSales(),
-    getSales("PAID"),
-    getSales("PENDING"),
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+type SearchParams = Promise<{ page?: string; tab?: string }>;
+
+export default async function SalesPage({ searchParams }: { searchParams: SearchParams }) {
+  const sp = await searchParams;
+  const tab = (sp.tab as "all" | "paid" | "pending") ?? "all";
+  const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
+
+  const filter = tab === "paid" ? "PAID" : tab === "pending" ? "PENDING" : undefined;
+  const result = await getSales(filter, page);
+
+  // Contagens para os badges (página 1, tamanho grande para ter o total)
+  const [allCount, pendingCount, paidCount] = await Promise.all([
+    getSales(undefined, 1).then((r) => r.total),
+    getSales("PENDING", 1).then((r) => r.total),
+    getSales("PAID", 1).then((r) => r.total),
   ]);
+
+  function buildHref(p: number) {
+    const params = new URLSearchParams();
+    if (tab !== "all") params.set("tab", tab);
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    return `/sales${qs ? `?${qs}` : ""}`;
+  }
+
+  function tabHref(t: string) {
+    return t === "all" ? "/sales" : `/sales?tab=${t}`;
+  }
 
   return (
     <div>
@@ -34,64 +59,67 @@ export default async function SalesPage() {
         }
       />
 
-      <Tabs defaultValue="all">
+      <Tabs value={tab}>
         <TabsList className="w-full sm:w-auto mb-4">
-          <TabsTrigger value="all" className="flex-1 sm:flex-none">
-            Todas
-            <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{all.length}</Badge>
+          <TabsTrigger value="all" className="flex-1 sm:flex-none" asChild>
+            <Link href={tabHref("all")}>
+              Todas
+              <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{allCount}</Badge>
+            </Link>
           </TabsTrigger>
-          <TabsTrigger value="pending" className="flex-1 sm:flex-none">
-            Pendentes
-            {pending.length > 0 && (
-              <Badge className="ml-1.5 h-5 px-1.5 text-xs bg-warning text-warning-foreground">{pending.length}</Badge>
-            )}
+          <TabsTrigger value="pending" className="flex-1 sm:flex-none" asChild>
+            <Link href={tabHref("pending")}>
+              Pendentes
+              {pendingCount > 0 && (
+                <Badge className="ml-1.5 h-5 px-1.5 text-xs bg-warning text-warning-foreground">{pendingCount}</Badge>
+              )}
+            </Link>
           </TabsTrigger>
-          <TabsTrigger value="paid" className="flex-1 sm:flex-none">
-            Pagas
-            <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{paid.length}</Badge>
+          <TabsTrigger value="paid" className="flex-1 sm:flex-none" asChild>
+            <Link href={tabHref("paid")}>
+              Pagas
+              <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{paidCount}</Badge>
+            </Link>
           </TabsTrigger>
         </TabsList>
 
-        {(["all", "pending", "paid"] as const).map((tab) => {
-          const sales = tab === "all" ? all : tab === "paid" ? paid : pending;
-          return (
-            <TabsContent key={tab} value={tab}>
-              {sales.length === 0 ? (
-                <EmptyState
-                  icon={ShoppingCart}
-                  title="Nenhuma venda"
-                  description={tab === "pending" ? "Sem vendas pendentes." : tab === "paid" ? "Sem vendas pagas." : "Cadastre sua primeira venda."}
-                  action={tab === "all" ? (
-                    <Button asChild><Link href="/sales/new"><Plus />Nova venda</Link></Button>
-                  ) : undefined}
-                />
-              ) : (
-                <SaleList sales={sales} />
-              )}
-            </TabsContent>
-          );
-        })}
+        <TabsContent value={tab} forceMount>
+          {result.items.length === 0 ? (
+            <EmptyState
+              icon={ShoppingCart}
+              title="Nenhuma venda"
+              description={
+                tab === "pending" ? "Sem vendas pendentes." :
+                tab === "paid" ? "Sem vendas pagas." :
+                "Cadastre sua primeira venda."
+              }
+              action={tab === "all" ? (
+                <Button asChild><Link href="/sales/new"><Plus />Nova venda</Link></Button>
+              ) : undefined}
+            />
+          ) : (
+            <>
+              <div className="space-y-3">
+                {result.items.map((sale) => (
+                  <SaleCard key={sale.id} sale={sale} />
+                ))}
+              </div>
+              <Pagination
+                page={result.page}
+                pageCount={result.pageCount}
+                buildHref={buildHref}
+              />
+            </>
+          )}
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-// ─── Lista responsiva ────────────────────────────────────────────────────────
+// ─── Card de venda ───────────────────────────────────────────────────────────
 
-type Sale = Awaited<ReturnType<typeof getSales>>[number];
-
-function SaleList({ sales }: { sales: Sale[] }) {
-  return (
-    <>
-      {/* Cards — mobile e desktop */}
-      <div className="space-y-3">
-        {sales.map((sale) => (
-          <SaleCard key={sale.id} sale={sale} />
-        ))}
-      </div>
-    </>
-  );
-}
+type Sale = Awaited<ReturnType<typeof getSales>>["items"][number];
 
 function SaleCard({ sale }: { sale: Sale }) {
   const isPending = sale.status === "PENDING";
@@ -100,6 +128,8 @@ function SaleCard({ sale }: { sale: Sale }) {
       `${i.quantity}× ${i.productNameSnapshot}${i.flavorNameSnapshot ? ` ${i.flavorNameSnapshot}` : ""}`,
     )
     .join(", ");
+
+  const hasDiscount = sale.discountType && sale.discountValue > 0;
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -115,6 +145,14 @@ function SaleCard({ sale }: { sale: Sale }) {
         </div>
         <div className="text-right shrink-0">
           <p className="font-semibold tabular-nums">{formatBRL(sale.totalCents)}</p>
+          {hasDiscount && (
+            <p className="text-xs text-muted-foreground tabular-nums">
+              Desconto:{" "}
+              {sale.discountType === "PERCENTAGE"
+                ? `${sale.discountValue}%`
+                : formatBRL(sale.discountValue)}
+            </p>
+          )}
           <StatusBadge sale={sale} />
         </div>
       </div>

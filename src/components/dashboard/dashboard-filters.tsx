@@ -2,8 +2,9 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { format, subDays, startOfMonth, startOfYear } from "date-fns";
-import { SlidersHorizontal, X, Loader2 } from "lucide-react";
+import { format, subDays, startOfMonth, startOfYear, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { SlidersHorizontal, X, Loader2, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -112,6 +113,19 @@ export function DashboardFilters({
     current.marketId,
   ].filter(Boolean).length;
 
+  const rangeLabel = useMemo(() => {
+    try {
+      const f = parseISO(current.from);
+      const t = parseISO(current.to);
+      const sameYear = f.getFullYear() === t.getFullYear();
+      const fromFmt = format(f, sameYear ? "d MMM" : "d MMM yyyy", { locale: ptBR });
+      const toFmt = format(t, "d MMM yyyy", { locale: ptBR });
+      return `${fromFmt} – ${toFmt}`;
+    } catch {
+      return "";
+    }
+  }, [current.from, current.to]);
+
   return (
     <div className="mb-4 rounded-lg border bg-card">
       {/* Linha de presets + toggle */}
@@ -132,6 +146,13 @@ export function DashboardFilters({
         <div className="ml-auto flex items-center gap-2">
           {isPending && (
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          )}
+          {/* Período ativo — sempre visível */}
+          {rangeLabel && (
+            <span className="flex items-center gap-1.5 rounded-md border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              <CalendarDays className="size-3.5 shrink-0" />
+              {rangeLabel}
+            </span>
           )}
           <Button
             variant={activeCount > 0 ? "default" : "outline"}

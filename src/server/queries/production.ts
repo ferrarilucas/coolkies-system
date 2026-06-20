@@ -22,6 +22,21 @@ export async function getProductionBatches() {
   });
 }
 
+// ─── Detalhe de uma produção (para edição) ───────────────────────────────────
+
+export type ProductionBatchDetail = Awaited<ReturnType<typeof getProductionBatchById>>;
+
+export async function getProductionBatchById(id: string) {
+  return db.productionBatch.findUnique({
+    where: { id },
+    include: {
+      fillings: {
+        select: { flavorId: true, quantity: true },
+      },
+    },
+  });
+}
+
 // ─── Estoque atual de cookies ─────────────────────────────────────────────────
 
 export type CookieStockEntry = {
@@ -77,18 +92,21 @@ export async function getCookieStock(): Promise<CookieStockEntry[]> {
     .map((key) => {
       const [productId, flavorIdRaw] = key.split("|");
       const flavorId = flavorIdRaw === "null" ? null : flavorIdRaw;
+      // Ignorar entradas sem sabor definido — são apenas artefatos de controle interno
+      if (!flavorId) return null;
       const p = producedMap.get(key) ?? 0;
       const s = soldMap.get(key) ?? 0;
       return {
         productId,
         productName: productMap.get(productId) ?? productId,
         flavorId,
-        flavorName: flavorId ? (flavorMap.get(flavorId) ?? flavorId) : null,
+        flavorName: flavorMap.get(flavorId) ?? flavorId,
         produced: p,
         sold: s,
         current: p - s,
       };
     })
+    .filter((e): e is NonNullable<typeof e> => e !== null)
     .sort((a, b) => a.productName.localeCompare(b.productName));
 }
 

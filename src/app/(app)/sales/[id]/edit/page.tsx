@@ -31,6 +31,8 @@ export default async function EditSalePage({
     forecastDate: sale.paymentForecastDate
       ? format(sale.paymentForecastDate, "yyyy-MM-dd")
       : null,
+    discountType: (sale.discountType ?? null) as "PERCENTAGE" | "FIXED" | null,
+    discountValue: sale.discountValue,
     items: sale.items.map((i) => ({
       productId: i.productId,
       productName: i.productNameSnapshot,

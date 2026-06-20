@@ -1,7 +1,6 @@
 import {
   TrendingUp,
   Clock,
-  ShoppingCart,
   Receipt,
   Cookie,
   Percent,
@@ -12,7 +11,6 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -72,17 +70,11 @@ export default async function DashboardPage({
 
   const { kpis, trend, mix, topCustomers, lowStock, market } = data;
 
-  const rangeLabel = `${format(from, "d MMM", { locale: ptBR })} – ${format(
-    to,
-    "d MMM yyyy",
-    { locale: ptBR },
-  )}`;
-
   return (
     <div>
       <PageHeader
         title="Painel"
-        description={`Visão de negócio · ${rangeLabel}`}
+        description="Visão geral do negócio"
       />
 
       <DashboardFilters
@@ -98,8 +90,22 @@ export default async function DashboardPage({
         }}
       />
 
-      {/* ─── KPIs principais ─── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* ─── KPI total (pago + pendente) ─── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-3">
+        <Kpi
+          label="Total geral"
+          value={formatBRL(kpis.totalRevenueCents)}
+          hint="pago + pendente"
+          icon={Wallet}
+          highlight
+        />
+        <Kpi
+          label="Cookies vendidos"
+          value={String(kpis.soldCookies)}
+          hint={`em ${kpis.salesCount} venda${kpis.salesCount !== 1 ? "s" : ""}`}
+          icon={Cookie}
+          highlight
+        />
         <Kpi
           label="Receita recebida"
           value={formatBRL(kpis.paidRevenueCents)}
@@ -108,28 +114,16 @@ export default async function DashboardPage({
           tone="success"
         />
         <Kpi
-          label="Receita prevista"
+          label="A receber"
           value={formatBRL(kpis.forecastRevenueCents)}
-          hint="a receber"
+          hint="pendente"
           icon={Clock}
-          tone="warning"
-        />
-        <Kpi
-          label="Vendas"
-          value={String(kpis.salesCount)}
-          hint={`${kpis.soldCookies} cookies`}
-          icon={ShoppingCart}
-        />
-        <Kpi
-          label="Ticket médio"
-          value={formatBRL(kpis.avgTicketCents)}
-          hint="por venda"
-          icon={Receipt}
+          tone={kpis.forecastRevenueCents > 0 ? "warning" : undefined}
         />
       </div>
 
       {/* ─── KPIs de lucro / CMV ─── */}
-      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           label="CMV estimado"
           value={kpis.cogsCents == null ? "—" : formatBRL(kpis.cogsCents)}
@@ -138,17 +132,13 @@ export default async function DashboardPage({
               ? "sem dados de custo"
               : `${formatBRL(kpis.unitCostCents)}/cookie`
           }
-          icon={Cookie}
+          icon={Receipt}
         />
         <Kpi
           label="Lucro bruto"
-          value={
-            kpis.grossProfitCents == null
-              ? "—"
-              : formatBRL(kpis.grossProfitCents)
-          }
+          value={kpis.grossProfitCents == null ? "—" : formatBRL(kpis.grossProfitCents)}
           hint="recebida − CMV"
-          icon={Wallet}
+          icon={TrendingUp}
           tone={
             kpis.grossProfitCents != null && kpis.grossProfitCents < 0
               ? "destructive"
@@ -160,11 +150,7 @@ export default async function DashboardPage({
           value={pct(kpis.marginPct)}
           hint="sobre recebida"
           icon={Percent}
-          tone={
-            kpis.marginPct != null && kpis.marginPct < 0
-              ? "destructive"
-              : undefined
-          }
+          tone={kpis.marginPct != null && kpis.marginPct < 0 ? "destructive" : undefined}
         />
         <Kpi
           label="Gasto em compras"
@@ -191,11 +177,11 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-visible">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Mix de sabores</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pr-2">
             {mix.length > 0 ? <FlavorMixChart data={mix} /> : <ChartEmpty />}
           </CardContent>
         </Card>
@@ -350,12 +336,14 @@ function Kpi({
   hint,
   icon: Icon,
   tone,
+  highlight,
 }: {
   label: string;
   value: string;
   hint: string;
   icon: React.ComponentType<{ className?: string }>;
   tone?: "success" | "warning" | "destructive";
+  highlight?: boolean;
 }) {
   const valueClass =
     tone === "success"
@@ -366,17 +354,19 @@ function Kpi({
           ? "text-destructive"
           : "";
   return (
-    <Card>
+    <Card className={highlight ? "border-primary/30 bg-primary/5" : ""}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {label}
           </CardTitle>
-          <Icon className="size-4 text-muted-foreground" />
+          <Icon className={`size-4 ${highlight ? "text-primary/60" : "text-muted-foreground"}`} />
         </div>
       </CardHeader>
       <CardContent>
-        <p className={`text-xl font-bold tabular-nums ${valueClass}`}>{value}</p>
+        <p className={`tabular-nums font-bold ${highlight ? "text-2xl" : "text-xl"} ${valueClass}`}>
+          {value}
+        </p>
         <p className="text-[11px] text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>

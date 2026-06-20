@@ -12,7 +12,7 @@ export default function SignInPage() {
         <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10">
           <Cookie className="size-8 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold">Cookies</h1>
+        <h1 className="text-2xl font-bold">Coolkies</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Gerencie suas vendas, receitas e estoque.
         </p>

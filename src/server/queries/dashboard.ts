@@ -36,8 +36,6 @@ function flavorKey(productId: string, flavorId: string | null) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Opções para a barra de filtros
-//   Serverless + connection_limit=1: queries SEQUENCIAIS (sem Promise.all) para
-//   não disputar a única conexão e estourar o pool_timeout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type FilterOptions = Awaited<ReturnType<typeof getFilterOptions>>;
@@ -68,11 +66,6 @@ export async function getFilterOptions() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dados principais do dashboard
-//
-//   Tudo é resolvido com apenas 4 leituras sequenciais (sales, ingredients,
-//   production batches, purchases) e o resto é computado em memória. Isso evita
-//   o P2024 ("Timed out fetching a new connection") em ambiente serverless com
-//   connection_limit=1, onde dezenas de queries paralelas se enfileiram.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
@@ -121,12 +114,12 @@ export async function getDashboardData(filters: DashboardFilters) {
     },
   });
 
-  // ── Query 2: ingredientes (cadastro) ────────────────────────────────────────
+  // ── Query 2: ingredientes ────────────────────────────────────────────────────
   const ingredients = await db.ingredient.findMany({
     select: { id: true, name: true, baseUnit: true, minStock: true },
   });
 
-  // ── Query 3: lotes de produção (para custo e consumo, em uma única passada) ──
+  // ── Query 3: lotes de produção ──────────────────────────────────────────────
   const batches = await db.productionBatch.findMany({
     where: { recipeId: { not: null } },
     select: {
@@ -144,9 +137,7 @@ export async function getDashboardData(filters: DashboardFilters) {
             select: {
               fillingRecipe: {
                 select: {
-                  ingredients: {
-                    select: { ingredientId: true, quantity: true },
-                  },
+                  ingredients: { select: { ingredientId: true, quantity: true } },
                 },
               },
             },
@@ -156,7 +147,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     },
   });
 
-  // ── Query 4: todas as compras de ingredientes (custo, estoque e mercado) ─────
+  // ── Query 4: compras de ingredientes ────────────────────────────────────────
   const purchases = await db.ingredientPurchase.findMany({
     orderBy: { purchasedAt: "desc" },
     select: {
@@ -169,30 +160,24 @@ export async function getDashboardData(filters: DashboardFilters) {
     },
   });
 
-  // ─── Derivações de compras: custo/unidade base, total comprado, por mercado ──
-  const costPerBaseUnit = new Map<string, number>(); // última compra
-  const purchasedTotal = new Map<string, number>(); // soma de quantidades
-  const lastPriceByMarket = new Map<string, Map<string, number>>(); // ing → mkt → unitCents
+  // ─── Custo/unidade base (última compra), consumo total ───────────────────────
+  const costPerBaseUnit = new Map<string, number>();
+  const purchasedTotal = new Map<string, number>();
+  const lastPriceByMarket = new Map<string, Map<string, number>>();
   for (const p of purchases) {
     const ingId = p.ingredient.id;
     purchasedTotal.set(ingId, (purchasedTotal.get(ingId) ?? 0) + p.quantity);
     if (p.quantity > 0) {
-      // purchases vem ordenado desc → o primeiro visto é o mais recente
       if (!costPerBaseUnit.has(ingId)) {
         costPerBaseUnit.set(ingId, p.pricePaidCents / p.quantity);
       }
       let mkt = lastPriceByMarket.get(ingId);
-      if (!mkt) {
-        mkt = new Map();
-        lastPriceByMarket.set(ingId, mkt);
-      }
-      if (!mkt.has(p.marketId)) {
-        mkt.set(p.marketId, p.pricePaidCents / p.quantity);
-      }
+      if (!mkt) { mkt = new Map(); lastPriceByMarket.set(ingId, mkt); }
+      if (!mkt.has(p.marketId)) mkt.set(p.marketId, p.pricePaidCents / p.quantity);
     }
   }
 
-  // ─── Consumo + custo médio por cookie (uma passada sobre os lotes) ───────────
+  // ─── Custo médio por cookie ──────────────────────────────────────────────────
   const consumed = new Map<string, number>();
   let totalProductionCost = 0;
   let totalProduced = 0;
@@ -201,10 +186,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     const yieldQty = batch.recipe.yieldQty || 1;
     const recipeBatches = batch.quantity / yieldQty;
     for (const ri of batch.recipe.ingredients) {
-      consumed.set(
-        ri.ingredientId,
-        (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * recipeBatches,
-      );
+      consumed.set(ri.ingredientId, (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * recipeBatches);
       const unit = costPerBaseUnit.get(ri.ingredientId);
       if (unit != null) totalProductionCost += unit * ri.quantity * recipeBatches;
     }
@@ -212,10 +194,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       const fr = f.flavor.fillingRecipe;
       if (!fr) continue;
       for (const ri of fr.ingredients) {
-        consumed.set(
-          ri.ingredientId,
-          (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * f.quantity,
-        );
+        consumed.set(ri.ingredientId, (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * f.quantity);
         const unit = costPerBaseUnit.get(ri.ingredientId);
         if (unit != null) totalProductionCost += unit * ri.quantity * f.quantity;
       }
@@ -227,7 +206,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       ? totalProductionCost / totalProduced
       : null;
 
-  // ─── KPIs + mix + clientes (em memória) ──────────────────────────────────────
+  // ─── KPIs + mix + clientes ───────────────────────────────────────────────────
   const hasItemFilter = !!(filters.productId || filters.flavorId);
   const itemMatches = (i: { productId: string; flavorId: string | null }) =>
     (!filters.productId || i.productId === filters.productId) &&
@@ -239,20 +218,24 @@ export async function getDashboardData(filters: DashboardFilters) {
   let soldCookies = 0;
 
   const mixMap = new Map<string, { label: string; revenue: number; qty: number }>();
-  const customerMap = new Map<
-    string,
-    { name: string; revenue: number; count: number }
-  >();
+  const customerMap = new Map<string, { name: string; revenue: number; count: number }>();
 
   for (const sale of sales) {
-    const matchedItems = hasItemFilter
-      ? sale.items.filter(itemMatches)
-      : sale.items;
-    const saleRevenue = matchedItems.reduce(
-      (s, i) => s + i.unitPriceSnapshot * i.quantity,
-      0,
-    );
+    const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
     const saleQty = matchedItems.reduce((s, i) => s + i.quantity, 0);
+
+    // Receita: usa totalCents (já com desconto) quando não há filtro de item.
+    // Com filtro de item, aplica proporção do desconto sobre os itens filtrados.
+    let saleRevenue: number;
+    if (!hasItemFilter) {
+      saleRevenue = sale.totalCents;
+    } else {
+      const rawItemTotal = sale.items.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+      const matchedRaw = matchedItems.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+      // ratio do desconto: totalCents / rawItemTotal (≤ 1)
+      const discountRatio = rawItemTotal > 0 ? sale.totalCents / rawItemTotal : 1;
+      saleRevenue = Math.round(matchedRaw * discountRatio);
+    }
 
     salesCount += 1;
     soldCookies += saleQty;
@@ -287,7 +270,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       ? (grossProfit / paidRevenue) * 100
       : null;
 
-  // ─── Série temporal realizada × prevista ─────────────────────────────────────
+  // ─── Série temporal ──────────────────────────────────────────────────────────
   const spanDays = differenceInCalendarDays(to, from);
   const granularity: Granularity =
     spanDays <= 31 ? "day" : spanDays <= 120 ? "week" : "month";
@@ -308,16 +291,17 @@ export async function getDashboardData(filters: DashboardFilters) {
         ? eachWeekOfInterval({ start: from, end: to }, { weekStartsOn: 1 })
         : eachMonthOfInterval({ start: from, end: to });
 
-  const series = new Map<
-    string,
-    { label: string; realized: number; forecast: number }
-  >();
+  const series = new Map<string, { label: string; realized: number; forecast: number }>();
   for (const b of bucketsArr) {
     series.set(bucketKey(b), { label: bucketLabel(b), realized: 0, forecast: 0 });
   }
   for (const sale of sales) {
     const matched = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
-    const rev = matched.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+    const rawItemTotal = sale.items.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+    const matchedRaw = matched.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+    const discountRatio = rawItemTotal > 0 ? sale.totalCents / rawItemTotal : 1;
+    const rev = hasItemFilter ? Math.round(matchedRaw * discountRatio) : sale.totalCents;
+
     if (sale.status === "PAID") {
       const e = series.get(bucketKey(sale.paidAt ?? sale.soldAt));
       if (e) e.realized += rev;
@@ -348,7 +332,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       avgTicketCents: c.count > 0 ? Math.round(c.revenue / c.count) : 0,
     }));
 
-  // ─── Estoque baixo (em memória) ──────────────────────────────────────────────
+  // ─── Estoque baixo ───────────────────────────────────────────────────────────
   const lowStock = ingredients
     .filter((ing) => (ing.minStock ?? 0) > 0)
     .map((ing) => {
@@ -356,28 +340,17 @@ export async function getDashboardData(filters: DashboardFilters) {
       const used = consumed.get(ing.id) ?? 0;
       const current = purchased - used;
       const min = ing.minStock ?? 0;
-      return {
-        id: ing.id,
-        name: ing.name,
-        baseUnit: ing.baseUnit as string,
-        current,
-        minStock: min,
-        deficit: min - current,
-      };
+      return { id: ing.id, name: ing.name, baseUnit: ing.baseUnit as string, current, minStock: min, deficit: min - current };
     })
     .filter((i) => i.current < i.minStock)
     .sort((a, b) => b.deficit - a.deficit);
 
-  // ─── Mercado: gasto no período + comparativo de preços (em memória) ──────────
+  // ─── Mercado ─────────────────────────────────────────────────────────────────
   const spendMap = new Map<string, { name: string; spend: number; count: number }>();
   for (const p of purchases) {
     if (p.purchasedAt < from || p.purchasedAt > to) continue;
     if (filters.marketId && p.marketId !== filters.marketId) continue;
-    const e = spendMap.get(p.marketId) ?? {
-      name: p.market.name,
-      spend: 0,
-      count: 0,
-    };
+    const e = spendMap.get(p.marketId) ?? { name: p.market.name, spend: 0, count: 0 };
     e.spend += p.pricePaidCents;
     e.count += 1;
     spendMap.set(p.marketId, e);
@@ -387,19 +360,13 @@ export async function getDashboardData(filters: DashboardFilters) {
     .map((m) => ({ name: m.name, spendCents: m.spend, count: m.count }));
   const totalSpendCents = spendByMarket.reduce((s, m) => s + m.spendCents, 0);
 
-  const marketNameById = new Map(
-    purchases.map((p) => [p.marketId, p.market.name]),
-  );
-  const ingNameById = new Map(
-    purchases.map((p) => [p.ingredient.id, p.ingredient]),
-  );
+  const marketNameById = new Map(purchases.map((p) => [p.marketId, p.market.name]));
+  const ingNameById = new Map(purchases.map((p) => [p.ingredient.id, p.ingredient]));
   const priceComparison = Array.from(lastPriceByMarket.entries())
     .map(([ingId, byMkt]) => {
       const ing = ingNameById.get(ingId);
       if (!ing || byMkt.size < 2) return null;
-      const entries = Array.from(byMkt.entries()).sort(
-        (a, b) => a[1] - b[1],
-      );
+      const entries = Array.from(byMkt.entries()).sort((a, b) => a[1] - b[1]);
       const [cheapMkt, cheapVal] = entries[0];
       const [dearMkt, dearVal] = entries[entries.length - 1];
       return {

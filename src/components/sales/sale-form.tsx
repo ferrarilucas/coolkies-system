@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Plus, Trash2, ShoppingCart, Minus } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Minus, Tag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ type SaleItemLine = {
   unitPriceCents: number;
 };
 
+type DiscountType = "PERCENTAGE" | "FIXED";
 type PayStatus = "PAID" | ForecastPreset;
 
 const NO_FLAVOR = "__none__";
@@ -63,6 +64,12 @@ function blankLine(catalog: CatalogProduct[]): SaleItemLine {
   };
 }
 
+function calcDiscountCents(subtotal: number, type: DiscountType | null, value: number): number {
+  if (!type || value <= 0) return 0;
+  if (type === "PERCENTAGE") return Math.round(subtotal * value / 100);
+  return Math.min(value, subtotal);
+}
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -75,19 +82,15 @@ interface Props {
     status: "PAID" | "PENDING";
     forecastPreset: string | null;
     forecastDate: string | null;
+    discountType: DiscountType | null;
+    discountValue: number;
     items: Omit<SaleItemLine, "key">[];
   };
 }
 
 // ─── Stepper de quantidade ────────────────────────────────────────────────────
 
-function QuantityStepper({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function QuantityStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div className="flex items-center">
       <button
@@ -164,7 +167,6 @@ function ItemRow({
 
   return (
     <div className="rounded-lg border bg-card p-3 space-y-2">
-      {/* Linha 1: produto + sabor */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Select value={line.productId || ""} onValueChange={handleProductChange}>
           <SelectTrigger className={cn(!line.productId && "text-muted-foreground")}>
@@ -194,7 +196,6 @@ function ItemRow({
         </Select>
       </div>
 
-      {/* Linha 2: qtd + preço + total + lixo */}
       <div className="flex items-center gap-2">
         <QuantityStepper
           value={line.quantity}
@@ -231,12 +232,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const router = useRouter();
   const [saving, startSaving] = useTransition();
 
-  const [customer, setCustomer] = useState<CustomerSummary | null>(
-    initial?.customer ?? null,
-  );
-  const [soldAt, setSoldAt] = useState(
-    initial?.soldAt ?? format(new Date(), "yyyy-MM-dd"),
-  );
+  const [customer, setCustomer] = useState<CustomerSummary | null>(initial?.customer ?? null);
+  const [soldAt, setSoldAt] = useState(initial?.soldAt ?? format(new Date(), "yyyy-MM-dd"));
   const [notes, setNotes] = useState(initial?.notes ?? "");
 
   const [lines, setLines] = useState<SaleItemLine[]>(
@@ -252,10 +249,12 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const [payStatus, setPayStatus] = useState<PayStatus>(initialPayStatus);
   const [customDate, setCustomDate] = useState(initial?.forecastDate ?? "");
 
+  // Desconto
+  const [discountType, setDiscountType] = useState<DiscountType | null>(initial?.discountType ?? null);
+  const [discountValue, setDiscountValue] = useState<number>(initial?.discountValue ?? 0);
+
   function updateLine(key: string, patch: Partial<SaleItemLine>) {
-    setLines((prev) =>
-      prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
-    );
+    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
   function removeLine(key: string) {
@@ -270,10 +269,9 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   }
 
   const filledLines = lines.filter((l) => l.productId !== "");
-  const totalCents = filledLines.reduce(
-    (sum, l) => sum + l.unitPriceCents * l.quantity,
-    0,
-  );
+  const subtotalCents = filledLines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
+  const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
+  const totalCents = subtotalCents - discountCents;
 
   const forecastDate: Date | null =
     payStatus === "PAID"
@@ -295,18 +293,15 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     fd.set("notes", notes);
     fd.set("status", payStatus === "PAID" ? "PAID" : "PENDING");
     fd.set("forecastPreset", payStatus !== "PAID" ? payStatus : "");
-    fd.set(
-      "forecastDate",
-      forecastDate ? format(forecastDate, "yyyy-MM-dd") : "",
-    );
+    fd.set("forecastDate", forecastDate ? format(forecastDate, "yyyy-MM-dd") : "");
+    fd.set("discountType", discountType ?? "");
+    fd.set("discountValue", String(discountValue));
     fd.set(
       "items",
       JSON.stringify(
-        filledLines.map(
-          ({ productId, productName, flavorId, flavorName, quantity, unitPriceCents }) => ({
-            productId, productName, flavorId, flavorName, quantity, unitPriceCents,
-          }),
-        ),
+        filledLines.map(({ productId, productName, flavorId, flavorName, quantity, unitPriceCents }) => ({
+          productId, productName, flavorId, flavorName, quantity, unitPriceCents,
+        })),
       ),
     );
 
@@ -401,6 +396,108 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
 
         {filledLines.length > 0 && (
           <div className="flex justify-end pt-1">
+            <span className="text-sm text-muted-foreground tabular-nums">
+              Subtotal: {formatBRL(subtotalCents)}
+            </span>
+          </div>
+        )}
+      </section>
+
+      <Separator />
+
+      {/* ── Desconto ───────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Tag className="size-3.5" />
+          Desconto <span className="font-normal normal-case text-muted-foreground">(opcional)</span>
+        </h2>
+
+        <div className="flex items-start gap-3">
+          {/* Tipo */}
+          <div className="w-40 shrink-0 space-y-1.5">
+            <Label>Tipo</Label>
+            <Select
+              value={discountType ?? "none"}
+              onValueChange={(v) => {
+                if (v === "none") {
+                  setDiscountType(null);
+                  setDiscountValue(0);
+                } else {
+                  setDiscountType(v as DiscountType);
+                  setDiscountValue(0);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem desconto</SelectItem>
+                <SelectItem value="PERCENTAGE">Percentual (%)</SelectItem>
+                <SelectItem value="FIXED">Valor fixo (R$)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Valor */}
+          {discountType && (
+            <div className="flex-1 space-y-1.5">
+              <Label>
+                {discountType === "PERCENTAGE" ? "Percentual (%)" : "Valor (R$)"}
+              </Label>
+              {discountType === "PERCENTAGE" ? (
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountValue || ""}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value);
+                      setDiscountValue(isNaN(n) ? 0 : Math.min(100, Math.max(0, n)));
+                    }}
+                    placeholder="0"
+                    className="pr-8"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    %
+                  </span>
+                </div>
+              ) : (
+                <MoneyInput
+                  valueCents={discountValue}
+                  onChangeCents={setDiscountValue}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Resumo do desconto */}
+        {discountType && discountCents > 0 && filledLines.length > 0 && (
+          <div className="rounded-lg border bg-muted/40 p-3 space-y-1 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="tabular-nums">{formatBRL(subtotalCents)}</span>
+            </div>
+            <div className="flex justify-between text-destructive">
+              <span>
+                Desconto{" "}
+                {discountType === "PERCENTAGE" && `(${discountValue}%)`}
+              </span>
+              <span className="tabular-nums">− {formatBRL(discountCents)}</span>
+            </div>
+            <Separator className="my-1" />
+            <div className="flex justify-between font-semibold">
+              <span>Total</span>
+              <span className="tabular-nums">{formatBRL(totalCents)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Total sem desconto */}
+        {(!discountType || discountCents === 0) && filledLines.length > 0 && (
+          <div className="flex justify-end">
             <span className="text-sm font-semibold tabular-nums">
               Total: {formatBRL(totalCents)}
             </span>

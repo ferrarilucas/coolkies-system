@@ -2,27 +2,25 @@
 
 import {
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
   Tooltip,
-  Legend,
+  Cell,
 } from "recharts";
 
 type Slice = { label: string; revenueCents: number; qty: number };
 
 const brl = (cents: number) =>
-  (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 // Paleta cookie/chocolate/caramelo
 const COLORS = [
   "hsl(25 45% 38%)",
-  "hsl(22 40% 28%)",
   "hsl(33 55% 60%)",
   "hsl(38 70% 55%)",
+  "hsl(22 40% 28%)",
   "hsl(15 45% 45%)",
   "hsl(43 50% 70%)",
   "hsl(8 40% 35%)",
@@ -42,29 +40,41 @@ export function FlavorMixChart({ data }: { data: Slice[] }) {
     });
   }
 
+  // Abreviar labels longos (ex: "Cookie Chocolate ao leite" → "Choc. ao leite")
+  const chartData = slices.map((s) => ({
+    ...s,
+    shortLabel: s.label.replace(/^Cookie\s+/i, ""),
+  }));
+
+  const height = Math.max(180, chartData.length * 36);
+
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <PieChart>
-        <Pie
-          data={slices}
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart
+        layout="vertical"
+        data={chartData}
+        margin={{ top: 0, right: 8, left: 4, bottom: 0 }}
+        barCategoryGap="20%"
+      >
+        <XAxis
+          type="number"
           dataKey="revenueCents"
-          nameKey="label"
-          cx="50%"
-          cy="50%"
-          innerRadius={48}
-          outerRadius={88}
-          paddingAngle={2}
-          stroke="hsl(var(--card))"
-          strokeWidth={2}
-        >
-          {slices.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Pie>
+          hide
+        />
+        <YAxis
+          type="category"
+          dataKey="shortLabel"
+          width={108}
+          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+          tickLine={false}
+          axisLine={false}
+        />
         <Tooltip
-          formatter={(v: number, _n, p) =>
-            [`${brl(v)} · ${p.payload.qty} un`, p.payload.label]
-          }
+          cursor={{ fill: "hsl(var(--muted)/0.3)" }}
+          formatter={(v: number, _n, p) => [
+            `${brl(v)} · ${p.payload.qty} un`,
+            p.payload.label,
+          ]}
           contentStyle={{
             background: "hsl(var(--popover))",
             border: "1px solid hsl(var(--border))",
@@ -73,13 +83,12 @@ export function FlavorMixChart({ data }: { data: Slice[] }) {
             color: "hsl(var(--popover-foreground))",
           }}
         />
-        <Legend
-          wrapperStyle={{ fontSize: 11 }}
-          formatter={(value) => (
-            <span style={{ color: "hsl(var(--muted-foreground))" }}>{value}</span>
-          )}
-        />
-      </PieChart>
+        <Bar dataKey="revenueCents" radius={[0, 4, 4, 0]}>
+          {chartData.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   );
 }

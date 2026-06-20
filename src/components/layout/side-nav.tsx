@@ -82,7 +82,7 @@ export function SideNav({ user }: { user: SessionUser }) {
         {!collapsed && (
           <div className="flex items-center gap-2">
             <Cookie className="size-5 text-primary" />
-            <span className="font-semibold">Cookies</span>
+            <span className="font-semibold">Coolkies</span>
           </div>
         )}
         <button

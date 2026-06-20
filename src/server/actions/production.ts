@@ -16,10 +16,13 @@ async function requireSession() {
 
 type FillingInput = { flavorId: string; quantity: number };
 
+// ─── Criar produção ───────────────────────────────────────────────────────────
+
 export async function createProductionBatch(formData: FormData): Promise<ActionResult> {
   const user = await requireSession();
 
   const productId = String(formData.get("productId") ?? "").trim();
+  const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
   const quantity = parseInt(String(formData.get("quantity") ?? "0"));
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -35,42 +38,30 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
 
   try {
     await db.$transaction(async (tx) => {
-      // Cria o lote
       const batch = await tx.productionBatch.create({
-        data: {
-          productId,
-          recipeId,
-          userId: user.id,
-          quantity,
-          notes,
-          producedAt,
-        },
+        data: { productId, flavorId, recipeId, userId: user.id, quantity, notes, producedAt },
       });
 
-      // Cria o StockMovement principal (produto sem sabor específico, ou soma geral)
+      // Movimento principal: todos os cookies vão para o sabor base (ou null se não informado)
       await tx.stockMovement.create({
         data: {
           productId,
-          flavorId: null,
+          flavorId,
           type: StockMovementType.PRODUCTION,
           quantity,
           productionBatchId: batch.id,
         },
       });
 
-      // Cria os recheios e StockMovements por sabor (os recheados)
+      // Recheios: adicionam ao estoque do sabor do recheio e descontam do sabor base
       for (const filling of fillings) {
         if (!filling.flavorId || filling.quantity <= 0) continue;
 
         await tx.productionFilling.create({
-          data: {
-            productionBatchId: batch.id,
-            flavorId: filling.flavorId,
-            quantity: filling.quantity,
-          },
+          data: { productionBatchId: batch.id, flavorId: filling.flavorId, quantity: filling.quantity },
         });
 
-        // Adiciona ao estoque com sabor (são cookies distintos)
+        // Entrada no estoque com o sabor do recheio
         await tx.stockMovement.create({
           data: {
             productId,
@@ -80,12 +71,11 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
           },
         });
 
-        // Desconta os recheados do movimento genérico (sem sabor)
-        // já que eles agora têm identidade própria
+        // Saída do sabor base (ou null)
         await tx.stockMovement.create({
           data: {
             productId,
-            flavorId: null,
+            flavorId,
             type: StockMovementType.ADJUSTMENT,
             quantity: -filling.quantity,
             reason: `Convertidos para sabor ${filling.flavorId}`,
@@ -101,6 +91,88 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
     return { ok: false, error: "Erro ao registrar produção." };
   }
 }
+
+// ─── Atualizar produção ───────────────────────────────────────────────────────
+
+export async function updateProductionBatch(id: string, formData: FormData): Promise<ActionResult> {
+  await requireSession();
+
+  const productId = String(formData.get("productId") ?? "").trim();
+  const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
+  const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
+  const quantity = parseInt(String(formData.get("quantity") ?? "0"));
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  const producedAtRaw = String(formData.get("producedAt") ?? "").trim();
+  const producedAt = producedAtRaw ? new Date(`${producedAtRaw}T12:00:00`) : new Date();
+
+  const fillingsRaw = String(formData.get("fillings") ?? "[]");
+  let fillings: FillingInput[] = [];
+  try { fillings = JSON.parse(fillingsRaw); } catch { /* noop */ }
+
+  if (!productId) return { ok: false, error: "Selecione um produto." };
+  if (quantity <= 0) return { ok: false, error: "Quantidade deve ser maior que zero." };
+
+  try {
+    await db.$transaction(async (tx) => {
+      // Remove movimentos e recheios antigos
+      await tx.stockMovement.deleteMany({ where: { productionBatchId: id } });
+      await tx.productionFilling.deleteMany({ where: { productionBatchId: id } });
+
+      // Atualiza o lote
+      await tx.productionBatch.update({
+        where: { id },
+        data: { productId, flavorId, recipeId, quantity, notes, producedAt },
+      });
+
+      // Recria movimento principal
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          flavorId,
+          type: StockMovementType.PRODUCTION,
+          quantity,
+          productionBatchId: id,
+        },
+      });
+
+      // Recria recheios
+      for (const filling of fillings) {
+        if (!filling.flavorId || filling.quantity <= 0) continue;
+
+        await tx.productionFilling.create({
+          data: { productionBatchId: id, flavorId: filling.flavorId, quantity: filling.quantity },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            productId,
+            flavorId: filling.flavorId,
+            type: StockMovementType.PRODUCTION,
+            quantity: filling.quantity,
+          },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            productId,
+            flavorId,
+            type: StockMovementType.ADJUSTMENT,
+            quantity: -filling.quantity,
+            reason: `Convertidos para sabor ${filling.flavorId}`,
+          },
+        });
+      }
+    });
+
+    revalidatePath("/products");
+    revalidatePath("/pantry");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Erro ao atualizar produção." };
+  }
+}
+
+// ─── Excluir produção ─────────────────────────────────────────────────────────
 
 export async function deleteProductionBatch(id: string): Promise<ActionResult> {
   await requireSession();

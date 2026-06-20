@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Cookies — Gestão de vendas",
-  description: "Gerencie pedidos, receitas e estoque de cookies.",
+  title: "Coolkies — Gestão de vendas",
+  description: "Gerencie pedidos, receitas e estoque de coolkies.",
 };
 
 export const viewport: Viewport = {
