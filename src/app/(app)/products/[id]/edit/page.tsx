@@ -27,7 +27,6 @@ export default async function EditProductionPage({
 
   const initial = {
     productId: batch.productId,
-    flavorId: batch.flavorId,
     recipeId: batch.recipeId,
     quantity: batch.quantity,
     notes: batch.notes ?? "",

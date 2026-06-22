@@ -27,14 +27,11 @@ type SaleItemInput = {
 
 type DiscountType = "PERCENTAGE" | "FIXED";
 
-/** Calcula o valor do desconto em centavos a partir do subtotal bruto. */
 function calcDiscountCents(subtotal: number, type: DiscountType | null, value: number): number {
   if (!type || value <= 0) return 0;
   if (type === "PERCENTAGE") return Math.round(subtotal * value / 100);
-  return Math.min(value, subtotal); // FIXED — não pode ser negativo
+  return Math.min(value, subtotal);
 }
-
-// ─── Parsear campos comuns ────────────────────────────────────────────────────
 
 function parseDiscount(formData: FormData): { discountType: DiscountType | null; discountValue: number } {
   const raw = String(formData.get("discountType") ?? "").trim();
@@ -76,50 +73,51 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
   const totalCents = subtotalCents - discountCents;
 
   try {
-    const sale = await db.$transaction(async (tx) => {
-      const sale = await tx.sale.create({
-        data: {
-          userId: user.id,
-          customerId,
-          customerName,
-          soldAt,
-          notes,
-          status,
-          paidAt: status === "PAID" ? new Date() : null,
-          paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
-          forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
-          discountType,
-          discountValue,
-          totalCents,
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              productNameSnapshot: item.productName,
-              flavorId: item.flavorId,
-              flavorNameSnapshot: item.flavorName,
-              quantity: item.quantity,
-              unitPriceSnapshot: item.unitPriceCents,
-            })),
-          },
+    // Cria a venda com os itens
+    const sale = await db.sale.create({
+      data: {
+        userId: user.id,
+        customerId,
+        customerName,
+        soldAt,
+        notes,
+        status,
+        paidAt: status === "PAID" ? new Date() : null,
+        paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
+        forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
+        discountType,
+        discountValue,
+        totalCents,
+        items: {
+          create: items.map((item) => ({
+            productId: item.productId,
+            productNameSnapshot: item.productName,
+            flavorId: item.flavorId,
+            flavorNameSnapshot: item.flavorName,
+            quantity: item.quantity,
+            unitPriceSnapshot: item.unitPriceCents,
+          })),
         },
-      });
+      },
+    });
 
-      await tx.stockMovement.createMany({
-        data: items.map((item) => ({
+    // Cria movimentos de estoque sequencialmente
+    for (const item of items) {
+      await db.stockMovement.create({
+        data: {
           productId: item.productId,
           flavorId: item.flavorId,
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: sale.id,
-        })),
+        },
       });
-
-      return sale;
-    });
+    }
 
     revalidatePath("/sales");
     return { ok: true, data: { id: sale.id } };
-  } catch {
+  } catch (e) {
+    console.error("createSale error:", e);
     return { ok: false, error: "Erro ao registrar venda." };
   }
 }
@@ -156,51 +154,55 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const totalCents = subtotalCents - discountCents;
 
   try {
-    await db.$transaction(async (tx) => {
-      await tx.stockMovement.deleteMany({ where: { saleId: id } });
-      await tx.saleItem.deleteMany({ where: { saleId: id } });
+    // Remove movimentos e itens antigos
+    await db.stockMovement.deleteMany({ where: { saleId: id } });
+    await db.saleItem.deleteMany({ where: { saleId: id } });
 
-      await tx.sale.update({
-        where: { id },
-        data: {
-          customerId,
-          customerName,
-          soldAt,
-          notes,
-          status,
-          paidAt: status === "PAID" ? new Date() : null,
-          paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
-          forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
-          discountType,
-          discountValue,
-          totalCents,
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              productNameSnapshot: item.productName,
-              flavorId: item.flavorId,
-              flavorNameSnapshot: item.flavorName,
-              quantity: item.quantity,
-              unitPriceSnapshot: item.unitPriceCents,
-            })),
-          },
+    // Atualiza a venda e recria os itens
+    await db.sale.update({
+      where: { id },
+      data: {
+        customerId,
+        customerName,
+        soldAt,
+        notes,
+        status,
+        paidAt: status === "PAID" ? new Date() : null,
+        paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
+        forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
+        discountType,
+        discountValue,
+        totalCents,
+        items: {
+          create: items.map((item) => ({
+            productId: item.productId,
+            productNameSnapshot: item.productName,
+            flavorId: item.flavorId,
+            flavorNameSnapshot: item.flavorName,
+            quantity: item.quantity,
+            unitPriceSnapshot: item.unitPriceCents,
+          })),
         },
-      });
+      },
+    });
 
-      await tx.stockMovement.createMany({
-        data: items.map((item) => ({
+    // Recria movimentos de estoque sequencialmente
+    for (const item of items) {
+      await db.stockMovement.create({
+        data: {
           productId: item.productId,
           flavorId: item.flavorId,
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: id,
-        })),
+        },
       });
-    });
+    }
 
     revalidatePath("/sales");
     return { ok: true };
-  } catch {
+  } catch (e) {
+    console.error("updateSale error:", e);
     return { ok: false, error: "Erro ao atualizar venda." };
   }
 }
@@ -222,10 +224,8 @@ export async function markAsPaid(id: string): Promise<ActionResult> {
 export async function deleteSale(id: string): Promise<ActionResult> {
   await requireSession();
   try {
-    await db.$transaction([
-      db.stockMovement.deleteMany({ where: { saleId: id } }),
-      db.sale.delete({ where: { id } }),
-    ]);
+    await db.stockMovement.deleteMany({ where: { saleId: id } });
+    await db.sale.delete({ where: { id } });
   } catch {
     return { ok: false, error: "Não foi possível excluir." };
   }

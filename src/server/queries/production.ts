@@ -50,50 +50,48 @@ export type CookieStockEntry = {
 };
 
 export async function getCookieStock(): Promise<CookieStockEntry[]> {
-  const movements = await db.stockMovement.groupBy({
-    by: ["productId", "flavorId"],
-    _sum: { quantity: true },
+  // Fonte de verdade para produção: ProductionFilling (direto, sem StockMovement)
+  const fillings = await db.productionFilling.findMany({
+    select: {
+      flavorId: true,
+      quantity: true,
+      productionBatch: { select: { productId: true } },
+    },
   });
 
-  const products = await db.product.findMany({
-    select: { id: true, name: true },
+  // Fonte de verdade para vendas: SaleItem (inclui pago + pendente)
+  const saleItems = await db.saleItem.findMany({
+    where: { flavorId: { not: null } },
+    select: { productId: true, flavorId: true, quantity: true },
   });
-  const flavors = await db.flavor.findMany({
-    select: { id: true, name: true },
-  });
+
+  const products = await db.product.findMany({ select: { id: true, name: true } });
+  const flavors = await db.flavor.findMany({ select: { id: true, name: true } });
 
   const productMap = new Map(products.map((p) => [p.id, p.name]));
   const flavorMap = new Map(flavors.map((f) => [f.id, f.name]));
 
-  const produced = await db.stockMovement.groupBy({
-    by: ["productId", "flavorId"],
-    where: { type: "PRODUCTION" },
-    _sum: { quantity: true },
-  });
-  const sold = await db.stockMovement.groupBy({
-    by: ["productId", "flavorId"],
-    where: { type: "SALE" },
-    _sum: { quantity: true },
-  });
+  // Agrega produzidos por (productId, flavorId)
+  const producedMap = new Map<string, number>();
+  for (const f of fillings) {
+    const key = `${f.productionBatch.productId}|${f.flavorId}`;
+    producedMap.set(key, (producedMap.get(key) ?? 0) + f.quantity);
+  }
 
-  const producedMap = new Map(
-    produced.map((r) => [`${r.productId}|${r.flavorId}`, r._sum.quantity ?? 0]),
-  );
-  const soldMap = new Map(
-    sold.map((r) => [`${r.productId}|${r.flavorId}`, Math.abs(r._sum.quantity ?? 0)]),
-  );
+  // Agrega vendidos por (productId, flavorId)
+  const soldMap = new Map<string, number>();
+  for (const item of saleItems) {
+    if (!item.flavorId) continue;
+    const key = `${item.productId}|${item.flavorId}`;
+    soldMap.set(key, (soldMap.get(key) ?? 0) + item.quantity);
+  }
 
-  const keys = new Set([
-    ...producedMap.keys(),
-    ...soldMap.keys(),
-  ]);
+  const keys = new Set([...producedMap.keys(), ...soldMap.keys()]);
 
   return Array.from(keys)
     .map((key) => {
-      const [productId, flavorIdRaw] = key.split("|");
-      const flavorId = flavorIdRaw === "null" ? null : flavorIdRaw;
-      // Ignorar entradas sem sabor definido — são apenas artefatos de controle interno
-      if (!flavorId) return null;
+      const [productId, flavorId] = key.split("|");
+      if (!flavorId || flavorId === "null") return null;
       const p = producedMap.get(key) ?? 0;
       const s = soldMap.get(key) ?? 0;
       return {

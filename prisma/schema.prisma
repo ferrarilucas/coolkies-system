@@ -376,7 +376,7 @@ model ProductionBatch {
   producedAt DateTime @default(now())
   createdAt DateTime @default(now())
 
-  movement  StockMovement?
+  movements StockMovement[]
   fillings  ProductionFilling[] // recheios aplicados neste lote
 
   @@map("production_batch")
@@ -411,7 +411,7 @@ model StockMovement {
   reason    String?
 
   // vínculos opcionais com a origem
-  productionBatchId String?          @unique
+  productionBatchId String?
   productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
   saleId            String?
 

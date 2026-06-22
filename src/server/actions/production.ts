@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { StockMovementType } from "@prisma/client";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -22,7 +21,6 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
   const user = await requireSession();
 
   const productId = String(formData.get("productId") ?? "").trim();
-  const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
   const quantity = parseInt(String(formData.get("quantity") ?? "0"));
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -36,58 +34,27 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
   if (!productId) return { ok: false, error: "Selecione um produto." };
   if (quantity <= 0) return { ok: false, error: "Quantidade deve ser maior que zero." };
 
+  const fillingsTotal = fillings.reduce((s, f) => s + f.quantity, 0);
+  if (fillings.length > 0 && fillingsTotal !== quantity) {
+    return { ok: false, error: `Total distribuído (${fillingsTotal}) deve ser igual à quantidade produzida (${quantity}).` };
+  }
+
   try {
-    await db.$transaction(async (tx) => {
-      const batch = await tx.productionBatch.create({
-        data: { productId, flavorId, recipeId, userId: user.id, quantity, notes, producedAt },
-      });
-
-      // Movimento principal: todos os cookies vão para o sabor base (ou null se não informado)
-      await tx.stockMovement.create({
-        data: {
-          productId,
-          flavorId,
-          type: StockMovementType.PRODUCTION,
-          quantity,
-          productionBatchId: batch.id,
-        },
-      });
-
-      // Recheios: adicionam ao estoque do sabor do recheio e descontam do sabor base
-      for (const filling of fillings) {
-        if (!filling.flavorId || filling.quantity <= 0) continue;
-
-        await tx.productionFilling.create({
-          data: { productionBatchId: batch.id, flavorId: filling.flavorId, quantity: filling.quantity },
-        });
-
-        // Entrada no estoque com o sabor do recheio
-        await tx.stockMovement.create({
-          data: {
-            productId,
-            flavorId: filling.flavorId,
-            type: StockMovementType.PRODUCTION,
-            quantity: filling.quantity,
-          },
-        });
-
-        // Saída do sabor base (ou null)
-        await tx.stockMovement.create({
-          data: {
-            productId,
-            flavorId,
-            type: StockMovementType.ADJUSTMENT,
-            quantity: -filling.quantity,
-            reason: `Convertidos para sabor ${filling.flavorId}`,
-          },
-        });
-      }
+    const batch = await db.productionBatch.create({
+      data: { productId, recipeId, userId: user.id, quantity, notes, producedAt },
     });
+
+    for (const filling of fillings.filter((f) => f.flavorId && f.quantity > 0)) {
+      await db.productionFilling.create({
+        data: { productionBatchId: batch.id, flavorId: filling.flavorId, quantity: filling.quantity },
+      });
+    }
 
     revalidatePath("/products");
     revalidatePath("/pantry");
     return { ok: true };
-  } catch {
+  } catch (e) {
+    console.error("createProductionBatch error:", e);
     return { ok: false, error: "Erro ao registrar produção." };
   }
 }
@@ -98,7 +65,6 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
   await requireSession();
 
   const productId = String(formData.get("productId") ?? "").trim();
-  const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
   const quantity = parseInt(String(formData.get("quantity") ?? "0"));
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -112,62 +78,31 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
   if (!productId) return { ok: false, error: "Selecione um produto." };
   if (quantity <= 0) return { ok: false, error: "Quantidade deve ser maior que zero." };
 
+  const fillingsTotal = fillings.reduce((s, f) => s + f.quantity, 0);
+  if (fillings.length > 0 && fillingsTotal !== quantity) {
+    return { ok: false, error: `Total distribuído (${fillingsTotal}) deve ser igual à quantidade produzida (${quantity}).` };
+  }
+
   try {
-    await db.$transaction(async (tx) => {
-      // Remove movimentos e recheios antigos
-      await tx.stockMovement.deleteMany({ where: { productionBatchId: id } });
-      await tx.productionFilling.deleteMany({ where: { productionBatchId: id } });
+    // Remove recheios antigos e recria
+    await db.productionFilling.deleteMany({ where: { productionBatchId: id } });
 
-      // Atualiza o lote
-      await tx.productionBatch.update({
-        where: { id },
-        data: { productId, flavorId, recipeId, quantity, notes, producedAt },
-      });
-
-      // Recria movimento principal
-      await tx.stockMovement.create({
-        data: {
-          productId,
-          flavorId,
-          type: StockMovementType.PRODUCTION,
-          quantity,
-          productionBatchId: id,
-        },
-      });
-
-      // Recria recheios
-      for (const filling of fillings) {
-        if (!filling.flavorId || filling.quantity <= 0) continue;
-
-        await tx.productionFilling.create({
-          data: { productionBatchId: id, flavorId: filling.flavorId, quantity: filling.quantity },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            productId,
-            flavorId: filling.flavorId,
-            type: StockMovementType.PRODUCTION,
-            quantity: filling.quantity,
-          },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            productId,
-            flavorId,
-            type: StockMovementType.ADJUSTMENT,
-            quantity: -filling.quantity,
-            reason: `Convertidos para sabor ${filling.flavorId}`,
-          },
-        });
-      }
+    await db.productionBatch.update({
+      where: { id },
+      data: { productId, recipeId, quantity, notes, producedAt },
     });
+
+    for (const filling of fillings.filter((f) => f.flavorId && f.quantity > 0)) {
+      await db.productionFilling.create({
+        data: { productionBatchId: id, flavorId: filling.flavorId, quantity: filling.quantity },
+      });
+    }
 
     revalidatePath("/products");
     revalidatePath("/pantry");
     return { ok: true };
-  } catch {
+  } catch (e) {
+    console.error("updateProductionBatch error:", e);
     return { ok: false, error: "Erro ao atualizar produção." };
   }
 }
@@ -177,10 +112,8 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
 export async function deleteProductionBatch(id: string): Promise<ActionResult> {
   await requireSession();
   try {
-    await db.$transaction([
-      db.stockMovement.deleteMany({ where: { productionBatchId: id } }),
-      db.productionBatch.delete({ where: { id } }),
-    ]);
+    await db.productionFilling.deleteMany({ where: { productionBatchId: id } });
+    await db.productionBatch.delete({ where: { id } });
     revalidatePath("/products");
     revalidatePath("/pantry");
     return { ok: true };

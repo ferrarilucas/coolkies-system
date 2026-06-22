@@ -20,13 +20,12 @@ interface Flavor { id: string; name: string; productId: string; fillingRecipeId:
 interface Recipe { id: string; name: string; yieldQty: number }
 
 interface Props {
-  batchId?: string; // se presente, é edição
+  batchId?: string;
   products: Product[];
   flavors: Flavor[];
   recipes: Recipe[];
   initial?: {
     productId: string;
-    flavorId: string | null;
     recipeId: string | null;
     quantity: number;
     notes: string;
@@ -38,7 +37,6 @@ interface Props {
 type FillingLine = { key: string; flavorId: string; quantity: number };
 
 const NO_RECIPE = "__none__";
-const NO_FLAVOR = "__none__";
 
 export function ProductionForm({ batchId, products, flavors, recipes, initial }: Props) {
   const router = useRouter();
@@ -47,7 +45,6 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
   const [productId, setProductId] = useState(
     initial?.productId ?? (products.length === 1 ? products[0].id : "")
   );
-  const [flavorId, setFlavorId] = useState<string>(initial?.flavorId ?? NO_FLAVOR);
   const [recipeId, setRecipeId] = useState(initial?.recipeId ?? NO_RECIPE);
   const [quantity, setQuantity] = useState(String(initial?.quantity ?? 12));
   const [notes, setNotes] = useState(initial?.notes ?? "");
@@ -58,23 +55,17 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
     initial?.fillings.map((f) => ({ ...f, key: crypto.randomUUID() })) ?? []
   );
 
-  // Sabores do produto selecionado
+  // Todos os sabores do produto — qualquer um pode ser distribuído
   const productFlavors = flavors.filter((f) => f.productId === productId);
-  // Sabores "base" = sem receita de recheio (ex: Tradicional)
-  const baseFlavors = productFlavors.filter((f) => !f.fillingRecipeId);
-  // Sabores com recheio = só aparecem na seção de recheios
-  const flavorsWithFilling = productFlavors.filter((f) => f.fillingRecipeId);
-
   const selectedRecipe = recipeId !== NO_RECIPE ? recipes.find((r) => r.id === recipeId) : undefined;
 
   function handleProductChange(pid: string) {
     setProductId(pid);
-    setFlavorId(NO_FLAVOR);
     setFillings([]);
   }
 
   function addFilling() {
-    const available = flavorsWithFilling.filter(
+    const available = productFlavors.filter(
       (f) => !fillings.some((l) => l.flavorId === f.id),
     );
     if (available.length === 0) return;
@@ -94,8 +85,6 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
 
   const totalQty = parseInt(quantity) || 0;
   const fillingsTotal = fillings.reduce((s, f) => s + (f.quantity || 0), 0);
-  const unfilled = totalQty - fillingsTotal;
-  // Quando há recheios, todos os cookies devem ser distribuídos
   const fillingsIncomplete = fillings.length > 0 && fillingsTotal < totalQty;
   const fillingsExceeded = fillingsTotal > totalQty;
   const selectedFillingIds = new Set(fillings.map((f) => f.flavorId));
@@ -104,12 +93,11 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
     e.preventDefault();
     if (!productId) { toast.error("Selecione um produto."); return; }
     if (totalQty <= 0) { toast.error("Quantidade deve ser maior que zero."); return; }
-    if (fillingsExceeded) { toast.error("Total de recheados excede a quantidade produzida."); return; }
-    if (fillingsIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre os recheios (faltam ${unfilled}).`); return; }
+    if (fillingsExceeded) { toast.error("Total de sabores excede a quantidade produzida."); return; }
+    if (fillingsIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre os sabores (faltam ${totalQty - fillingsTotal}).`); return; }
 
     const fd = new FormData();
     fd.set("productId", productId);
-    fd.set("flavorId", flavorId === NO_FLAVOR ? "" : flavorId);
     fd.set("recipeId", recipeId === NO_RECIPE ? "" : recipeId);
     fd.set("quantity", String(totalQty));
     fd.set("notes", notes);
@@ -154,26 +142,6 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
               </SelectContent>
             </Select>
           </div>
-
-          {/* Sabor base — só aparece se o produto tem sabores sem recheio */}
-          {productId && baseFlavors.length > 0 && (
-            <div className="space-y-2">
-              <Label>
-                Sabor <span className="text-muted-foreground">(opcional)</span>
-              </Label>
-              <Select value={flavorId} onValueChange={setFlavorId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sabor…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_FLAVOR}>Sem sabor específico</SelectItem>
-                  {baseFlavors.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div className="space-y-2">
             <Label>
@@ -229,78 +197,85 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
         </div>
       </section>
 
-      {/* ── Recheios — só aparece se há sabores com recheio ──────────── */}
-      {productId && flavorsWithFilling.length > 0 && (
+      {/* ── Distribuição por sabor ─────────────────────────────────── */}
+      {productId && (
         <>
           <Separator />
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Recheios
+                Sabores
               </h2>
-              {totalQty > 0 && (
+              {totalQty > 0 && fillings.length > 0 && (
                 <span className="text-xs tabular-nums">
                   {fillingsExceeded ? (
-                    <span className="text-destructive">Excede em {-unfilled}</span>
-                  ) : fillingsIncomplete ? (
-                    <span className="text-warning-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
+                    <span className="text-destructive">Excede em {fillingsTotal - totalQty}</span>
                   ) : fillingsTotal === totalQty ? (
                     <span className="text-success">Todos distribuídos ✓</span>
                   ) : (
-                    <span className="text-muted-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
+                    <span className="text-warning-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
                   )}
                 </span>
               )}
             </div>
 
-            <div className="space-y-2">
-              {fillings.map((line) => (
-                <div key={line.key} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
-                  <Select
-                    value={line.flavorId}
-                    onValueChange={(v) => updateFilling(line.key, { flavorId: v })}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {flavorsWithFilling.map((f) => (
-                        <SelectItem
-                          key={f.id}
-                          value={f.id}
-                          disabled={selectedFillingIds.has(f.id) && f.id !== line.flavorId}
-                        >
-                          {f.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={totalQty}
-                    value={line.quantity || ""}
-                    onChange={(e) => updateFilling(line.key, { quantity: parseInt(e.target.value) || 0 })}
-                    placeholder="Qtd."
-                    className="w-20 text-right tabular-nums"
-                  />
-                  <span className="text-xs text-muted-foreground shrink-0">un.</span>
-                  <button
-                    type="button"
-                    onClick={() => removeFilling(line.key)}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+            {productFlavors.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                Nenhum sabor cadastrado para este produto.{" "}
+                Configure em <strong>Cadastros → Catálogo</strong>.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {fillings.map((line) => (
+                    <div key={line.key} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
+                      <Select
+                        value={line.flavorId}
+                        onValueChange={(v) => updateFilling(line.key, { flavorId: v })}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {productFlavors.map((f) => (
+                            <SelectItem
+                              key={f.id}
+                              value={f.id}
+                              disabled={selectedFillingIds.has(f.id) && f.id !== line.flavorId}
+                            >
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={totalQty}
+                        value={line.quantity || ""}
+                        onChange={(e) => updateFilling(line.key, { quantity: parseInt(e.target.value) || 0 })}
+                        placeholder="Qtd."
+                        className="w-20 text-right tabular-nums"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">un.</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilling(line.key)}
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {flavorsWithFilling.length > fillings.length && (
-              <Button type="button" variant="outline" className="w-full gap-2" onClick={addFilling}>
-                <Plus className="size-4" />
-                Adicionar recheio
-              </Button>
+                {productFlavors.length > fillings.length && (
+                  <Button type="button" variant="outline" className="w-full gap-2" onClick={addFilling}>
+                    <Plus className="size-4" />
+                    Adicionar sabor
+                  </Button>
+                )}
+              </>
             )}
           </section>
         </>
