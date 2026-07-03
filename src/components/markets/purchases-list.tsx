@@ -73,7 +73,7 @@ function PurchaseRow({ purchase: p }: { purchase: PurchaseItem }) {
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+        className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
         onClick={handleDelete}
         disabled={deleting}
       >

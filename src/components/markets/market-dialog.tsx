@@ -44,7 +44,7 @@ export function MarketDialog({ market, onCreated }: Props) {
       <Button
         size="sm"
         variant={isEdit ? "ghost" : "default"}
-        className={isEdit ? "h-8 w-8 p-0" : ""}
+        className={isEdit ? "h-9 w-9 p-0" : ""}
         onClick={() => setOpen(true)}
       >
         {isEdit ? <Pencil className="size-4" /> : <><Plus className="size-4" /> Novo mercado</>}

@@ -20,7 +20,7 @@ export function AppShell({
           </div>
         </main>
       </div>
-      <BottomNav user={user} />
+      <BottomNav />
     </div>
   );
 }

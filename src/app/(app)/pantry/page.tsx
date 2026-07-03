@@ -1,7 +1,9 @@
-import { AlertTriangle, PackageOpen } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ListChecks, PackageOpen } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getPantryStock } from "@/server/queries/production";
 import { formatQty, baseUnitLabel } from "@/lib/units";
 import { BaseUnit } from "@prisma/client";
@@ -16,6 +18,14 @@ export default async function PantryPage() {
       <PageHeader
         title="Despensa"
         description="Estoque atual de ingredientes calculado a partir das compras e produções."
+        action={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/pantry/shopping-list">
+              <ListChecks />
+              Lista de compras
+            </Link>
+          </Button>
+        }
       />
 
       {alerts.length > 0 && (

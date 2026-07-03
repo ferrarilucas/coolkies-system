@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   TrendingUp,
   Clock,
@@ -190,11 +191,17 @@ export default async function DashboardPage({
       {/* ─── Top clientes + Estoque baixo ─── */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="size-4 text-muted-foreground" />
               Top clientes
             </CardTitle>
+            <Link
+              href="/customers"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Ver todos
+            </Link>
           </CardHeader>
           <CardContent>
             {topCustomers.length === 0 ? (
@@ -231,11 +238,17 @@ export default async function DashboardPage({
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="size-4 text-warning" />
               Estoque baixo
             </CardTitle>
+            <Link
+              href="/pantry/shopping-list"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Lista de compras
+            </Link>
           </CardHeader>
           <CardContent>
             {lowStock.length === 0 ? (

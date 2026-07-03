@@ -56,7 +56,7 @@ function MarketRow({ market }: { market: MarketItem }) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
+            className="h-9 w-9 text-destructive hover:text-destructive"
             onClick={() => setDeleteOpen(true)}
           >
             <Trash2 className="size-4" />

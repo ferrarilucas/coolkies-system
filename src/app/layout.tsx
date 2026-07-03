@@ -8,12 +8,17 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 export const metadata: Metadata = {
   title: "Coolkies — Gestão de vendas",
   description: "Gerencie pedidos, receitas e estoque de coolkies.",
+  appleWebApp: {
+    capable: true,
+    title: "Coolkies",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  viewportFit: "cover",
   themeColor: "#8B5E3C",
 };
 

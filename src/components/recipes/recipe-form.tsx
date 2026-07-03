@@ -322,7 +322,7 @@ export function RecipeForm({
                 <button
                   type="button"
                   onClick={() => removeLine(line.key)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="size-4" />
                 </button>

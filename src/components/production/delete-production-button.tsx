@@ -24,7 +24,7 @@ export function DeleteProductionButton({ id }: { id: string }) {
 
   return (
     <>
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive" onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-destructive hover:text-destructive" onClick={() => setOpen(true)}>
         <Trash2 className="size-4" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

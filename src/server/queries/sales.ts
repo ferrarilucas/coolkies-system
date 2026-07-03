@@ -6,8 +6,33 @@ export const SALES_PAGE_SIZE = 20;
 
 export type SaleListItem = Awaited<ReturnType<typeof getSales>>["items"][number];
 
-export async function getSales(filter?: "PAID" | "PENDING", page = 1) {
-  const where = filter ? { status: filter } : undefined;
+export async function getSales(filter?: "PAID" | "PENDING", page = 1, q?: string) {
+  const search = q?.trim();
+  const where = {
+    ...(filter ? { status: filter } : {}),
+    ...(search
+      ? {
+          OR: [
+            { customerName: { contains: search, mode: "insensitive" as const } },
+            { notes: { contains: search, mode: "insensitive" as const } },
+            {
+              items: {
+                some: {
+                  productNameSnapshot: { contains: search, mode: "insensitive" as const },
+                },
+              },
+            },
+            {
+              items: {
+                some: {
+                  flavorNameSnapshot: { contains: search, mode: "insensitive" as const },
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
   const skip = (page - 1) * SALES_PAGE_SIZE;
 
   const [items, total] = await Promise.all([
@@ -31,6 +56,17 @@ export async function getSales(filter?: "PAID" | "PENDING", page = 1) {
   ]);
 
   return { items, total, page, pageSize: SALES_PAGE_SIZE, pageCount: Math.ceil(total / SALES_PAGE_SIZE) };
+}
+
+export async function getSalesCounts() {
+  const groups = await db.sale.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const map = new Map(groups.map((g) => [g.status, g._count._all]));
+  const paid = map.get("PAID") ?? 0;
+  const pending = map.get("PENDING") ?? 0;
+  return { all: paid + pending, paid, pending };
 }
 
 // ─── Detalhe de uma venda (para edição) ──────────────────────────────────────

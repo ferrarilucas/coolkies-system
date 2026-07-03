@@ -1,16 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Plus, Trash2, ShoppingCart, Minus, Tag } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Minus, Tag, AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -253,6 +261,37 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const [discountType, setDiscountType] = useState<DiscountType | null>(initial?.discountType ?? null);
   const [discountValue, setDiscountValue] = useState<number>(initial?.discountValue ?? 0);
 
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  const currentSnapshot = JSON.stringify({
+    customer: customer?.id ?? null,
+    soldAt,
+    notes,
+    payStatus,
+    customDate,
+    discountType,
+    discountValue,
+    lines: lines.map((l) => [l.productId, l.flavorId, l.quantity, l.unitPriceCents]),
+  });
+  const firstSnapshot = useRef<string | null>(null);
+  if (firstSnapshot.current === null) firstSnapshot.current = currentSnapshot;
+  const dirty = currentSnapshot !== firstSnapshot.current;
+
+  useEffect(() => {
+    if (!dirty) return;
+    function handler(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  function handleCancel() {
+    if (dirty) setConfirmLeave(true);
+    else router.push("/sales");
+  }
+
   function updateLine(key: string, patch: Partial<SaleItemLine>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
@@ -272,6 +311,7 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const subtotalCents = filledLines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
   const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
   const totalCents = subtotalCents - discountCents;
+  const zeroPriceCount = filledLines.filter((l) => l.unitPriceCents === 0).length;
 
   const forecastDate: Date | null =
     payStatus === "PAID"
@@ -495,14 +535,6 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
           </div>
         )}
 
-        {/* Total sem desconto */}
-        {(!discountType || discountCents === 0) && filledLines.length > 0 && (
-          <div className="flex justify-end">
-            <span className="text-sm font-semibold tabular-nums">
-              Total: {formatBRL(totalCents)}
-            </span>
-          </div>
-        )}
       </section>
 
       <Separator />
@@ -546,20 +578,55 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
       </section>
 
       {/* ── Ações ──────────────────────────────────────────────────────── */}
-      <div className="flex justify-end gap-3 pb-8">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push("/sales")}
-          disabled={saving}
-        >
-          Cancelar
-        </Button>
-        <Button onClick={handleSubmit} disabled={saving}>
-          <ShoppingCart className="size-4" />
-          {saving ? "Salvando..." : saleId ? "Salvar venda" : "Registrar venda"}
-        </Button>
+      <div className="sticky bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
+        {zeroPriceCount > 0 && (
+          <p className="mb-2 flex items-center gap-1.5 text-xs text-warning-foreground">
+            <AlertTriangle className="size-3.5 text-warning" />
+            {zeroPriceCount === 1
+              ? "1 item está sem preço"
+              : `${zeroPriceCount} itens estão sem preço`}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-lg font-bold tabular-nums">{formatBRL(totalCents)}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              <ShoppingCart className="size-4" />
+              {saving ? "Salvando..." : saleId ? "Salvar venda" : "Registrar venda"}
+            </Button>
+          </div>
+        </div>
       </div>
+
+      <Dialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Descartar alterações?</DialogTitle>
+            <DialogDescription>
+              As informações preenchidas neste formulário serão perdidas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmLeave(false)}>
+              Continuar editando
+            </Button>
+            <Button variant="destructive" onClick={() => router.push("/sales")}>
+              Descartar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

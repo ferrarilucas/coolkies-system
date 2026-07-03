@@ -98,7 +98,7 @@ export function PriceDialog({ mode, products, price, defaultProductId, defaultFl
             Novo preço
           </Button>
         ) : (
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-9 w-9">
             <Pencil className="size-4" />
             <span className="sr-only">Editar preço</span>
           </Button>

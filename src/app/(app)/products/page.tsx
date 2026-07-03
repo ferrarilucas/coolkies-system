@@ -19,7 +19,7 @@ export default async function CookiesPage() {
   return (
     <div>
       <PageHeader
-        title="Coolkies"
+        title="Produtos"
         description="Estoque de produto final e histórico de produções."
         action={
           <Button asChild size="sm">
@@ -107,7 +107,7 @@ export default async function CookiesPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
                       <Link href={`/products/${b.id}/edit`}>
                         <Pencil className="size-4" />
                         <span className="sr-only">Editar</span>

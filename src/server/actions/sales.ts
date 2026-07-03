@@ -209,12 +209,49 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
 
 // ─── Marcar como pago ────────────────────────────────────────────────────────
 
-export async function markAsPaid(id: string): Promise<ActionResult> {
+export async function markAsPaid(
+  id: string,
+): Promise<ActionResult<{ forecastDate: string | null; forecastPreset: string | null }>> {
   await requireSession();
+  const sale = await db.sale.findUnique({
+    where: { id },
+    select: { paymentForecastDate: true, forecastPreset: true },
+  });
+  if (!sale) return { ok: false, error: "Venda não encontrada." };
+
   await db.sale.update({
     where: { id },
     data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
   });
+  revalidatePath("/sales");
+  return {
+    ok: true,
+    data: {
+      forecastDate: sale.paymentForecastDate?.toISOString() ?? null,
+      forecastPreset: sale.forecastPreset ?? null,
+    },
+  };
+}
+
+export async function markAsPending(
+  id: string,
+  forecastDate: string | null,
+  forecastPreset: string | null,
+): Promise<ActionResult> {
+  await requireSession();
+  try {
+    await db.sale.update({
+      where: { id },
+      data: {
+        status: "PENDING",
+        paidAt: null,
+        paymentForecastDate: forecastDate ? new Date(forecastDate) : null,
+        forecastPreset: forecastPreset as "DAY_FIVE" | "FIFTH_BUSINESS_DAY" | "CUSTOM" | null,
+      },
+    });
+  } catch {
+    return { ok: false, error: "Não foi possível desfazer." };
+  }
   revalidatePath("/sales");
   return { ok: true };
 }

@@ -8,40 +8,43 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Pagination } from "@/components/ui/pagination";
-import { getSales } from "@/server/queries/sales";
+import { getSales, getSalesCounts } from "@/server/queries/sales";
 import { formatBRL } from "@/lib/money";
 import { MarkAsPaidButton } from "@/components/sales/mark-as-paid-button";
 import { DeleteSaleButton } from "@/components/sales/delete-sale-button";
+import { SalesSearch } from "@/components/sales/sales-search";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-type SearchParams = Promise<{ page?: string; tab?: string }>;
+type SearchParams = Promise<{ page?: string; tab?: string; q?: string }>;
 
 export default async function SalesPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const tab = (sp.tab as "all" | "paid" | "pending") ?? "all";
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
+  const q = (sp.q ?? "").trim();
 
   const filter = tab === "paid" ? "PAID" : tab === "pending" ? "PENDING" : undefined;
-  const result = await getSales(filter, page);
+  const result = await getSales(filter, page, q || undefined);
 
-  // Contagens para os badges (página 1, tamanho grande para ter o total)
-  const [allCount, pendingCount, paidCount] = await Promise.all([
-    getSales(undefined, 1).then((r) => r.total),
-    getSales("PENDING", 1).then((r) => r.total),
-    getSales("PAID", 1).then((r) => r.total),
-  ]);
+  const counts = await getSalesCounts();
+  const { all: allCount, pending: pendingCount, paid: paidCount } = counts;
 
   function buildHref(p: number) {
     const params = new URLSearchParams();
     if (tab !== "all") params.set("tab", tab);
+    if (q) params.set("q", q);
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     return `/sales${qs ? `?${qs}` : ""}`;
   }
 
   function tabHref(t: string) {
-    return t === "all" ? "/sales" : `/sales?tab=${t}`;
+    const params = new URLSearchParams();
+    if (t !== "all") params.set("tab", t);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return `/sales${qs ? `?${qs}` : ""}`;
   }
 
   return (
@@ -58,6 +61,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
           </Button>
         }
       />
+
+      <SalesSearch initialValue={q} tab={tab} />
 
       <Tabs value={tab}>
         <TabsList className="w-full sm:w-auto mb-4">
@@ -87,13 +92,14 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
           {result.items.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
-              title="Nenhuma venda"
+              title={q ? "Nenhum resultado" : "Nenhuma venda"}
               description={
+                q ? `Nada encontrado para "${q}".` :
                 tab === "pending" ? "Sem vendas pendentes." :
                 tab === "paid" ? "Sem vendas pagas." :
                 "Cadastre sua primeira venda."
               }
-              action={tab === "all" ? (
+              action={tab === "all" && !q ? (
                 <Button asChild><Link href="/sales/new"><Plus />Nova venda</Link></Button>
               ) : undefined}
             />
@@ -164,7 +170,7 @@ function SaleCard({ sale }: { sale: Sale }) {
       <div className="flex items-center gap-2 pt-1 border-t">
         {isPending && <MarkAsPaidButton id={sale.id} />}
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+          <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
             <Link href={`/sales/${sale.id}/edit`}>
               <Pencil className="size-4" />
               <span className="sr-only">Editar</span>

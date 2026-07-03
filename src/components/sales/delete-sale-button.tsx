@@ -24,7 +24,7 @@ export function DeleteSaleButton({ id }: { id: string }) {
 
   return (
     <>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => setOpen(true)}>
         <Trash2 className="size-4" />
         <span className="sr-only">Excluir</span>
       </Button>

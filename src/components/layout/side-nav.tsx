@@ -24,8 +24,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from "./theme-toggle";
 
 type NavItem = {
   href: string;
@@ -110,6 +112,7 @@ export function SideNav({ user }: { user: SessionUser }) {
                 <Link
                   href={href}
                   title={collapsed ? label : undefined}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
                     "flex items-center gap-3 rounded-md py-2 text-sm font-medium transition-colors",
                     collapsed ? "justify-center px-0" : "px-3",
@@ -185,7 +188,11 @@ function UserFooter({
             )}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top" className="w-52">
+        <DropdownMenuContent align="end" side="top" className="w-60">
+          <div className="p-2">
+            <ThemeToggle />
+          </div>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={handleLogout}
             className="text-destructive focus:text-destructive"

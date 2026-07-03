@@ -77,10 +77,10 @@ function CustomerCard({ customer }: { customer: CustomerFull }) {
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditOpen(true)}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setEditOpen(true)}>
             <Pencil className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="size-4" />
           </Button>
         </div>
