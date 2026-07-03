@@ -24,6 +24,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   // protege tudo, exceto auth API, assets e o próprio sign-in
   matcher: [
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|sign-in|not-authorized).*)",
+    "/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg|icon-192.png|icon-512.png|apple-icon.png|splash/|sign-in|not-authorized).*)",
   ],
 };

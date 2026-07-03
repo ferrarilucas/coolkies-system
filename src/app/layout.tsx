@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { startupImages } from "@/lib/startup-images";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
     capable: true,
     title: "Coolkies",
     statusBarStyle: "default",
+    startupImage: startupImages,
   },
 };
 
