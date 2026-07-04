@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, ChefHat, Pencil } from "lucide-react";
+import { Plus, ChefHat } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { getCookieStock, getProductionBatches } from "@/server/queries/production";
-import { DeleteProductionButton } from "@/components/production/delete-production-button";
+import { RowActions } from "@/components/shared/row-actions";
+import { deleteProductionBatch } from "@/server/actions/production";
 
 export default async function CookiesPage() {
   const [stock, batches] = await Promise.all([
@@ -54,13 +55,25 @@ export default async function CookiesPage() {
                 <div key={`${entry.productId}-${entry.flavorId}`}
                   className="rounded-lg border bg-card p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold">{entry.productName}</p>
-                      {entry.flavorName && (
-                        <Badge variant="secondary" className="text-xs mt-0.5">{entry.flavorName}</Badge>
+                    <div className="min-w-0">
+                      {entry.flavorName ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">{entry.productName}</p>
+                          <p className="font-semibold">{entry.flavorName}</p>
+                        </>
+                      ) : (
+                        <p className="font-semibold">{entry.productName}</p>
                       )}
                     </div>
-                    <span className={`text-2xl font-bold tabular-nums ${entry.current <= 0 ? "text-destructive" : "text-primary"}`}>
+                    <span
+                      className={`text-2xl font-bold tabular-nums ${
+                        entry.current < 0
+                          ? "text-destructive"
+                          : entry.current === 0
+                            ? "text-muted-foreground"
+                            : "text-primary"
+                      }`}
+                    >
                       {entry.current}
                     </span>
                   </div>
@@ -106,15 +119,13 @@ export default async function CookiesPage() {
                       {b.notes && ` · ${b.notes}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
-                      <Link href={`/products/${b.id}/edit`}>
-                        <Pencil className="size-4" />
-                        <span className="sr-only">Editar</span>
-                      </Link>
-                    </Button>
-                    <DeleteProductionButton id={b.id} />
-                  </div>
+                  <RowActions
+                    editHref={`/products/${b.id}/edit`}
+                    deleteTitle="Excluir produção"
+                    deleteDescription="Isso irá reverter o estoque adicionado por esta produção. Não é possível desfazer."
+                    deleteSuccessMessage="Produção excluída."
+                    onDelete={deleteProductionBatch.bind(null, b.id)}
+                  />
                 </div>
               ))}
             </div>

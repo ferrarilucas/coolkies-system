@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, ShoppingCart, Pencil } from "lucide-react";
+import { Plus, ShoppingCart } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { Pagination } from "@/components/ui/pagination";
 import { getSales, getSalesCounts } from "@/server/queries/sales";
 import { formatBRL } from "@/lib/money";
 import { MarkAsPaidButton } from "@/components/sales/mark-as-paid-button";
-import { DeleteSaleButton } from "@/components/sales/delete-sale-button";
+import { RowActions } from "@/components/shared/row-actions";
+import { deleteSale } from "@/server/actions/sales";
 import { SalesSearch } from "@/components/sales/sales-search";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -138,15 +139,20 @@ function SaleCard({ sale }: { sale: Sale }) {
   const hasDiscount = sale.discountType && sale.discountValue > 0;
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3">
-      {/* Linha 1: cliente + data + total */}
+    <div className="rounded-lg border bg-card p-4 pb-2 space-y-2">
+      {/* Linha 1: cliente + status + total */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium truncate">
-            {sale.customerName ?? <span className="text-muted-foreground italic">Sem identificação</span>}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-medium truncate">
+              {sale.customerName ?? <span className="text-muted-foreground italic">Sem identificação</span>}
+            </p>
+            <StatusBadge sale={sale} />
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {format(sale.soldAt, "d 'de' MMMM yyyy", { locale: ptBR })}
+            {format(sale.soldAt, "d 'de' MMM yyyy", { locale: ptBR })}
+            {isPending && sale.paymentForecastDate &&
+              ` · Prev. ${format(sale.paymentForecastDate, "dd/MM/yyyy")}`}
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -159,7 +165,6 @@ function SaleCard({ sale }: { sale: Sale }) {
                 : formatBRL(sale.discountValue)}
             </p>
           )}
-          <StatusBadge sale={sale} />
         </div>
       </div>
 
@@ -167,17 +172,15 @@ function SaleCard({ sale }: { sale: Sale }) {
       <p className="text-sm text-muted-foreground truncate">{itemsSummary}</p>
 
       {/* Linha 3: ações */}
-      <div className="flex items-center gap-2 pt-1 border-t">
-        {isPending && <MarkAsPaidButton id={sale.id} />}
-        <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
-            <Link href={`/sales/${sale.id}/edit`}>
-              <Pencil className="size-4" />
-              <span className="sr-only">Editar</span>
-            </Link>
-          </Button>
-          <DeleteSaleButton id={sale.id} />
-        </div>
+      <div className="flex items-center justify-between gap-2 border-t pt-1">
+        {isPending ? <MarkAsPaidButton id={sale.id} /> : <span />}
+        <RowActions
+          editHref={`/sales/${sale.id}/edit`}
+          deleteTitle="Excluir venda"
+          deleteDescription="Tem certeza? Esta ação não pode ser desfeita e irá reverter a movimentação de estoque."
+          deleteSuccessMessage="Venda excluída."
+          onDelete={deleteSale.bind(null, sale.id)}
+        />
       </div>
     </div>
   );
@@ -186,21 +189,14 @@ function SaleCard({ sale }: { sale: Sale }) {
 function StatusBadge({ sale }: { sale: Sale }) {
   if (sale.status === "PAID") {
     return (
-      <Badge className="text-xs bg-success/15 text-success border-success/30 mt-1">
+      <Badge className="text-xs bg-success/15 text-success border-success/30 shrink-0">
         Pago
       </Badge>
     );
   }
   return (
-    <div className="mt-1">
-      <Badge className="text-xs bg-warning/15 text-warning-foreground border-warning/30">
-        Pendente
-      </Badge>
-      {sale.paymentForecastDate && (
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Prev. {format(sale.paymentForecastDate, "dd/MM/yyyy")}
-        </p>
-      )}
-    </div>
+    <Badge className="text-xs bg-warning/15 text-warning-text border-warning/30 shrink-0">
+      Pendente
+    </Badge>
   );
 }

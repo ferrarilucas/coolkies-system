@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { normalizeName } from "@/lib/text";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -17,7 +18,7 @@ async function requireAdmin() {
 
 export async function createProduct(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
@@ -32,7 +33,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
 
 export async function updateProduct(id: string, formData: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
@@ -56,7 +57,7 @@ export async function toggleProductActive(id: string, active: boolean): Promise<
 
 export async function createFlavor(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   const productId = String(formData.get("productId") ?? "").trim();
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
   if (!name) return { ok: false, error: "Nome obrigatório." };
@@ -74,7 +75,7 @@ export async function createFlavor(formData: FormData): Promise<ActionResult> {
 
 export async function updateFlavor(id: string, formData: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
   if (!name) return { ok: false, error: "Nome obrigatório." };
 

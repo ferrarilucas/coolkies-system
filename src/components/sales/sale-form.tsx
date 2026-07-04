@@ -578,9 +578,9 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
       </section>
 
       {/* ── Ações ──────────────────────────────────────────────────────── */}
-      <div className="sticky bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
+      <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         {zeroPriceCount > 0 && (
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-warning-foreground">
+          <p className="mb-2 flex items-center gap-1.5 text-xs text-warning-text">
             <AlertTriangle className="size-3.5 text-warning" />
             {zeroPriceCount === 1
               ? "1 item está sem preço"

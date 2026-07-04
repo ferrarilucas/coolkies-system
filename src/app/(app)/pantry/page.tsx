@@ -29,12 +29,19 @@ export default async function PantryPage() {
       />
 
       {alerts.length > 0 && (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
-          <AlertTriangle className="size-4 text-warning mt-0.5 shrink-0" />
-          <div className="text-sm">
-            <span className="font-medium">Estoque baixo: </span>
-            {alerts.map((a) => a.ingredientName).join(", ")}
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertTriangle className="size-4 text-warning-text shrink-0" />
+            <span>
+              <span className="font-semibold">{alerts.length}</span>{" "}
+              {alerts.length === 1
+                ? "ingrediente abaixo do mínimo"
+                : "ingredientes abaixo do mínimo"}
+            </span>
           </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link href="/pantry/shopping-list">Ver lista</Link>
+          </Button>
         </div>
       )}
 
@@ -73,24 +80,35 @@ function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>
         <div className="flex items-center gap-2">
           <span className="font-medium">{entry.ingredientName}</span>
           {entry.belowMin && (
-            <Badge className="text-xs bg-warning/15 text-warning-foreground border-warning/30 gap-1">
+            <Badge className="text-xs bg-warning/15 text-warning-text border-warning/30 gap-1">
               <AlertTriangle className="size-3" />
               Baixo
             </Badge>
           )}
         </div>
-        <span className={`text-xl font-bold tabular-nums ${entry.current <= 0 ? "text-destructive" : ""}`}>
+        <span
+          className={`text-xl font-bold tabular-nums ${
+            entry.current < 0
+              ? "text-destructive"
+              : entry.belowMin
+                ? "text-warning-text"
+                : entry.current === 0
+                  ? "text-muted-foreground"
+                  : ""
+          }`}
+        >
           {currentFormatted}
         </span>
       </div>
 
-      {/* Barra de progresso */}
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${entry.belowMin ? "bg-warning" : "bg-primary"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      {entry.purchased > 0 && (
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${entry.belowMin ? "bg-warning" : "bg-primary"}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex gap-3">
@@ -104,7 +122,7 @@ function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>
         )}
       </div>
 
-      {entry.minStock != null && (
+      {entry.minStock != null && entry.minStock > 0 && (
         <p className="text-xs text-muted-foreground">
           Mínimo: {formatQty(entry.minStock, unit)}
         </p>

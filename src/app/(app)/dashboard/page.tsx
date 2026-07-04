@@ -362,7 +362,7 @@ function Kpi({
     tone === "success"
       ? "text-success"
       : tone === "warning"
-        ? "text-warning-foreground"
+        ? "text-warning-text"
         : tone === "destructive"
           ? "text-destructive"
           : "";

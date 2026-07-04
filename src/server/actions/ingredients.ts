@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { normalizeName } from "@/lib/text";
 import { BaseUnit } from "@prisma/client";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -23,7 +24,7 @@ function parseBaseUnit(value: string): BaseUnit {
 export async function createIngredient(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
 
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
   const minStockRaw = String(formData.get("minStock") ?? "").trim();
   const minStock = minStockRaw ? parseFloat(minStockRaw.replace(",", ".")) : null;
@@ -44,7 +45,7 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
 export async function updateIngredient(id: string, formData: FormData): Promise<ActionResult> {
   await requireAdmin();
 
-  const name = String(formData.get("name") ?? "").trim();
+  const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
   const minStockRaw = String(formData.get("minStock") ?? "").trim();
   const minStock = minStockRaw ? parseFloat(minStockRaw.replace(",", ".")) : null;

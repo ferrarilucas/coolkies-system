@@ -213,7 +213,7 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
                   ) : fillingsTotal === totalQty ? (
                     <span className="text-success">Todos distribuídos ✓</span>
                   ) : (
-                    <span className="text-warning-foreground">{fillingsTotal}/{totalQty} distribuídos</span>
+                    <span className="text-warning-text">{fillingsTotal}/{totalQty} distribuídos</span>
                   )}
                 </span>
               )}

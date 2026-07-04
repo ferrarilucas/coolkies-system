@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { formatBRL } from "@/lib/money";
 import { formatQty } from "@/lib/units";
+import { isLowStock } from "@/lib/stock";
 
 // ─── Histórico de produções ───────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
       consumed,
       current,
       minStock: ing.minStock ?? null,
-      belowMin: ing.minStock != null && current < ing.minStock,
+      belowMin: isLowStock(current, ing.minStock),
       latestPriceCents: pricePerUnit !== null ? Math.round(pricePerUnit) : null,
       latestMarket: lastPurchase?.market.name ?? null,
     };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Trash2, ShoppingCart, Mail, Phone, Building2 } from "lucide-react";
+import { ShoppingCart, Mail, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { RowActions } from "@/components/shared/row-actions";
 import { updateCustomer, deleteCustomer } from "@/server/actions/customers";
 import type { CustomerFull } from "@/server/queries/customers";
 
@@ -27,9 +28,7 @@ export function CustomerList({ customers }: { customers: CustomerFull[] }) {
 
 function CustomerCard({ customer }: { customer: CustomerFull }) {
   const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, startSave] = useTransition();
-  const [deleting, startDelete] = useTransition();
 
   function handleEdit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -38,14 +37,6 @@ function CustomerCard({ customer }: { customer: CustomerFull }) {
       const res = await updateCustomer(customer.id, fd);
       if (res.ok) { toast.success("Cliente atualizado."); setEditOpen(false); }
       else toast.error(res.error ?? "Erro ao atualizar.");
-    });
-  }
-
-  function handleDelete() {
-    startDelete(async () => {
-      const res = await deleteCustomer(customer.id);
-      if (res.ok) { toast.success("Cliente excluído."); setDeleteOpen(false); }
-      else toast.error(res.error ?? "Erro ao excluir.");
     });
   }
 
@@ -76,13 +67,19 @@ function CustomerCard({ customer }: { customer: CustomerFull }) {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setEditOpen(true)}>
-            <Pencil className="size-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="size-4" />
-          </Button>
+        <div className="shrink-0">
+          <RowActions
+            onEdit={() => setEditOpen(true)}
+            deleteTitle="Excluir cliente"
+            deleteDescription={
+              <>
+                Tem certeza que deseja excluir <strong>{customer.name}</strong>?
+                As vendas vinculadas não serão excluídas, apenas o vínculo será removido.
+              </>
+            }
+            deleteSuccessMessage="Cliente excluído."
+            onDelete={() => deleteCustomer(customer.id)}
+          />
         </div>
       </div>
 
@@ -121,24 +118,6 @@ function CustomerCard({ customer }: { customer: CustomerFull }) {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de exclusão */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Excluir cliente</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir <strong>{customer.name}</strong>?
-              As vendas vinculadas não serão excluídas, apenas o vínculo será removido.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Excluindo…" : "Excluir"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

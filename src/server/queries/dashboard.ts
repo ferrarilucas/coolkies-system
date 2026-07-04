@@ -11,6 +11,7 @@ import {
   format,
 } from "date-fns";
 import type { Prisma } from "@prisma/client";
+import { isLowStock } from "@/lib/stock";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos de filtro
@@ -334,7 +335,6 @@ export async function getDashboardData(filters: DashboardFilters) {
 
   // ─── Estoque baixo ───────────────────────────────────────────────────────────
   const lowStock = ingredients
-    .filter((ing) => (ing.minStock ?? 0) > 0)
     .map((ing) => {
       const purchased = purchasedTotal.get(ing.id) ?? 0;
       const used = consumed.get(ing.id) ?? 0;
@@ -342,7 +342,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       const min = ing.minStock ?? 0;
       return { id: ing.id, name: ing.name, baseUnit: ing.baseUnit as string, current, minStock: min, deficit: min - current };
     })
-    .filter((i) => i.current < i.minStock)
+    .filter((i) => isLowStock(i.current, i.minStock))
     .sort((a, b) => b.deficit - a.deficit);
 
   // ─── Mercado ─────────────────────────────────────────────────────────────────
