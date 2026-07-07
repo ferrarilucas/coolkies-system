@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 
 // ─── Lista de vendas (paginada) ───────────────────────────────────────────────
 
@@ -6,10 +7,37 @@ export const SALES_PAGE_SIZE = 20;
 
 export type SaleListItem = Awaited<ReturnType<typeof getSales>>["items"][number];
 
-export async function getSales(filter?: "PAID" | "PENDING", page = 1, q?: string) {
-  const search = q?.trim();
-  const where = {
-    ...(filter ? { status: filter } : {}),
+export type SalesFilters = {
+  status?: "PAID" | "PENDING";
+  q?: string;
+  customerId?: string;
+  from?: Date;
+  to?: Date;
+  forecastFrom?: Date;
+  forecastTo?: Date;
+  overdueOnly?: boolean;
+};
+
+function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
+  const search = f.q?.trim();
+  const forecast: Prisma.DateTimeNullableFilter = {
+    ...(f.forecastFrom ? { gte: f.forecastFrom } : {}),
+    ...(f.forecastTo ? { lte: f.forecastTo } : {}),
+    ...(f.overdueOnly ? { lt: new Date() } : {}),
+  };
+  return {
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.overdueOnly ? { status: "PENDING" } : {}),
+    ...(f.customerId ? { customerId: f.customerId } : {}),
+    ...(f.from || f.to
+      ? {
+          soldAt: {
+            ...(f.from ? { gte: f.from } : {}),
+            ...(f.to ? { lte: f.to } : {}),
+          },
+        }
+      : {}),
+    ...(Object.keys(forecast).length > 0 ? { paymentForecastDate: forecast } : {}),
     ...(search
       ? {
           OR: [
@@ -33,6 +61,10 @@ export async function getSales(filter?: "PAID" | "PENDING", page = 1, q?: string
         }
       : {}),
   };
+}
+
+export async function getSales(filters: SalesFilters = {}, page = 1) {
+  const where = buildSalesWhere(filters);
   const skip = (page - 1) * SALES_PAGE_SIZE;
 
   const [items, total] = await Promise.all([
@@ -58,15 +90,51 @@ export async function getSales(filter?: "PAID" | "PENDING", page = 1, q?: string
   return { items, total, page, pageSize: SALES_PAGE_SIZE, pageCount: Math.ceil(total / SALES_PAGE_SIZE) };
 }
 
-export async function getSalesCounts() {
+export async function getSalesCounts(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
   const groups = await db.sale.groupBy({
     by: ["status"],
+    where: buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined }),
     _count: { _all: true },
   });
   const map = new Map(groups.map((g) => [g.status, g._count._all]));
   const paid = map.get("PAID") ?? 0;
   const pending = map.get("PENDING") ?? 0;
   return { all: paid + pending, paid, pending };
+}
+
+// ─── Resumo do conjunto filtrado (big numbers) ───────────────────────────────
+
+export type SalesSummary = Awaited<ReturnType<typeof getSalesSummary>>;
+
+export async function getSalesSummary(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
+  const base = buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined });
+
+  const groups = await db.sale.groupBy({
+    by: ["status"],
+    where: base,
+    _sum: { totalCents: true },
+    _count: { _all: true },
+  });
+  const overdue = await db.sale.aggregate({
+    where: {
+      AND: [base, { status: "PENDING", paymentForecastDate: { lt: new Date() } }],
+    },
+    _sum: { totalCents: true },
+    _count: { _all: true },
+  });
+
+  const byStatus = new Map(groups.map((g) => [g.status, g]));
+  const pending = byStatus.get("PENDING");
+  const paid = byStatus.get("PAID");
+
+  return {
+    pendingCents: pending?._sum.totalCents ?? 0,
+    pendingCount: pending?._count._all ?? 0,
+    paidCents: paid?._sum.totalCents ?? 0,
+    paidCount: paid?._count._all ?? 0,
+    overdueCents: overdue._sum.totalCents ?? 0,
+    overdueCount: overdue._count._all ?? 0,
+  };
 }
 
 // ─── Detalhe de uma venda (para edição) ──────────────────────────────────────

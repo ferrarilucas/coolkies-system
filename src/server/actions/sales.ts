@@ -233,6 +233,34 @@ export async function markAsPaid(
   };
 }
 
+export async function markCustomerSalesAsPaid(
+  customerId: string,
+): Promise<ActionResult<{ count: number; totalCents: number }>> {
+  await requireSession();
+
+  const pending = await db.sale.aggregate({
+    where: { customerId, status: "PENDING" },
+    _sum: { totalCents: true },
+    _count: { _all: true },
+  });
+  const count = pending._count._all;
+  if (count === 0) {
+    return { ok: false, error: "Nenhuma venda pendente para este cliente." };
+  }
+
+  await db.sale.updateMany({
+    where: { customerId, status: "PENDING" },
+    data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    data: { count, totalCents: pending._sum.totalCents ?? 0 },
+  };
+}
+
 export async function markAsPending(
   id: string,
   forecastDate: string | null,
