@@ -16,7 +16,7 @@
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:db:setup": "docker compose exec -T db psql -U cookies -d postgres -c \"DROP DATABASE IF EXISTS cookies_test\" && docker compose exec -T db psql -U cookies -d postgres -c \"CREATE DATABASE cookies_test\" && dotenv -e .env.test -- prisma db push --skip-generate"
+    "test:db:setup": "docker exec cookies_db psql -U cookies -d postgres -c \"DROP DATABASE IF EXISTS cookies_test\" && docker exec cookies_db psql -U cookies -d postgres -c \"CREATE DATABASE cookies_test\" && dotenv -e .env.test -- prisma db push --skip-generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
