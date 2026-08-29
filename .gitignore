@@ -10,3 +10,4 @@ next-env.d.ts
 /prisma/migrations/dev.db*
 tsconfig.tsbuildinfo
 .claude/worktrees
+.env.test
