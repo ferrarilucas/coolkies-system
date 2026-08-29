@@ -21,10 +21,13 @@ Existe base de produção em uso, com vendas, clientes e receitas reais que prec
 - Convite de membros por e-mail, com papéis
 - Migração dos dados de produção para um workspace inicial
 - Infraestrutura de testes automatizados (não existe hoje)
+- Assinatura recorrente via Asaas e liberação de acesso por plano
 
 **Fora, explicitamente:**
 
-- Billing, planos e limites de uso
+- Limites de uso por plano (quantidade de vendas, membros, produtos)
+- Emissão de nota fiscal
+- Cupons, descontos e trials estendidos por cliente
 - Subdomínios por tenant
 - Super-admin de plataforma / impersonação
 - Exportação de dados
@@ -281,11 +284,73 @@ Migrations 1 e 2 são reversíveis sem perda. A 3 é o ponto sem volta: **dump c
 
 ---
 
-## 10. Testes
+## 10. Billing e liberação por plano
+
+### 10.1 Gateway: Asaas
+
+Escolhido por reunir Pix Automático, cartão recorrente e boleto num só lugar, com sandbox independente (API key própria, sem mover valores reais) e documentação em português.
+
+**Pix Automático** é o método principal: regulado pela Resolução BCB nº 422/2025 e em operação desde janeiro de 2026, com ampla cobertura bancária e MDR de 0,4%–1,2%, contra 3%–4,5% de cartão recorrente. Exige conta **PJ**. Cartão fica como alternativa para quem não autorizar o débito.
+
+### 10.2 Campos em `Workspace`
+
+| Campo | Conteúdo |
+|---|---|
+| `plan` | identificador do plano; inicia com um único valor, `pro` |
+| `subscriptionStatus` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED` |
+| `trialEndsAt` | fim do período de teste (14 dias a partir da criação do workspace) |
+| `graceUntil` | fim da tolerância após falha de pagamento |
+| `asaasCustomerId` | id do cliente no gateway |
+| `asaasSubscriptionId` | id da assinatura no gateway |
+
+`plan` é string livre justamente para que criar novos planos seja dado, não migration. A tabela de preços é decisão comercial e não afeta este desenho.
+
+### 10.3 Estado derivado, não copiado
+
+**O Asaas não emite webhook de assinatura — apenas de cobrança.** Toda cobrança pertencente a uma assinatura carrega o campo `subscription` no JSON do webhook, e é por ele que se faz o vínculo.
+
+Consequência: `subscriptionStatus` é uma máquina de estados nossa, alimentada por eventos de cobrança:
+
+| Evento recebido | Novo estado |
+|---|---|
+| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ACTIVE`, `graceUntil` limpo |
+| `PAYMENT_OVERDUE` | `PAST_DUE`, `graceUntil` = agora + 7 dias |
+| cancelamento da assinatura | `CANCELED` |
+| `trialEndsAt` vencido sem pagamento | `PAST_DUE` |
+
+O endpoint de webhook valida o token configurado no Asaas antes de processar, e é **idempotente**: o id do evento é registrado, e reentrega do mesmo evento não reaplica efeito. Gateways reenviam.
+
+### 10.4 Liberação: somente-leitura, nunca bloqueio total
+
+`assertCanWrite()` vive ao lado de `getWorkspaceContext()` na camada de acesso e recusa **escritas** quando o workspace não está em `TRIALING` ou `ACTIVE` e a tolerância expirou.
+
+Leitura nunca é bloqueada. O dono continua vendo vendas, clientes e histórico; apenas não registra nada novo. Bloquear acesso a dados que o cliente criou gera contestação e ressentimento — travar escrita converte. A UI mostra um banner persistente com o link de regularização.
+
+`OWNER` mantém acesso de escrita à tela de assinatura mesmo em `PAST_DUE`, caso contrário o cliente não conseguiria pagar.
+
+### 10.5 Telas
+
+O Asaas não oferece portal do cliente hospedado, ao contrário da Stripe. São nossas:
+
+- assinatura: plano atual, status, próxima cobrança, método
+- contratação: autorização de Pix Automático ou cartão
+- histórico de cobranças
+- banner de inadimplência
+
+Este é o custo real da escolha do gateway, e foi aceito conscientemente em troca de Pix Automático.
+
+## 11. Testes
 
 O projeto não possui testes hoje. Entram Vitest e um Postgres de teste, e a camada de isolamento não é exceção à cobertura.
 
 **Caso central:** dois workspaces com dados semelhantes, e toda operação de cada modelo provando que um não enxerga o outro — leitura, escrita, atualização, remoção, contagem e agregação.
+
+**Casos obrigatórios de billing:**
+
+- workspace em `PAST_DUE` com tolerância vencida recusa escrita e permite leitura
+- webhook duplicado não reaplica efeito
+- webhook com token inválido é recusado
+- `OWNER` em `PAST_DUE` ainda acessa a tela de assinatura
 
 **Casos obrigatórios adicionais:**
 
@@ -298,7 +363,7 @@ O projeto não possui testes hoje. Entram Vitest e um Postgres de teste, e a cam
 
 ---
 
-## 11. Fases de implementação
+## 12. Fases de implementação
 
 Cada fase deixa o app funcionando. Nenhuma exige que a próxima esteja pronta para subir.
 
@@ -309,13 +374,16 @@ Cada fase deixa o app funcionando. Nenhuma exige que a próxima esteja pronta pa
 | 3 | 16 arquivos de `src/server/` migram para `getWorkspaceDb()`; regra ESLint entra | camada de domínio escopada |
 | 4 | Plugin `organization`, migration 4 + remoção do hook de allowlist, seletor de workspace, papéis por membro, onboarding | workspaces utilizáveis |
 | 5 | Resend, template, aceite por token, tela de membros | convites funcionando |
+| 6 | Campos de billing, máquina de estados, webhook Asaas, `assertCanWrite()`, telas de assinatura | cobrança em produção |
 
 A extension é escrita e testada na fase 1, antes de qualquer código de domínio depender dela.
 
-## 12. Riscos
+## 13. Riscos
 
 **Walker de nested writes.** Peça onde um erro produz dado órfão ou vazamento silencioso, apoiada em DMMF, que é API pouco documentada. Mitigação: primeira coisa escrita, teste antes do uso, e `createSale` — o nested write mais complexo do app — como caso de teste explícito.
 
 **Janela da migration 3.** Único ponto irreversível. Mitigação: dump prévio, script de verificação bloqueante, execução por `DIRECT_URL`.
+
+**Webhook de cobrança como fonte de verdade.** Derivar estado de assinatura a partir de eventos de cobrança é mais frágil que ler um estado pronto: evento perdido ou fora de ordem desalinha o status. Mitigação: idempotência por id de evento, e uma rotina diária que reconcilia o status consultando a API do Asaas em vez de confiar apenas no que chegou.
 
 **Volume do escopo.** São 16 tabelas, 16 arquivos de servidor, ~25 páginas e o modelo de acesso trocado. Mitigação: fases entregáveis. Parar após a fase 3 já deixa um app multi-tenant sólido com um tenant, base melhor que a atual.
