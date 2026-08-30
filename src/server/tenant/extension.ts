@@ -1,16 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
-
-const UNSCOPED_MODELS = new Set([
-  "User",
-  "Session",
-  "Account",
-  "Verification",
-  "AllowedEmail",
-  "Workspace",
-  "Member",
-  "Invitation",
-]);
+import { injectWorkspaceId, UNSCOPED_MODELS } from "./nested-writes";
 
 const WHERE_OPS = new Set([
   "findFirst",
@@ -71,14 +61,14 @@ export function scopedDb(workspaceId: string): PrismaClient {
             }
             return query({
               ...typed,
-              data: { ...((typed.data ?? {}) as object), workspaceId },
+              data: injectWorkspaceId(model, typed.data ?? {}, workspaceId),
             } as never);
           }
 
           if (operation === "upsert") {
             return query({
               ...withWhere(typed, workspaceId),
-              create: { ...((typed.create ?? {}) as object), workspaceId },
+              create: injectWorkspaceId(model, typed.create ?? {}, workspaceId),
             } as never);
           }
 

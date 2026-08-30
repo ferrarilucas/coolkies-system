@@ -111,4 +111,34 @@ describe("escopo por workspace", () => {
 
     expect(found?.id).toBe(meu.id);
   });
+
+  it("nested write de venda grava workspaceId nos itens", async () => {
+    const a = await createWorkspace("A");
+    const scoped = scopedDb(a.id);
+    const user = await testDb.user.create({
+      data: { id: "u-nested", name: "Ana", email: "ana@example.com" },
+    });
+    const product = await scoped.product.create({ data: { name: "Cookie" } });
+
+    const sale = await scoped.sale.create({
+      data: {
+        userId: user.id,
+        totalCents: 1000,
+        items: {
+          create: [
+            {
+              productId: product.id,
+              productNameSnapshot: "Cookie",
+              quantity: 2,
+              unitPriceSnapshot: 500,
+            },
+          ],
+        },
+      },
+      include: { items: true },
+    });
+
+    expect(sale.workspaceId).toBe(a.id);
+    expect(sale.items[0].workspaceId).toBe(a.id);
+  });
 });
