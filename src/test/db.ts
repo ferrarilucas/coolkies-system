@@ -30,3 +30,12 @@ export async function resetDb() {
     `TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`,
   );
 }
+
+let counter = 0;
+
+export async function createWorkspace(name: string) {
+  counter += 1;
+  return testDb.workspace.create({
+    data: { name, slug: `${name.toLowerCase().replace(/\W+/g, "-")}-${counter}` },
+  });
+}

@@ -37,6 +37,7 @@ model User {
   sales            Sale[]
   productionBatches ProductionBatch[]
   ingredientPurchases IngredientPurchase[]
+  members          Member[]
 
   @@map("user")
 }
@@ -49,6 +50,7 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeWorkspaceId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -98,6 +100,61 @@ model AllowedEmail {
   @@map("allowed_email")
 }
 
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  CANCELED
+  EXPIRED
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("workspace")
+}
+
+model Member {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        MemberRole @default(MEMBER)
+  createdAt   DateTime   @default(now())
+
+  @@unique([workspaceId, userId])
+  @@map("member")
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        MemberRole       @default(MEMBER)
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  inviterId   String
+  createdAt   DateTime         @default(now())
+
+  @@index([workspaceId, status])
+  @@map("invitation")
+}
+
 // ─────────────────────────────────────────────
 // CATÁLOGO ("Valores"): produtos, sabores, preços
 // ─────────────────────────────────────────────
@@ -114,6 +171,8 @@ model Product {
   saleItems      SaleItem[]
   stockMovements StockMovement[]
   productionBatches ProductionBatch[]
+
+  workspaceId String?
 
   @@unique([name])
   @@map("product")
@@ -139,6 +198,8 @@ model Flavor {
   productionBatches ProductionBatch[]
   productionFillings ProductionFilling[]
 
+  workspaceId String?
+
   @@unique([productId, name])
   @@map("flavor")
 }
@@ -157,6 +218,8 @@ model PriceListItem {
 
   history PriceHistory[]
 
+  workspaceId String?
+
   @@unique([productId, flavorId])
   @@map("price_list_item")
 }
@@ -167,6 +230,8 @@ model PriceHistory {
   priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
   priceCents      Int
   changedAt       DateTime      @default(now())
+
+  workspaceId String?
 
   @@map("price_history")
 }
@@ -186,6 +251,8 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   sales Sale[]
+
+  workspaceId String?
 
   @@map("customer")
 }
@@ -238,6 +305,8 @@ model Sale {
 
   items SaleItem[]
 
+  workspaceId String?
+
   @@index([status, paymentForecastDate])
   @@index([soldAt])
   @@map("sale")
@@ -258,6 +327,8 @@ model SaleItem {
   unitPriceSnapshot  Int // centavos
   flavorNameSnapshot String?
   productNameSnapshot String
+
+  workspaceId String?
 
   @@map("sale_item")
 }
@@ -284,6 +355,8 @@ model Ingredient {
   recipeIngredients RecipeIngredient[]
   shoppingItems     ShoppingListItem[]
 
+  workspaceId String?
+
   @@unique([name])
   @@map("ingredient")
 }
@@ -295,6 +368,8 @@ model Market {
   updatedAt DateTime @updatedAt
 
   purchases IngredientPurchase[]
+
+  workspaceId String?
 
   @@unique([name])
   @@map("market")
@@ -315,6 +390,8 @@ model IngredientPurchase {
   pricePaidCents Int // valor pago em centavos
   purchasedAt DateTime @default(now())
   createdAt  DateTime @default(now())
+
+  workspaceId String?
 
   @@index([ingredientId, purchasedAt])
   @@map("ingredient_purchase")
@@ -338,6 +415,8 @@ model Recipe {
   // Sabores que usam esta receita como recheio
   flavorFillings Flavor[] @relation("FlavorFillingRecipe")
 
+  workspaceId String?
+
   @@unique([name])
   @@map("recipe")
 }
@@ -349,6 +428,8 @@ model RecipeIngredient {
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   quantity     Float // quantidade na unidade base do ingrediente
+
+  workspaceId String?
 
   @@unique([recipeId, ingredientId])
   @@map("recipe_ingredient")
@@ -379,6 +460,8 @@ model ProductionBatch {
   movements StockMovement[]
   fillings  ProductionFilling[] // recheios aplicados neste lote
 
+  workspaceId String?
+
   @@map("production_batch")
 }
 
@@ -390,6 +473,8 @@ model ProductionFilling {
   flavorId          String
   flavor            Flavor          @relation(fields: [flavorId], references: [id])
   quantity          Int             // quantos cookies deste lote receberam este recheio
+
+  workspaceId String?
 
   @@map("production_filling")
 }
@@ -417,6 +502,8 @@ model StockMovement {
 
   createdAt DateTime @default(now())
 
+  workspaceId String?
+
   @@index([productId, flavorId])
   @@map("stock_movement")
 }
@@ -432,6 +519,8 @@ model ShoppingListItem {
   autoGenerated Boolean    @default(false) // gerado por estoque baixo
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+
+  workspaceId String?
 
   @@map("shopping_list_item")
 }
