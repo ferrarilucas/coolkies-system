@@ -1,20 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb, requireRole } from "@/server/tenant/context";
+import { getScopedDb } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
-async function requireAdmin() {
-  await requireRole("OWNER", "ADMIN");
-}
-
 // ─── Products ───────────────────────────────────────
 
 export async function createProduct(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const { db, workspaceId } = await getScopedDb();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
@@ -29,8 +24,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateProduct(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const { db } = await getScopedDb();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
@@ -45,8 +39,7 @@ export async function updateProduct(id: string, formData: FormData): Promise<Act
 }
 
 export async function toggleProductActive(id: string, active: boolean): Promise<ActionResult> {
-  await requireAdmin();
-  const { db } = await getScopedDb();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   await db.product.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -55,8 +48,7 @@ export async function toggleProductActive(id: string, active: boolean): Promise<
 // ─── Flavors ────────────────────────────────────────
 
 export async function createFlavor(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const { db, workspaceId } = await getScopedDb();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   const name = normalizeName(String(formData.get("name") ?? ""));
   const productId = String(formData.get("productId") ?? "").trim();
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
@@ -74,8 +66,7 @@ export async function createFlavor(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateFlavor(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const { db } = await getScopedDb();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   const name = normalizeName(String(formData.get("name") ?? ""));
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
   if (!name) return { ok: false, error: "Nome obrigatório." };
@@ -91,8 +82,7 @@ export async function updateFlavor(id: string, formData: FormData): Promise<Acti
 }
 
 export async function toggleFlavorActive(id: string, active: boolean): Promise<ActionResult> {
-  await requireAdmin();
-  const { db } = await getScopedDb();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   await db.flavor.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -101,8 +91,7 @@ export async function toggleFlavorActive(id: string, active: boolean): Promise<A
 // ─── Prices ─────────────────────────────────────────
 
 export async function upsertPrice(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const { db, workspaceId } = await getScopedDb();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   const productId = String(formData.get("productId") ?? "").trim();
   const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
   const priceCents = parseInt(String(formData.get("priceCents") ?? "0"), 10);
@@ -135,8 +124,7 @@ export async function upsertPrice(formData: FormData): Promise<ActionResult> {
 }
 
 export async function togglePriceActive(id: string, active: boolean): Promise<ActionResult> {
-  await requireAdmin();
-  const { db } = await getScopedDb();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   await db.priceListItem.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import type { MemberRole, PrismaClient } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -10,7 +11,7 @@ export type WorkspaceContext = {
   role: MemberRole;
 };
 
-export async function getWorkspaceContext(): Promise<WorkspaceContext> {
+export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext> => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Não autenticado");
 
@@ -25,7 +26,7 @@ export async function getWorkspaceContext(): Promise<WorkspaceContext> {
     workspaceId: membership.workspaceId,
     role: membership.role,
   };
-}
+});
 
 export async function getWorkspaceDb(): Promise<PrismaClient> {
   const { workspaceId } = await getWorkspaceContext();
@@ -40,7 +41,10 @@ export async function requireRole(...allowed: MemberRole[]): Promise<WorkspaceCo
 
 export type ScopedDb = WorkspaceContext & { db: PrismaClient };
 
-export async function getScopedDb(): Promise<ScopedDb> {
+export async function getScopedDb(...allowedRoles: MemberRole[]): Promise<ScopedDb> {
   const context = await getWorkspaceContext();
+  if (allowedRoles.length > 0 && !allowedRoles.includes(context.role)) {
+    throw new Error("Não autorizado");
+  }
   return { ...context, db: scopedDb(context.workspaceId) };
 }
