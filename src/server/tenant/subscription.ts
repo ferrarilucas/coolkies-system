@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
@@ -12,15 +13,22 @@ export async function ensureTrialSubscription(userId: string): Promise<void> {
   const existing = await db.subscription.findUnique({ where: { userId } });
   if (existing) return;
 
-  await db.subscription.create({
-    data: {
-      userId,
-      plan: "solo",
-      source: "ASAAS",
-      status: "TRIALING",
-      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
-    },
-  });
+  try {
+    await db.subscription.create({
+      data: {
+        userId,
+        plan: "solo",
+        source: "ASAAS",
+        status: "TRIALING",
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return;
+    }
+    throw error;
+  }
 }
 
 export function isSubscriptionUsable(
