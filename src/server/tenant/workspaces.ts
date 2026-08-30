@@ -166,12 +166,24 @@ export async function listPendingInvites(workspaceId: string): Promise<InviteSum
   }));
 }
 
+export type CreatedInvite = {
+  code: string;
+  workspaceName: string;
+  inviterName: string;
+};
+
 export async function createInvite(
   workspaceId: string,
   role: MemberRole,
   email: string | null,
-): Promise<string> {
+): Promise<CreatedInvite> {
   const inviterId = await requireUserId();
+
+  const [workspace, inviter] = await Promise.all([
+    db.workspace.findUnique({ where: { id: workspaceId } }),
+    db.user.findUnique({ where: { id: inviterId } }),
+  ]);
+  if (!workspace) throw new Error("Workspace não encontrado.");
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const code = randomCode();
@@ -188,7 +200,12 @@ export async function createInvite(
         expiresAt: new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000),
       },
     });
-    return code;
+
+    return {
+      code,
+      workspaceName: workspace.name,
+      inviterName: inviter?.name ?? "Alguém",
+    };
   }
 
   throw new Error("Não foi possível gerar um código. Tente de novo.");

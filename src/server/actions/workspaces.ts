@@ -9,7 +9,10 @@ import {
   joinWithCode,
   setActiveWorkspace,
 } from "@/server/tenant/workspaces";
+import { formatInviteCode } from "@/server/tenant/workspaces";
 import { getWorkspaceContext, requireRole } from "@/server/tenant/context";
+import { sendInviteEmail } from "@/lib/email";
+import { roleLabel } from "@/lib/roles";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -50,16 +53,37 @@ export async function joinWorkspace(formData: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function createInvite(formData: FormData): Promise<ActionResult<{ code: string }>> {
+export type InviteCreated = { code: string; emailSent: boolean; emailError?: string };
+
+export async function createInvite(
+  formData: FormData,
+): Promise<ActionResult<InviteCreated>> {
   const roleRaw = String(formData.get("role") ?? "MEMBER");
   const role = (roleRaw === "ADMIN" ? "ADMIN" : "MEMBER") as MemberRole;
   const email = String(formData.get("email") ?? "").trim().toLowerCase() || null;
 
   try {
     const { workspaceId } = await requireRole("OWNER", "ADMIN");
-    const code = await createInviteRecord(workspaceId, role, email);
+    const invite = await createInviteRecord(workspaceId, role, email);
+
+    let emailSent = false;
+    let emailError: string | undefined;
+
+    if (email) {
+      const result = await sendInviteEmail({
+        to: email,
+        code: formatInviteCode(invite.code),
+        workspaceName: invite.workspaceName,
+        inviterName: invite.inviterName,
+        roleLabel: roleLabel(role),
+        appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+      });
+      emailSent = result.sent;
+      emailError = result.reason;
+    }
+
     revalidatePath("/workspaces/members");
-    return { ok: true, data: { code } };
+    return { ok: true, data: { code: invite.code, emailSent, emailError } };
   } catch (e) {
     return { ok: false, error: messageOf(e) };
   }

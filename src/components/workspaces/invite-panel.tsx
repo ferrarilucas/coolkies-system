@@ -42,13 +42,27 @@ export function InvitePanel({ invites }: { invites: PendingInvite[] }) {
   const router = useRouter();
 
   function onCreate(formData: FormData) {
+    const wantsEmail = String(formData.get("email") ?? "").trim().length > 0;
+
     startTransition(async () => {
       const result = await createInvite(formData);
       if (!result.ok) {
         toast.error(result.error ?? "Não foi possível gerar o convite.");
         return;
       }
-      toast.success("Código gerado.");
+
+      if (!wantsEmail) {
+        toast.success("Código gerado. Copie e envie como preferir.");
+      } else if (result.data?.emailSent) {
+        toast.success("Convite enviado por e-mail.");
+      } else {
+        toast.warning(
+          result.data?.emailError
+            ? `Código gerado, mas o e-mail não saiu: ${result.data.emailError}`
+            : "Código gerado, mas o e-mail não saiu. Copie e envie manualmente.",
+        );
+      }
+
       setOpen(false);
       router.refresh();
     });
@@ -156,14 +170,18 @@ export function InvitePanel({ invites }: { invites: PendingInvite[] }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail (opcional)</Label>
+              <Label htmlFor="email">Enviar por e-mail (opcional)</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="Só para você lembrar de quem é"
+                placeholder="nome@email.com"
                 autoComplete="off"
               />
+              <p className="text-xs text-muted-foreground">
+                Se preencher, mandamos o código por e-mail. Se deixar em branco,
+                você copia e envia como preferir.
+              </p>
             </div>
 
             <Button type="submit" disabled={pending} className="w-full">
