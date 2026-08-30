@@ -1,0 +1,18 @@
+export const DOMAIN_TABLES = [
+  "product",
+  "flavor",
+  "price_list_item",
+  "price_history",
+  "customer",
+  "sale",
+  "sale_item",
+  "ingredient",
+  "market",
+  "ingredient_purchase",
+  "recipe",
+  "recipe_ingredient",
+  "production_batch",
+  "production_filling",
+  "stock_movement",
+  "shopping_list_item",
+];
