@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb, testDb } from "@/test/db";
-import { activeWorkspaceIds, canWriteInWorkspace, isSubscriptionUsable } from "./subscription";
+import {
+  activeWorkspaceIds,
+  canWriteInWorkspace,
+  ensureTrialSubscription,
+  isSubscriptionUsable,
+} from "./subscription";
 
 describe("model de assinatura", () => {
   beforeEach(async () => {
@@ -188,5 +193,47 @@ describe("permissao de escrita", () => {
     });
 
     expect(await canWriteInWorkspace(ws.id)).toBe(false);
+  });
+});
+
+describe("trial na criacao do primeiro workspace", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("cria assinatura em trial de 14 dias", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-trial", name: "Nova", email: "trial@example.com" },
+    });
+
+    await ensureTrialSubscription(user.id);
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+
+    expect(sub?.status).toBe("TRIALING");
+    expect(sub?.plan).toBe("solo");
+    const dias = Math.round(
+      ((sub?.trialEndsAt?.getTime() ?? 0) - Date.now()) / 86400000,
+    );
+    expect(dias).toBe(14);
+  });
+
+  it("nao renova o trial de quem ja tem assinatura", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-retrial", name: "Velha", email: "retrial@example.com" },
+    });
+    const antiga = new Date("2026-01-01");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        source: "MANUAL",
+        trialEndsAt: antiga,
+      },
+    });
+
+    await ensureTrialSubscription(user.id);
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+
+    expect(sub?.trialEndsAt?.toISOString()).toBe(antiga.toISOString());
   });
 });

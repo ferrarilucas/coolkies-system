@@ -2,7 +2,9 @@ import { headers } from "next/headers";
 import type { MemberRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { effectiveLimit } from "@/lib/plans";
 import { normalizeName } from "@/lib/text";
+import { ensureTrialSubscription, getSubscription } from "./subscription";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 8;
@@ -112,6 +114,19 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
   const userId = await requireUserId();
   const clean = normalizeName(name);
   if (!clean) throw new Error("Informe um nome para o workspace.");
+
+  await ensureTrialSubscription(userId);
+
+  const sub = await getSubscription(userId);
+  const owned = await db.member.count({ where: { userId, role: "OWNER" } });
+  const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
+  if (owned + 1 > limit) {
+    throw new Error(
+      sub?.status === "TRIALING"
+        ? "Durante o teste você pode ter um workspace. Assine um plano para criar outro."
+        : "Seu plano não permite mais workspaces. Faça upgrade para criar outro.",
+    );
+  }
 
   const workspace = await db.$transaction(async (tx) => {
     const created = await tx.workspace.create({
