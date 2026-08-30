@@ -1,24 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) throw new Error("Não autenticado");
-  return session.user;
-}
 
 type FillingInput = { flavorId: string; quantity: number };
 
 // ─── Criar produção ───────────────────────────────────────────────────────────
 
 export async function createProductionBatch(formData: FormData): Promise<ActionResult> {
-  const user = await requireSession();
+  const { db, workspaceId, userId } = await getScopedDb();
 
   const productId = String(formData.get("productId") ?? "").trim();
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
@@ -41,12 +33,17 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
 
   try {
     const batch = await db.productionBatch.create({
-      data: { productId, recipeId, userId: user.id, quantity, notes, producedAt },
+      data: { productId, recipeId, userId, quantity, notes, producedAt, workspaceId },
     });
 
     for (const filling of fillings.filter((f) => f.flavorId && f.quantity > 0)) {
       await db.productionFilling.create({
-        data: { productionBatchId: batch.id, flavorId: filling.flavorId, quantity: filling.quantity },
+        data: {
+          productionBatchId: batch.id,
+          flavorId: filling.flavorId,
+          quantity: filling.quantity,
+          workspaceId,
+        },
       });
     }
 
@@ -62,7 +59,7 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
 // ─── Atualizar produção ───────────────────────────────────────────────────────
 
 export async function updateProductionBatch(id: string, formData: FormData): Promise<ActionResult> {
-  await requireSession();
+  const { db, workspaceId } = await getScopedDb();
 
   const productId = String(formData.get("productId") ?? "").trim();
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
@@ -94,7 +91,12 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
 
     for (const filling of fillings.filter((f) => f.flavorId && f.quantity > 0)) {
       await db.productionFilling.create({
-        data: { productionBatchId: id, flavorId: filling.flavorId, quantity: filling.quantity },
+        data: {
+          productionBatchId: id,
+          flavorId: filling.flavorId,
+          quantity: filling.quantity,
+          workspaceId,
+        },
       });
     }
 
@@ -110,7 +112,7 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
 // ─── Excluir produção ─────────────────────────────────────────────────────────
 
 export async function deleteProductionBatch(id: string): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
   try {
     await db.productionFilling.deleteMany({ where: { productionBatchId: id } });
     await db.productionBatch.delete({ where: { id } });

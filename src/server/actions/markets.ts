@@ -1,30 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 import { toBaseUnit, type InputUnit } from "@/lib/units";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) throw new Error("Não autenticado");
-  return session.user;
-}
 
 // ─── Mercados ─────────────────────────────────────────────────────────────────
 
 export async function createMarket(
   formData: FormData,
 ): Promise<ActionResult<{ id: string; name: string }>> {
-  await requireSession();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
   try {
-    const market = await db.market.create({ data: { name } });
+    const market = await db.market.create({ data: { name, workspaceId } });
     revalidatePath("/markets");
     return { ok: true, data: { id: market.id, name: market.name } };
   } catch {
@@ -36,7 +28,7 @@ export async function updateMarket(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
@@ -50,7 +42,7 @@ export async function updateMarket(
 }
 
 export async function deleteMarket(id: string): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   try {
     await db.market.delete({ where: { id } });
     revalidatePath("/markets");
@@ -65,7 +57,7 @@ export async function deleteMarket(id: string): Promise<ActionResult> {
 export async function createPurchase(
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireSession();
+  const { db, workspaceId, userId } = await getScopedDb();
 
   const marketId = String(formData.get("marketId") ?? "").trim();
   const ingredientId = String(formData.get("ingredientId") ?? "").trim();
@@ -88,11 +80,12 @@ export async function createPurchase(
     data: {
       marketId,
       ingredientId,
-      userId: user.id,
+      userId,
       quantity,
       unit,
       pricePaidCents,
       purchasedAt,
+      workspaceId,
     },
   });
 
@@ -101,7 +94,7 @@ export async function createPurchase(
 }
 
 export async function deletePurchase(id: string): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
   await db.ingredientPurchase.delete({ where: { id } });
   revalidatePath("/markets");
   return { ok: true };

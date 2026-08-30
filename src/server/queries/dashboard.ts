@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 import {
   startOfDay,
   endOfDay,
@@ -42,6 +42,7 @@ function flavorKey(productId: string, flavorId: string | null) {
 export type FilterOptions = Awaited<ReturnType<typeof getFilterOptions>>;
 
 export async function getFilterOptions() {
+  const db = await getWorkspaceDb();
   const products = await db.product.findMany({
     orderBy: { name: "asc" },
     select: {
@@ -72,6 +73,7 @@ export async function getFilterOptions() {
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
 export async function getDashboardData(filters: DashboardFilters) {
+  const db = await getWorkspaceDb();
   const from = startOfDay(filters.from);
   const to = endOfDay(filters.to);
 

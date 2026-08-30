@@ -1,10 +1,11 @@
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 export type IngredientWithCost = Awaited<
   ReturnType<typeof getIngredientsWithLastCost>
 >[number];
 
 export async function getIngredientsWithLastCost() {
+  const db = await getWorkspaceDb();
   const ingredients = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {

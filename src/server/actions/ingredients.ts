@@ -1,19 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 import { BaseUnit } from "@prisma/client";
 
 export type ActionResult = { ok: boolean; error?: string };
-
-async function requireAdmin() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (role !== "ADMIN") throw new Error("Não autorizado");
-}
 
 function parseBaseUnit(value: string): BaseUnit {
   if (value === "ML") return BaseUnit.ML;
@@ -22,7 +14,7 @@ function parseBaseUnit(value: string): BaseUnit {
 }
 
 export async function createIngredient(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
@@ -33,7 +25,7 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
   if (minStock !== null && isNaN(minStock)) return { ok: false, error: "Estoque mínimo inválido." };
 
   try {
-    await db.ingredient.create({ data: { name, baseUnit, minStock } });
+    await db.ingredient.create({ data: { name, baseUnit, minStock, workspaceId } });
   } catch {
     return { ok: false, error: "Já existe um ingrediente com esse nome." };
   }
@@ -43,7 +35,7 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
 }
 
 export async function updateIngredient(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
@@ -64,7 +56,7 @@ export async function updateIngredient(id: string, formData: FormData): Promise<
 }
 
 export async function deleteIngredient(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
 
   try {
     await db.ingredient.delete({ where: { id } });

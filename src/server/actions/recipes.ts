@@ -1,25 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 import { BaseUnit, Prisma } from "@prisma/client";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
-
-async function requireAdmin() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (role !== "ADMIN") throw new Error("Não autorizado");
-}
 
 // ─── Recipe ─────────────────────────────────────────────────────────────────
 
 type IngredientLine = { ingredientId: string; quantity: number };
 
 export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id: string }>> {
-  await requireAdmin();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const name = String(formData.get("name") ?? "").trim();
@@ -61,6 +53,7 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
                   recipeId: id,
                   ingredientId: ing.ingredientId,
                   quantity: ing.quantity,
+                  workspaceId,
                 })),
               }),
             ]
@@ -75,10 +68,12 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
           yieldQty,
           notes,
           steps,
+          workspaceId,
           ingredients: {
             create: ingredients.map((ing) => ({
               ingredientId: ing.ingredientId,
               quantity: ing.quantity,
+              workspaceId,
             })),
           },
         },
@@ -92,7 +87,7 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
 }
 
 export async function deleteRecipe(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { db } = await getScopedDb("OWNER", "ADMIN");
   try {
     await db.recipe.delete({ where: { id } });
   } catch {
@@ -109,7 +104,7 @@ type IngredientData = { id: string; name: string; baseUnit: string };
 export async function createIngredientInline(
   formData: FormData,
 ): Promise<ActionResult<IngredientData>> {
-  await requireAdmin();
+  const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
 
   const name = String(formData.get("name") ?? "").trim();
   const baseUnitRaw = String(formData.get("baseUnit") ?? "G");
@@ -119,7 +114,7 @@ export async function createIngredientInline(
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
-    const ingredient = await db.ingredient.create({ data: { name, baseUnit } });
+    const ingredient = await db.ingredient.create({ data: { name, baseUnit, workspaceId } });
     revalidatePath("/admin/ingredients");
     return { ok: true, data: { id: ingredient.id, name: ingredient.name, baseUnit: ingredient.baseUnit } };
   } catch {

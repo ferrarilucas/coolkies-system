@@ -1,12 +1,13 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 // ─── Mercados ─────────────────────────────────────────────────────────────────
 
 export type MarketItem = Awaited<ReturnType<typeof getMarkets>>[number];
 
 export async function getMarkets() {
+  const db = await getWorkspaceDb();
   return db.market.findMany({
     orderBy: { name: "asc" },
     include: { _count: { select: { purchases: true } } },
@@ -18,6 +19,7 @@ export async function getMarkets() {
 export type PurchaseItem = Awaited<ReturnType<typeof getPurchases>>[number];
 
 export async function getPurchases() {
+  const db = await getWorkspaceDb();
   return db.ingredientPurchase.findMany({
     orderBy: { purchasedAt: "desc" },
     include: {
@@ -32,6 +34,7 @@ export async function getPurchases() {
 export type LatestPrice = Awaited<ReturnType<typeof getLatestPricesByIngredient>>[number];
 
 export async function getLatestPricesByIngredient() {
+  const db = await getWorkspaceDb();
   // Para cada ingrediente, pega a compra mais recente
   const ingredients = await db.ingredient.findMany({
     orderBy: { name: "asc" },

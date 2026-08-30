@@ -1,6 +1,7 @@
 "use server";
 
-import { db } from "@/lib/db";
+import type { PrismaClient } from "@prisma/client";
+import { getWorkspaceDb } from "@/server/tenant/context";
 import { formatBRL } from "@/lib/money";
 import { formatQty } from "@/lib/units";
 import { isLowStock } from "@/lib/stock";
@@ -10,6 +11,7 @@ import { isLowStock } from "@/lib/stock";
 export type ProductionBatchItem = Awaited<ReturnType<typeof getProductionBatches>>[number];
 
 export async function getProductionBatches() {
+  const db = await getWorkspaceDb();
   return db.productionBatch.findMany({
     orderBy: { producedAt: "desc" },
     include: {
@@ -28,6 +30,7 @@ export async function getProductionBatches() {
 export type ProductionBatchDetail = Awaited<ReturnType<typeof getProductionBatchById>>;
 
 export async function getProductionBatchById(id: string) {
+  const db = await getWorkspaceDb();
   return db.productionBatch.findUnique({
     where: { id },
     include: {
@@ -51,6 +54,7 @@ export type CookieStockEntry = {
 };
 
 export async function getCookieStock(): Promise<CookieStockEntry[]> {
+  const db = await getWorkspaceDb();
   // Fonte de verdade para produção: ProductionFilling (direto, sem StockMovement)
   const fillings = await db.productionFilling.findMany({
     select: {
@@ -125,6 +129,7 @@ export type PantryEntry = {
 };
 
 export async function getPantryStock(): Promise<PantryEntry[]> {
+  const db = await getWorkspaceDb();
   const ingredients = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -147,7 +152,7 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
 
   // Total consumido em produções (via IngredientConsumption — calculado abaixo)
   // Para calcular o consumo real precisamos percorrer as produções com receita
-  const consumptionMap = await buildConsumptionMap();
+  const consumptionMap = await buildConsumptionMap(db);
 
   return ingredients.map((ing) => {
     const purchased = purchaseMap.get(ing.id) ?? 0;
@@ -175,7 +180,7 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
 }
 
 /** Constrói mapa ingredientId → quantidade consumida em produções */
-async function buildConsumptionMap(): Promise<Map<string, number>> {
+async function buildConsumptionMap(db: PrismaClient): Promise<Map<string, number>> {
   const map = new Map<string, number>();
 
   const batches = await db.productionBatch.findMany({

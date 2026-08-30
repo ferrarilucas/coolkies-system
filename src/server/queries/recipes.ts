@@ -1,10 +1,11 @@
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 // ─── Lista com custo estimado ────────────────────────────────────────────────
 
 export type RecipeListItem = Awaited<ReturnType<typeof getRecipesWithCost>>[number];
 
 export async function getRecipesWithCost() {
+  const db = await getWorkspaceDb();
   const recipes = await db.recipe.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -57,6 +58,7 @@ export async function getRecipesWithCost() {
 export type RecipeDetail = Awaited<ReturnType<typeof getRecipeById>>;
 
 export async function getRecipeById(id: string) {
+  const db = await getWorkspaceDb();
   const recipe = await db.recipe.findUnique({
     where: { id },
     include: {
@@ -101,6 +103,7 @@ export async function getRecipeById(id: string) {
 export type IngredientOption = Awaited<ReturnType<typeof getIngredientOptions>>[number];
 
 export async function getIngredientOptions() {
+  const db = await getWorkspaceDb();
   const ings = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {
