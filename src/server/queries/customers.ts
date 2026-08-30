@@ -1,6 +1,12 @@
 "use server";
 
 import { getWorkspaceDb } from "@/server/tenant/context";
+import {
+  buildCustomerBalances,
+  type CustomerPendingRow,
+  type CustomerSituation,
+  type WithBalance,
+} from "@/lib/customer-balance";
 
 export type CustomerSummary = {
   id: string;
@@ -60,4 +66,87 @@ export async function getCustomers() {
 export async function getCustomerById(id: string) {
   const db = await getWorkspaceDb();
   return db.customer.findUnique({ where: { id } });
+}
+
+export type CustomerBalanceQuery = {
+  q?: string;
+  sector?: string;
+  situation: CustomerSituation;
+  minDueCents?: number;
+};
+
+export type CustomerWithBalance = WithBalance<
+  Awaited<ReturnType<typeof getCustomers>>[number]
+>;
+
+/** Lista de clientes com o saldo pendente agregado, para a tela de clientes. */
+export async function getCustomersWithBalance(
+  filters: CustomerBalanceQuery,
+): Promise<CustomerWithBalance[]> {
+  const db = await getWorkspaceDb();
+  const term = filters.q?.trim();
+
+  const customers = await db.customer.findMany({
+    where: {
+      ...(filters.sector ? { sector: filters.sector } : {}),
+      ...(term
+        ? {
+            OR: [
+              { name: { contains: term, mode: "insensitive" as const } },
+              { email: { contains: term, mode: "insensitive" as const } },
+              { phone: { contains: term } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { sales: true } } },
+  });
+
+  const grouped = await db.sale.groupBy({
+    by: ["customerId"],
+    where: { status: "PENDING", customerId: { in: customers.map((c) => c.id) } },
+    _sum: { totalCents: true },
+    _count: { _all: true },
+    _min: { paymentForecastDate: true },
+  });
+
+  const pendingRows: CustomerPendingRow[] = grouped
+    .filter((row): row is typeof row & { customerId: string } => row.customerId !== null)
+    .map((row) => ({
+      customerId: row.customerId,
+      pendingCents: row._sum.totalCents ?? 0,
+      pendingCount: row._count._all,
+      oldestForecastDate: row._min.paymentForecastDate,
+    }));
+
+  return buildCustomerBalances(customers, pendingRows, filters);
+}
+
+/** Vendas pendentes de um cliente, da mais antiga para a mais recente. */
+export async function getPendingSalesByCustomer(customerId: string) {
+  const db = await getWorkspaceDb();
+  return db.sale.findMany({
+    where: { customerId, status: "PENDING" },
+    orderBy: { soldAt: "asc" },
+    select: {
+      id: true,
+      soldAt: true,
+      totalCents: true,
+      paymentForecastDate: true,
+      notes: true,
+    },
+  });
+}
+
+/** Setores distintos já cadastrados, para alimentar o filtro. */
+export async function getCustomerSectors(): Promise<string[]> {
+  const db = await getWorkspaceDb();
+  const rows = await db.customer.findMany({
+    where: { sector: { not: null } },
+    distinct: ["sector"],
+    orderBy: { sector: "asc" },
+    select: { sector: true },
+  });
+  return rows.map((r) => r.sector).filter((s): s is string => Boolean(s?.trim()));
 }

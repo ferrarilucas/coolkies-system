@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ShoppingCart, Mail, Phone } from "lucide-react";
+import { ShoppingCart, Mail, Phone, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { RowActions } from "@/components/shared/row-actions";
+import { CustomerCollectDialog } from "@/components/customers/customer-collect-dialog";
 import { updateCustomer, deleteCustomer } from "@/server/actions/customers";
-import type { CustomerFull } from "@/server/queries/customers";
+import { formatBRL } from "@/lib/money";
+import type { CustomerWithBalance } from "@/server/queries/customers";
 
-export function CustomerList({ customers }: { customers: CustomerFull[] }) {
+export function CustomerList({ customers }: { customers: CustomerWithBalance[] }) {
   return (
     <div className="space-y-2">
       {customers.map((c) => (
@@ -26,7 +28,7 @@ export function CustomerList({ customers }: { customers: CustomerFull[] }) {
   );
 }
 
-function CustomerCard({ customer }: { customer: CustomerFull }) {
+function CustomerCard({ customer }: { customer: CustomerWithBalance }) {
   const [editOpen, setEditOpen] = useState(false);
   const [saving, startSave] = useTransition();
 
@@ -65,9 +67,30 @@ function CustomerCard({ customer }: { customer: CustomerFull }) {
               <ShoppingCart className="size-3" />
               {customer._count.sales} {customer._count.sales === 1 ? "venda" : "vendas"}
             </span>
+            {customer.pendingCents > 0 && (
+              <span
+                className={
+                  customer.isOverdue
+                    ? "flex items-center gap-1 text-xs font-medium text-destructive"
+                    : "flex items-center gap-1 text-xs font-medium text-warning-text"
+                }
+              >
+                {customer.isOverdue && <AlertTriangle className="size-3" />}
+                {formatBRL(customer.pendingCents)} em {customer.pendingCount}{" "}
+                {customer.pendingCount === 1 ? "pendência" : "pendências"}
+              </span>
+            )}
           </div>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
+          {customer.pendingCents > 0 && (
+            <CustomerCollectDialog
+              customerId={customer.id}
+              customerName={customer.name}
+              pendingCents={customer.pendingCents}
+              pendingCount={customer.pendingCount}
+            />
+          )}
           <RowActions
             onEdit={() => setEditOpen(true)}
             deleteTitle="Excluir cliente"

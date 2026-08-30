@@ -245,3 +245,21 @@ Task 7: o primeiro fix round foi interrompido por limite de sessao da API antes 
 
 Nota sobre a Task 6: o plano nao prescreve testes para ela — os tres steps sao implementar, `tsc` e commit. Nao e omissao a corrigir: `getWorkspaceContext` depende de `headers()` do Next, que exige contexto de request e nao se exercita em teste unitario sem infraestrutura que o plano nao monta. As funcoes passam a ser exercitadas de fato na Fase 3, quando os arquivos de dominio as consomem.
 
+
+---
+
+## Execucao em producao — 2026-08-30
+
+Aplicada com sucesso. O ambiente mudou entre o planejamento e a execucao: o app saiu da Vercel para um Coolify em VPS propria, e o banco saiu do Supabase para um Postgres na mesma VPS. O runbook foi escrito assumindo Supabase e Vercel, mas a sequencia continuou valida.
+
+Duas coisas que o runbook nao previa apareceram:
+
+**Havia uma quarta migration pendente.** `20260622_stock_movement_batch_relation`, de junho, nunca aplicada nesse banco. O runbook assumia exatamente tres pendentes e mandava conferir isso apos o passo 4. Ela contem um `DELETE FROM stock_movement` de linhas orfas — verificamos antes de aplicar que afetaria zero linhas (304 movimentos, nenhum orfao), e so entao rodamos. Aplicada antes da aditiva.
+
+**O start command do Coolify roda `prisma migrate deploy`.** Ou seja, o passo 8 — o irreversivel — nao foi um comando manual: aconteceu sozinho quando o deploy do codigo da Fase 3 subiu. Isso foi seguro porque backfill e verificacao ja tinham passado, mas inverte o desenho do runbook, que previa uma confirmacao humana antes desse passo. Se o primeiro deploy tivesse funcionado antes do backfill, a migration de aperto teria falhado e travado todos os deploys seguintes com P3018.
+
+Dois builds falharam antes de passar. O primeiro por `ERR_PNPM_OUTDATED_LOCKFILE`: o deploy usa **pnpm**, mas as dependencias de teste e lint foram adicionadas com npm durante a implementacao, deixando o `pnpm-lock.yaml` defasado. Isso e consequencia direta da Global Constraint do plano ter fixado npm com base no README, sem verificar como o deploy roda. O segundo build morreu na fase de type-check do Next, sem mensagem — resolvido do lado da infraestrutura.
+
+Titularidade corrigida apos o backfill: o `OWNER` do workspace e a dona do negocio (jenifer270300@gmail.com), nao o desenvolvedor, que ficou como `ADMIN`. Hoje os dois papeis tem os mesmos poderes; a distincao passa a valer na Fase 4 e no billing, onde a assinatura se associa ao OWNER.
+
+Estado final verificado no banco: 9 migrations aplicadas, 18 colunas `workspaceId` nenhuma nullable, 19 indices, 18 foreign keys, 1 workspace. Contagens identicas as de antes do backfill — 235 vendas, 303 itens, 71 clientes, 3 produtos, 304 movimentos. Venda de teste criada pela UI em producao exercitou o caminho completo (sale + sale_item aninhado + stock_movement) com sucesso.
