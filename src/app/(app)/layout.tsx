@@ -18,7 +18,7 @@ export default async function AppLayout({
   const workspaces = await listUserWorkspaces();
   if (workspaces.length === 0) redirect("/onboarding");
 
-  const { workspaceId } = await getWorkspaceContext();
+  const { workspaceId, canWrite } = await getWorkspaceContext();
   const active = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0];
   const { status, isOverLimit } = await getWorkspacePlanState(active.id);
 
@@ -37,6 +37,7 @@ export default async function AppLayout({
       activeWorkspaceId={active.id}
       planStatus={status}
       isOverLimit={isOverLimit}
+      isReadOnly={!canWrite}
     >
       {children}
     </AppShell>
