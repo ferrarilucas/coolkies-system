@@ -325,7 +325,7 @@ Os limites por plano (`solo` = 1, `team` = 4, `unlimited` = sem teto) vivem como
 
 **Contagem do limite:** conta-se em quantos workspaces a pessoa e `OWNER`. Participar do workspace de outra pessoa como ADMIN ou MEMBER nao consome cota — voce paga pelos negocios que sao seus.
 
-**Quando alguem excede o limite** (por exemplo, ao baixar de plano), a criacao de novos workspaces e bloqueada e os existentes continuam acessiveis. Escolher por conta propria qual negocio da pessoa vira somente-leitura nao e decisao que o sistema deva tomar.
+**Quando alguem excede o limite** (por exemplo, ao baixar de plano), valem os **mais antigos**: ordenam-se os workspaces onde a pessoa e OWNER por data de criacao, os primeiros N conforme o plano ficam ativos, e os excedentes entram em somente-leitura com alerta de upgrade. A regra e deterministica — a pessoa sabe de antemao qual negocio continua funcionando — e nenhum dado deixa de ser visivel, conforme a secao 10.4.
 
 **O trial e da conta, nao do workspace.** No desenho antigo, cada workspace novo daria 14 dias — teste infinito de graca.
 
