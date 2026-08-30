@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
-import { injectWorkspaceId, UNSCOPED_MODELS } from "./nested-writes";
+import { injectIntoNestedWrites, injectWorkspaceId, UNSCOPED_MODELS } from "./nested-writes";
 
 const WHERE_OPS = new Set([
   "findFirst",
@@ -46,6 +46,13 @@ export function scopedDb(workspaceId: string): PrismaClient {
 
           const typed = (args ?? {}) as Record<string, unknown>;
 
+          if (operation === "update") {
+            return query({
+              ...withWhere(typed, workspaceId),
+              data: injectIntoNestedWrites(model, typed.data ?? {}, workspaceId),
+            } as never);
+          }
+
           if (WHERE_OPS.has(operation) || SINGLE_TARGET_OPS.has(operation)) {
             return query(withWhere(typed, workspaceId) as never);
           }
@@ -69,6 +76,7 @@ export function scopedDb(workspaceId: string): PrismaClient {
             return query({
               ...withWhere(typed, workspaceId),
               create: injectWorkspaceId(model, typed.create ?? {}, workspaceId),
+              update: injectIntoNestedWrites(model, typed.update ?? {}, workspaceId),
             } as never);
           }
 

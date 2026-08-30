@@ -141,4 +141,90 @@ describe("escopo por workspace", () => {
     expect(sale.workspaceId).toBe(a.id);
     expect(sale.items[0].workspaceId).toBe(a.id);
   });
+
+  it("nested write em update de venda grava workspaceId nos itens recriados", async () => {
+    const a = await createWorkspace("A");
+    const scoped = scopedDb(a.id);
+    const user = await testDb.user.create({
+      data: { id: "u-update", name: "Bia", email: "bia@example.com" },
+    });
+    const product = await scoped.product.create({ data: { name: "Cookie" } });
+
+    const sale = await scoped.sale.create({
+      data: {
+        userId: user.id,
+        totalCents: 1000,
+        items: {
+          create: [
+            {
+              productId: product.id,
+              productNameSnapshot: "Cookie",
+              quantity: 2,
+              unitPriceSnapshot: 500,
+            },
+          ],
+        },
+      },
+    });
+
+    await scoped.saleItem.deleteMany({ where: { saleId: sale.id } });
+
+    await scoped.sale.update({
+      where: { id: sale.id },
+      data: {
+        totalCents: 1500,
+        items: {
+          create: [
+            {
+              productId: product.id,
+              productNameSnapshot: "Cookie",
+              quantity: 3,
+              unitPriceSnapshot: 500,
+            },
+          ],
+        },
+      },
+    });
+
+    const items = await testDb.saleItem.findMany({ where: { saleId: sale.id } });
+
+    expect(items).toHaveLength(1);
+    expect(items[0].quantity).toBe(3);
+    expect(items[0].workspaceId).toBe(a.id);
+  });
+
+  it("update não vaza workspaceId de outro workspace para itens aninhados", async () => {
+    const a = await createWorkspace("A");
+    const b = await createWorkspace("B");
+    const user = await testDb.user.create({
+      data: { id: "u-leak", name: "Cau", email: "cau@example.com" },
+    });
+    const product = await testDb.product.create({
+      data: { name: "Cookie B", workspaceId: b.id },
+    });
+    const alheia = await testDb.sale.create({
+      data: { userId: user.id, totalCents: 100, workspaceId: b.id },
+    });
+
+    await expect(
+      scopedDb(a.id).sale.update({
+        where: { id: alheia.id },
+        data: {
+          items: {
+            create: [
+              {
+                productId: product.id,
+                productNameSnapshot: "Cookie B",
+                quantity: 1,
+                unitPriceSnapshot: 100,
+              },
+            ],
+          },
+        },
+      }),
+    ).rejects.toThrow();
+
+    const items = await testDb.saleItem.findMany();
+    expect(items).toHaveLength(0);
+  });
 });
