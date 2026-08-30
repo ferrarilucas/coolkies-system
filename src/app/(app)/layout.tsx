@@ -33,7 +33,7 @@ export default async function AppLayout({
       user={user}
       workspaces={workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }))}
       activeWorkspaceId={active.id}
-      planStatus={active.subscriptionStatus}
+      planStatus="TRIALING"
     >
       {children}
     </AppShell>

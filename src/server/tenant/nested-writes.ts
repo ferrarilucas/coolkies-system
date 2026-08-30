@@ -9,6 +9,7 @@ export const UNSCOPED_MODELS = new Set([
   "Verification",
   "AllowedEmail",
   "Workspace",
+  "Subscription",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 

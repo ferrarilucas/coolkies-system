@@ -15,7 +15,6 @@ export type WorkspaceSummary = {
   name: string;
   slug: string;
   role: MemberRole;
-  subscriptionStatus: string;
 };
 
 export type MemberSummary = {
@@ -91,7 +90,6 @@ export async function listUserWorkspaces(): Promise<WorkspaceSummary[]> {
     name: m.workspace.name,
     slug: m.workspace.slug,
     role: m.role,
-    subscriptionStatus: m.workspace.subscriptionStatus,
   }));
 }
 
@@ -120,7 +118,6 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
       data: {
         name: clean,
         slug: await uniqueSlug(clean),
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       },
     });
     await tx.member.create({
