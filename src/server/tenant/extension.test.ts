@@ -247,5 +247,9 @@ describe("escopo por workspace", () => {
     });
 
     expect(outro.name).toBe("Cookie");
+    expect(outro.workspaceId).toBe(b.id);
+
+    const total = await testDb.product.count({ where: { name: "Cookie" } });
+    expect(total).toBe(2);
   });
 });

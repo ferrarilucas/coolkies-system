@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { DOMAIN_TABLES } from "./domain-tables";
+import { DIRECT_DATABASE_URL } from "./direct-database-url";
 
-const db = new PrismaClient();
+const db = new PrismaClient({
+  datasources: { db: { url: DIRECT_DATABASE_URL } },
+});
 
 async function main() {
   const offenders: Array<{ table: string; count: number }> = [];

@@ -220,6 +220,7 @@ model Flavor {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([productId, name])
+  @@index([workspaceId])
   @@map("flavor")
 }
 
@@ -241,6 +242,7 @@ model PriceListItem {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([productId, flavorId])
+  @@index([workspaceId])
   @@map("price_list_item")
 }
 
@@ -254,6 +256,7 @@ model PriceHistory {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@map("price_history")
 }
 
@@ -355,6 +358,7 @@ model SaleItem {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@map("sale_item")
 }
 
@@ -462,6 +466,7 @@ model RecipeIngredient {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([recipeId, ingredientId])
+  @@index([workspaceId])
   @@map("recipe_ingredient")
 }
 
@@ -493,6 +498,7 @@ model ProductionBatch {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@map("production_batch")
 }
 
@@ -508,6 +514,7 @@ model ProductionFilling {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@map("production_filling")
 }
 
@@ -556,5 +563,6 @@ model ShoppingListItem {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@map("shopping_list_item")
 }
