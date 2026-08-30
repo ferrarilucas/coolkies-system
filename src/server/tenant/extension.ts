@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 
 const UNSCOPED_MODELS = new Set([
@@ -33,6 +33,22 @@ function withWhere(args: Record<string, unknown>, workspaceId: string) {
 
 export function scopedDb(workspaceId: string): PrismaClient {
   return db.$extends({
+    model: {
+      $allModels: {
+        async findUnique(this: unknown, args: Record<string, unknown>) {
+          const ctx = Prisma.getExtensionContext(this) as {
+            findFirst: (a: unknown) => Promise<unknown>;
+          };
+          return ctx.findFirst(args);
+        },
+        async findUniqueOrThrow(this: unknown, args: Record<string, unknown>) {
+          const ctx = Prisma.getExtensionContext(this) as {
+            findFirstOrThrow: (a: unknown) => Promise<unknown>;
+          };
+          return ctx.findFirstOrThrow(args);
+        },
+      },
+    },
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {

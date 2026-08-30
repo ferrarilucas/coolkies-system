@@ -90,4 +90,25 @@ describe("escopo por workspace", () => {
     const all = await scopedDb(a.id).workspace.findMany();
     expect(all.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("findUnique não retorna linha de outro workspace", async () => {
+    const a = await createWorkspace("A");
+    const b = await createWorkspace("B");
+    const alheio = await testDb.product.create({
+      data: { name: "Alheio", workspaceId: b.id },
+    });
+
+    const found = await scopedDb(a.id).product.findUnique({ where: { id: alheio.id } });
+
+    expect(found).toBeNull();
+  });
+
+  it("findUnique retorna a linha do próprio workspace", async () => {
+    const a = await createWorkspace("A");
+    const meu = await testDb.product.create({ data: { name: "Meu", workspaceId: a.id } });
+
+    const found = await scopedDb(a.id).product.findUnique({ where: { id: meu.id } });
+
+    expect(found?.id).toBe(meu.id);
+  });
 });
