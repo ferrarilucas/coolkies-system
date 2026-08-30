@@ -5,7 +5,7 @@ CREATE TYPE "MemberRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER');
 CREATE TYPE "InvitationStatus" AS ENUM ('PENDING', 'ACCEPTED', 'CANCELED', 'EXPIRED');
 
 -- DropIndex
-DROP INDEX "stock_movement_productionBatchId_key";
+DROP INDEX IF EXISTS "stock_movement_productionBatchId_key";
 
 -- AlterTable
 ALTER TABLE "customer" ADD COLUMN     "workspaceId" TEXT;

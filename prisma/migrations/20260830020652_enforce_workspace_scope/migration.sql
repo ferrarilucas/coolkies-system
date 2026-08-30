@@ -1,29 +1,29 @@
 -- DropIndex
-DROP INDEX "customer_email_key";
+DROP INDEX IF EXISTS "customer_email_key";
 
 -- DropIndex
-DROP INDEX "ingredient_name_key";
+DROP INDEX IF EXISTS "ingredient_name_key";
 
 -- DropIndex
-DROP INDEX "ingredient_purchase_ingredientId_purchasedAt_idx";
+DROP INDEX IF EXISTS "ingredient_purchase_ingredientId_purchasedAt_idx";
 
 -- DropIndex
-DROP INDEX "market_name_key";
+DROP INDEX IF EXISTS "market_name_key";
 
 -- DropIndex
-DROP INDEX "product_name_key";
+DROP INDEX IF EXISTS "product_name_key";
 
 -- DropIndex
-DROP INDEX "recipe_name_key";
+DROP INDEX IF EXISTS "recipe_name_key";
 
 -- DropIndex
-DROP INDEX "sale_soldAt_idx";
+DROP INDEX IF EXISTS "sale_soldAt_idx";
 
 -- DropIndex
-DROP INDEX "sale_status_paymentForecastDate_idx";
+DROP INDEX IF EXISTS "sale_status_paymentForecastDate_idx";
 
 -- DropIndex
-DROP INDEX "stock_movement_productId_flavorId_idx";
+DROP INDEX IF EXISTS "stock_movement_productId_flavorId_idx";
 
 -- AlterTable
 ALTER TABLE "customer" ALTER COLUMN "workspaceId" SET NOT NULL;
