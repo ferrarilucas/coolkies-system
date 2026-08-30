@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Prisma } from "@prisma/client";
 import { createWorkspace, resetDb, testDb } from "@/test/db";
 import { scopedDb } from "./extension";
 
@@ -21,7 +22,9 @@ describe("escopo por workspace", () => {
 
   it("create grava o workspaceId sem que o chamador informe", async () => {
     const a = await createWorkspace("A");
-    const created = await scopedDb(a.id).product.create({ data: { name: "Cookie" } });
+    const created = await scopedDb(a.id).product.create({
+      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    });
     expect(created.workspaceId).toBe(a.id);
   });
 
@@ -59,7 +62,7 @@ describe("escopo por workspace", () => {
 
     const criado = await scopedDb(a.id).product.upsert({
       where: { id: alheio.id },
-      create: { name: "Novo" },
+      create: { name: "Novo" } as Prisma.ProductUncheckedCreateInput,
       update: { name: "Sequestrado" },
     });
 
@@ -118,7 +121,9 @@ describe("escopo por workspace", () => {
     const user = await testDb.user.create({
       data: { id: "u-nested", name: "Ana", email: "ana@example.com" },
     });
-    const product = await scoped.product.create({ data: { name: "Cookie" } });
+    const product = await scoped.product.create({
+      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    });
 
     const sale = await scoped.sale.create({
       data: {
@@ -132,9 +137,9 @@ describe("escopo por workspace", () => {
               quantity: 2,
               unitPriceSnapshot: 500,
             },
-          ],
+          ] as Prisma.SaleItemUncheckedCreateWithoutSaleInput[],
         },
-      },
+      } as Prisma.SaleUncheckedCreateInput,
       include: { items: true },
     });
 
@@ -148,7 +153,9 @@ describe("escopo por workspace", () => {
     const user = await testDb.user.create({
       data: { id: "u-update", name: "Bia", email: "bia@example.com" },
     });
-    const product = await scoped.product.create({ data: { name: "Cookie" } });
+    const product = await scoped.product.create({
+      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    });
 
     const sale = await scoped.sale.create({
       data: {
@@ -162,9 +169,9 @@ describe("escopo por workspace", () => {
               quantity: 2,
               unitPriceSnapshot: 500,
             },
-          ],
+          ] as Prisma.SaleItemUncheckedCreateWithoutSaleInput[],
         },
-      },
+      } as Prisma.SaleUncheckedCreateInput,
     });
 
     await scoped.saleItem.deleteMany({ where: { saleId: sale.id } });
@@ -181,7 +188,7 @@ describe("escopo por workspace", () => {
               quantity: 3,
               unitPriceSnapshot: 500,
             },
-          ],
+          ] as Prisma.SaleItemUncheckedCreateWithoutSaleInput[],
         },
       },
     });
@@ -218,7 +225,7 @@ describe("escopo por workspace", () => {
                 quantity: 1,
                 unitPriceSnapshot: 100,
               },
-            ],
+            ] as Prisma.SaleItemUncheckedCreateWithoutSaleInput[],
           },
         },
       }),
@@ -232,8 +239,12 @@ describe("escopo por workspace", () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
 
-    await scopedDb(a.id).product.create({ data: { name: "Cookie" } });
-    const outro = await scopedDb(b.id).product.create({ data: { name: "Cookie" } });
+    await scopedDb(a.id).product.create({
+      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    });
+    const outro = await scopedDb(b.id).product.create({
+      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    });
 
     expect(outro.name).toBe("Cookie");
   });
