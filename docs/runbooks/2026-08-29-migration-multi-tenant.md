@@ -2,47 +2,35 @@
 
 Este runbook aplica em produção o trabalho já validado localmente: workspace por
 tenant, `workspaceId` obrigatório em todas as tabelas de domínio, uniques e índices
-compostos por workspace. Siga a ordem abaixo sem pular etapas — a migration de
-aperto (passo 5) é irreversível sem restaurar o dump do passo 2.
+compostos por workspace.
 
-Todos os comandos abaixo assumem que você está na raiz do projeto, com as
-dependências instaladas (`npm install`).
+Produção hoje **não tem nenhuma das três migrations novas aplicadas**. O ponto de
+partida é o schema antigo, single-tenant.
 
-## ⚠️ Pré-requisito bloqueante: código antes da migration
+## A ordem, em uma tela
 
-**Não aplique este runbook até as Tasks 10, 11 e 12 (Fase 3 — migração de
-`src/server/actions/*` para `getWorkspaceDb()`) estarem implementadas e
-_deployadas em produção_.**
+A ordem abaixo não é negociável. Cada passo depende do anterior, e três das
+dependências não são óbvias — estão explicadas na seção "Por que esta ordem" no
+fim do documento.
 
-Hoje, 8 arquivos ainda escrevem pelo client cru importado de `@/lib/db`, sem
-informar `workspaceId`:
+A numeração abaixo é a das seções deste documento.
 
-- `src/server/actions/customers.ts`
-- `src/server/actions/ingredients.ts`
-- `src/server/actions/production.ts`
-- `src/server/actions/allowlist.ts`
-- `src/server/actions/recipes.ts`
-- `src/server/actions/sales.ts`
-- `src/server/actions/markets.ts`
-- `src/server/actions/catalog.ts`
+| # | Passo | Por que aqui |
+|---|-------|--------------|
+| 2 | Entrar em janela de manutenção | Nenhuma escrita pode entrar com `workspaceId` NULL depois do backfill |
+| 3 | Dump completo + contagens de referência | Único caminho de volta a partir do passo 8 |
+| 4 | Aplicar **apenas** a migration aditiva | Cria `Workspace`/`Member`/`Invitation` e a coluna opcional |
+| 5 | Rodar o backfill | Preenche `workspaceId` e cria o workspace + memberships |
+| 6 | Deployar o código da Fase 3 | Só agora `member` existe **e** tem linhas para resolver o contexto |
+| 7 | Rodar `verify:backfill` | Trava bloqueante antes do passo irreversível |
+| 8 | Aplicar o aperto + os índices | Torna `workspaceId` NOT NULL |
+| 9 | Confirmar sucesso e sair da manutenção | — |
 
-A migration de aperto (passo 5) torna `workspaceId` **`NOT NULL`** em todas as
-tabelas de domínio. Se ela for aplicada antes de esses 8 arquivos estarem
-migrados e o novo código estar rodando em produção, **toda escrita feita por
-eles passa a falhar** com violação de not-null — registrar uma venda, cadastrar
-um cliente, lançar uma produção, tudo. O app fica no ar, mas incapaz de
-gravar nada nessas telas.
-
-A ordem correta é sempre **código primeiro, migration depois**:
-
-1. Implementar e revisar as Tasks 10–12.
-2. Deployar esse código em produção e confirmar que está servindo tráfego.
-3. Só então seguir com este runbook a partir do passo 1 abaixo.
-
-Se você chegou aqui sem ter certeza de que as Tasks 10–12 já estão no ar, **pare
-agora** e confirme antes de continuar. Não existe correção rápida depois que a
-migration for aplicada fora de ordem além de reverter a migration inteira
-(passo 7) e recomeçar.
+> **O erro que este runbook existe para evitar:** deployar o código da Fase 3
+> antes do passo 4. Esse código chama `db.member.findFirst()` em toda requisição
+> autenticada, e a tabela `member` só passa a existir na migration aditiva.
+> Deployar antes derruba o app inteiro — não é uma degradação parcial, é 500 em
+> qualquer página autenticada.
 
 ## 1. Pré-requisitos: qual conexão usar
 
@@ -76,7 +64,7 @@ lendo a variável de ambiente do shell diretamente — só nos scripts do projet
   — e não as de desenvolvimento local que normalmente ficam lá. Rodar o
   backfill com o `.env` local ainda no lugar aplica tudo no banco local, sem
   aviso.
-- `pg_dump`, `psql` e `npx prisma migrate deploy` (passos 2, 5 e 6) usam a
+- `pg_dump`, `psql` e `npx prisma migrate deploy` (passos 3, 4 e 8) usam a
   variável `$DIRECT_URL` exportada no **shell**, não o arquivo. Exporte-a
   explicitamente antes desses comandos, por exemplo lendo o mesmo `.env` de
   produção: `set -a; source .env; set +a` — e confira com `echo $DIRECT_URL`
@@ -85,7 +73,21 @@ lendo a variável de ambiente do shell diretamente — só nos scripts do projet
 Confirme antes de seguir que a `DIRECT_URL` que você vai usar — tanto no
 arquivo `.env` quanto exportada no shell — é a de produção.
 
-## 2. Dump completo do banco e contagens de referência
+## 2. Entrar em janela de manutenção
+
+**A partir daqui até o fim do passo 9, a aplicação não pode aceitar escritas.**
+
+Qualquer linha criada pelo app entre o backfill (passo 5) e a migration de aperto
+(passo 8) entra com `workspaceId NULL` e derruba o `ALTER COLUMN ... SET NOT NULL`
+— ou, pior, passa despercebida pela verificação do passo 7 se a escrita acontecer
+depois dela.
+
+Coloque a aplicação em modo de manutenção / leitura — pause o deploy, escale para
+zero instâncias ou redirecione o tráfego para uma página de manutenção, conforme o
+mecanismo disponível na sua hospedagem — e só libere as escritas de novo no
+passo 9.
+
+## 3. Dump completo do banco e contagens de referência
 
 ```bash
 pg_dump "$DIRECT_URL" -Fc -f backup-antes-do-aperto-$(date +%Y%m%d-%H%M).dump
@@ -107,7 +109,7 @@ Se o tamanho não bater com o que você espera do banco de produção, **não
 prossiga** — investigue a conexão antes de continuar.
 
 Aproveite esta mesma janela para anotar as contagens de referência que serão
-comparadas no passo 6, depois da migration:
+comparadas no passo 9:
 
 ```sql
 SELECT 'product' AS t, count(*) FROM product
@@ -115,21 +117,73 @@ UNION ALL SELECT 'sale', count(*) FROM sale
 UNION ALL SELECT 'sale_item', count(*) FROM sale_item;
 ```
 
-Guarde esse resultado (cole num lugar que você vá reabrir no passo 6) — sem ele
+Guarde esse resultado (cole num lugar que você vá reabrir no passo 9) — sem ele
 não há como confirmar que a migration não perdeu nem duplicou linhas.
 
-## 3. Janela de manutenção e backfill do workspace Douce Vie
+## 4. Aplicar APENAS a migration aditiva
 
-**A partir daqui até o fim do passo 6, a aplicação não pode aceitar escritas.**
-Qualquer linha criada pelo app entre agora e o fim da migration de aperto entra
-com `workspaceId NULL`, e isso derruba o `ALTER COLUMN ... SET NOT NULL` do
-passo 5 (ou, pior, passa despercebido pela verificação do passo 4 se a escrita
-acontecer depois dela). Coloque a aplicação em modo de manutenção / leitura —
-pause o deploy, escale para zero instâncias ou redirecione o tráfego para uma
-página de manutenção, conforme o mecanismo disponível na sua hospedagem — e só
-libere as escritas de novo depois de confirmar sucesso no passo 6.
+Este é o passo onde é mais fácil errar, e o erro é caro.
 
-Com a aplicação parada para escrita:
+**`prisma migrate deploy` não tem flag de "aplicar até a migration X".** Ele
+aplica **todas** as migrations pendentes, em ordem, de uma vez. Se você rodar
+`npx prisma migrate deploy` agora, ele aplica a aditiva, o aperto e os índices na
+mesma execução — e o aperto vai falhar, porque o backfill (passo 5) ainda não
+rodou e todas as linhas existentes têm `workspaceId NULL`.
+
+O caminho para aplicar só a aditiva tem duas partes: rodar o SQL dela à mão e
+depois registrar no Prisma que ela já foi aplicada.
+
+### 4.1. Rodar o SQL da aditiva
+
+```bash
+psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -1 \
+  -f prisma/migrations/20260829235758_add_workspace_models_and_nullable_workspace_id/migration.sql
+```
+
+- `-v ON_ERROR_STOP=1` aborta no primeiro erro em vez de seguir executando o
+  resto do arquivo.
+- `-1` roda o arquivo inteiro em **uma única transação**: ou tudo aplica, ou
+  nada aplica. Sem isso, um erro no meio deixa o schema pela metade.
+
+Essa migration é aditiva — cria `workspace`, `member`, `invitation` e adiciona
+`workspaceId` como coluna **opcional** (`NULL` permitido) nas tabelas de domínio.
+Ela não altera nenhuma linha existente e não quebra o código antigo que ainda
+está rodando.
+
+### 4.2. Registrar a migration como aplicada
+
+O Prisma não sabe que você rodou o SQL à mão. Se você parar aqui, o próximo
+`migrate deploy` vai tentar aplicá-la de novo e falhar com "already exists".
+
+```bash
+npx prisma migrate resolve --applied 20260829235758_add_workspace_models_and_nullable_workspace_id
+```
+
+Isso insere a linha correspondente em `_prisma_migrations` sem executar o SQL de
+novo.
+
+### 4.3. Conferir que só a aditiva foi aplicada
+
+```bash
+npx prisma migrate status
+```
+
+A saída **precisa** listar exatamente estas duas como não aplicadas:
+
+```
+Following migrations have not yet been applied:
+20260830020652_enforce_workspace_scope
+20260830023313_add_missing_workspace_indexes
+```
+
+Se aparecer alguma coisa diferente disso — em especial se disser "Database schema
+is up to date!" — **pare**. "Up to date" aqui significa que as três migrations
+foram aplicadas, provavelmente porque alguém rodou `migrate deploy` direto. Vá
+para a seção de rollback.
+
+## 5. Backfill do workspace Douce Vie
+
+Com a aplicação ainda parada para escrita:
 
 ```bash
 npm run backfill -- <email-do-owner>
@@ -162,7 +216,27 @@ abortado" ou "Workspace douce-vie já existe"), a transação é revertida
 automaticamente — nada fica parcialmente aplicado. Corrija a causa antes de rodar
 de novo. A aplicação continua em modo de manutenção enquanto isso.
 
-## 4. Verificação bloqueante
+## 6. Deployar o código da Fase 3
+
+**Só agora.** Não antes do passo 4, e não antes do passo 5.
+
+O código da Fase 3 (Tasks 10–12: `src/server/actions/*` e as páginas migradas
+para `getWorkspaceDb()`) depende de duas coisas que só existem depois dos passos
+anteriores:
+
+1. **A tabela `member` precisa existir.** `getWorkspaceContext()` chama
+   `db.member.findFirst()` em toda requisição autenticada. Antes do passo 4 essa
+   tabela não existe e toda página autenticada retorna 500.
+2. **Precisa haver uma linha em `member` para o usuário.** Sem membership,
+   `getWorkspaceContext()` lança `Nenhum workspace disponível` e a página falha.
+   As memberships são criadas pelo backfill do passo 5.
+
+Deploye o código e confirme que está servindo tráfego. A aplicação continua em
+modo de manutenção para escrita — o objetivo aqui é só ter o código novo no ar
+antes do aperto, para que nenhuma escrita passe pelo código antigo depois que a
+coluna virar `NOT NULL`.
+
+## 7. Verificação bloqueante
 
 ```bash
 npm run verify:backfill
@@ -174,36 +248,39 @@ uma das tabelas de domínio quantas linhas ainda têm `workspaceId IS NULL`.
 
 **Regra: se a saída não for exit code 0, pare.** Um exit code diferente de 0
 significa que existem linhas sem `workspaceId` — aplicar a migration de aperto
-nesse estado faria o `ALTER COLUMN ... SET NOT NULL` falhar no meio, ou pior,
-poderia falhar em uma tabela e não em outra. Volte ao passo 3, entenda por que
-sobraram linhas sem workspace, e só depois repita a verificação. A aplicação
-permanece em modo de manutenção até este passo passar.
+nesse estado faz o `ALTER COLUMN ... SET NOT NULL` falhar. Volte ao passo 5,
+entenda por que sobraram linhas sem workspace, e só depois repita a verificação.
 
-## 5. Migration de aperto
+Se o passo 6 (deploy) tiver deixado escapar alguma escrita, é aqui que ela
+aparece. Nesse caso, reforce o modo de manutenção antes de repetir.
 
-Com a verificação em exit 0, aplique a migration já commitada no repositório:
+## 8. Aplicar o aperto e os índices
+
+Com a verificação em exit 0:
 
 ```bash
 npx prisma migrate deploy
 ```
 
-Isso aplica todas as migrations pendentes em ordem, incluindo a de aperto
-(`prisma/migrations/20260830020652_enforce_workspace_scope/migration.sql`), que
-torna `workspaceId` `NOT NULL` em todas as 16 tabelas de domínio, declara as
-foreign keys para `workspace`, troca as uniques globais (`name`, `email`) por
-compostas (`workspaceId` + campo), e recria os índices com `workspaceId` na
-frente — inclusive os 8 índices adicionados em
-`prisma/migrations/20260830023313_add_missing_workspace_indexes/migration.sql`
-(`Flavor`, `PriceListItem`, `PriceHistory`, `SaleItem`, `RecipeIngredient`,
-`ProductionBatch`, `ProductionFilling`, `ShoppingListItem`).
+Agora `migrate deploy` é o comando certo: as duas migrations restantes são
+exatamente as que você quer aplicar, nesta ordem, e a aditiva já está registrada
+como aplicada.
+
+Isso aplica:
+
+- `20260830020652_enforce_workspace_scope`: torna `workspaceId` `NOT NULL` em
+  todas as 16 tabelas de domínio, declara as foreign keys para `workspace`,
+  troca as uniques globais (`name`, `email`) por compostas (`workspaceId` +
+  campo), e recria os índices com `workspaceId` na frente.
+- `20260830023313_add_missing_workspace_indexes`: os 8 índices de `Flavor`,
+  `PriceListItem`, `PriceHistory`, `SaleItem`, `RecipeIngredient`,
+  `ProductionBatch`, `ProductionFilling` e `ShoppingListItem`.
 
 Não use `prisma migrate dev` em produção — esse comando é interativo e pode
 oferecer resetar o banco, o que apagaria os dados. `migrate deploy` só aplica
 migrations já geradas e commitadas, sem prompts.
 
-## 6. Como confirmar sucesso
-
-Depois do `migrate deploy` terminar sem erro, confirme:
+## 9. Como confirmar sucesso e sair da manutenção
 
 ```bash
 npx prisma migrate status
@@ -219,7 +296,7 @@ npm run verify:backfill
 ```
 
 Por fim, confira que os dados de negócio continuam intactos comparando com as
-contagens anotadas no passo 2:
+contagens anotadas no passo 3:
 
 ```sql
 SELECT 'product' AS t, count(*) FROM product
@@ -231,25 +308,53 @@ As contagens antes e depois da migration devem ser idênticas — a migration s�
 altera colunas e índices, nunca linhas.
 
 Só com essas três verificações confirmadas, **tire a aplicação do modo de
-manutenção** e libere as escritas de novo.
+manutenção** e libere as escritas de novo. Faça um teste de escrita real
+(registrar uma venda, por exemplo) logo depois de liberar.
 
-## 7. Como reverter, etapa por etapa
+## 10. Como reverter, etapa por etapa
 
-- **Falhou no passo 2 (dump):** nada foi alterado no banco. Investigue a conexão
-  (`DIRECT_URL` correta? porta 5432 acessível?) e repita o passo 2. A aplicação
-  ainda nem entrou em modo de manutenção.
+- **Falhou no passo 3 (dump):** nada foi alterado no banco. Investigue a conexão
+  (`DIRECT_URL` correta? porta 5432 acessível?) e repita.
 
-- **Falhou no passo 3 (backfill):** o script roda em transação — uma falha no
+- **Falhou no passo 4.1 (SQL da aditiva):** o `-1` garante que a transação
+  inteira foi revertida — o schema está como antes e nada foi registrado em
+  `_prisma_migrations`. Corrija a causa e rode de novo. Confirme com
+  `npx prisma migrate status` que as **três** migrations aparecem como não
+  aplicadas.
+
+- **Rodou `migrate deploy` cedo demais e as três foram aplicadas de uma vez:** o
+  aperto falha no meio com `23502` (`column "workspaceId" ... contains null
+  values`) e o Prisma marca a migration como **falha**, bloqueando qualquer
+  deploy seguinte com `P3018`. O Postgres roda cada migration em transação, então
+  o aperto em si foi revertido — a coluna continua nullable e os índices antigos
+  continuam lá. Recupere assim:
+
+  ```bash
+  npx prisma migrate resolve --rolled-back 20260830020652_enforce_workspace_scope
+  ```
+
+  Isso desbloqueia o histórico. A aditiva continua aplicada (ela é aditiva e
+  passou), então retome o runbook **a partir do passo 5** (backfill). Não é
+  necessário restaurar o dump neste caso.
+
+- **Falhou no passo 5 (backfill):** o script roda em transação — uma falha no
   meio já desfaz tudo sozinha. Confirme com uma query rápida que o workspace
   `douce-vie` não existe (`SELECT * FROM workspace WHERE slug = 'douce-vie'`) antes
-  de tentar de novo. A aplicação continua em modo de manutenção.
+  de tentar de novo.
 
-- **Falhou no passo 4 (verificação):** não é uma falha de banco, é um sinal de
-  parada. Volte ao passo 3. A aplicação continua em modo de manutenção.
+- **Falhou no passo 6 (deploy do código):** o banco não foi tocado. Faça rollback
+  do deploy para a versão anterior — ela continua funcionando, porque a coluna
+  ainda é nullable e as tabelas novas apenas existem sem serem usadas. Investigue
+  e repita.
 
-- **Falhou no passo 5 (migration de aperto):** este é o único ponto realmente
-  arriscado. Se `prisma migrate deploy` retornar erro no meio da aplicação da
-  migration, restaure o dump do passo 2:
+- **Falhou no passo 7 (verificação):** não é uma falha de banco, é um sinal de
+  parada. Volte ao passo 5.
+
+- **Falhou no passo 8 (aperto):** este é o único ponto realmente arriscado. Se
+  `prisma migrate deploy` retornar erro, primeiro rode
+  `npx prisma migrate resolve --rolled-back 20260830020652_enforce_workspace_scope`
+  para destravar o histórico. Se o banco tiver ficado em estado inconsistente,
+  restaure o dump do passo 3:
 
   ```bash
   pg_restore --clean --if-exists -d "$DIRECT_URL" backup-antes-do-aperto-<timestamp>.dump
@@ -265,45 +370,39 @@ manutenção** e libere as escritas de novo.
   saber de antemão quais erros são esperados e inofensivos e quais indicam que
   o restore de fato falhou.
 
-  Depois de restaurar, rode `npx prisma migrate status` para confirmar que o
-  banco voltou ao estado anterior à migration de aperto (deve mostrar a migration
-  `20260830020652_enforce_workspace_scope` como pendente, não aplicada).
+  A causa mais provável **não** é duplicidade de `name` ou `email` dentro do
+  mesmo workspace — isso não é alcançável: as uniques globais antigas (`name`,
+  `email` sozinhos) eram estritamente mais fortes que as compostas novas
+  (`workspaceId` + campo), então nenhum dado que já satisfazia a unique antiga
+  pode violar a nova. A causa real mais provável é uma linha **nova**, com
+  `workspaceId NULL`, escrita pelo app depois da verificação do passo 7 — sinal
+  de que a janela de manutenção não foi respeitada.
 
-  Investigue a causa raiz antes de tentar de novo. A causa mais provável **não**
-  é duplicidade de `name` ou `email` dentro do mesmo workspace — isso não é
-  alcançável: as uniques globais antigas (`name`, `email` sozinhos) eram
-  estritamente mais fortes que as compostas novas (`workspaceId` + campo), então
-  nenhum dado que já satisfazia a unique antiga pode violar a nova. A causa real
-  mais provável é uma linha **nova**, com `workspaceId NULL`, escrita pelo app
-  depois da verificação do passo 4 — sinal de que a janela de manutenção do
-  passo 3 não foi respeitada. Confirme isso e reforce o modo de manutenção antes
-  de repetir o processo.
+## 11. Por que esta ordem
 
-## 8. Por que a ordem importa: aditiva → backfill → aperto
+Três dependências, e nenhuma delas é óbvia lendo só o schema:
 
-O schema evoluiu em três estágios, e essa ordem não é arbitrária:
+**Aditiva antes do código da Fase 3.** O código novo chama
+`db.member.findFirst()` em toda requisição autenticada. A tabela `member` nasce
+na migration aditiva. Código novo sem a migration = app inteiro fora do ar.
 
-1. **Aditiva** (`20260829235758_add_workspace_models_and_nullable_workspace_id`):
-   cria `Workspace`, `Member`, `Invitation` e adiciona `workspaceId` como coluna
-   **opcional** em todas as tabelas de domínio. Nesse estado, o app continua
-   funcionando normalmente com linhas antigas sem workspace.
+**Backfill antes do código da Fase 3.** Ter a tabela não basta: sem uma linha de
+`member` para o usuário, `getWorkspaceContext()` lança `Nenhum workspace
+disponível`. O backfill é quem cria o workspace e as memberships.
 
-2. **Backfill** (passo 3 deste runbook): preenche `workspaceId` em todas as linhas
-   existentes, atribuindo tudo ao workspace Douce Vie.
+**Código da Fase 3 antes do aperto.** O aperto torna `workspaceId` `NOT NULL`. O
+código antigo escreve sem informar `workspaceId`. Se o aperto for aplicado com o
+código antigo ainda no ar, toda escrita passa a falhar com violação de not-null —
+registrar uma venda, cadastrar um cliente, lançar uma produção. O app fica no ar,
+mas incapaz de gravar.
 
-3. **Aperto** (passo 5 deste runbook): só agora torna `workspaceId`
-   **obrigatório** e cria as uniques/índices compostos.
+**Backfill entre a aditiva e o aperto.** `ALTER COLUMN "workspaceId" SET NOT NULL`
+falha imediatamente se existir uma única linha com `workspaceId IS NULL` — e antes
+do backfill é exatamente isso que existe: todo o histórico de produção. Rodar o
+aperto fora de ordem não corrompe dados (a transação reverte), mas trava a
+migration e exige `migrate resolve --rolled-back` para destravar.
 
-A migration de aperto **não pode rodar antes do backfill** porque
-`ALTER COLUMN "workspaceId" SET NOT NULL` falha imediatamente se existir uma
-única linha com `workspaceId IS NULL` — e antes do backfill, é exatamente isso
-que existe: todo o histórico de dados de produção. Rodar o aperto fora de ordem
-não corrompe dados, mas trava a migration inteira com um erro de constraint, sem
-deixar o banco em um estado intermediário utilizável.
-
-Essa ordem de schema (aditiva → backfill → aperto) é independente da outra
-ordem, mais ampla, que este runbook exige no topo: **código (Tasks 10–12)
-deployado antes do aperto**. As duas travas existem porque protegem coisas
-diferentes — uma protege a migration em si de falhar no meio; a outra protege
-o app em produção de começar a rejeitar escritas assim que a migration
-terminar com sucesso.
+É por isso que a aditiva precisa ser aplicada **sozinha** (passo 4), e não com um
+`migrate deploy` que levaria as três de uma vez: o backfill e o deploy do código
+precisam acontecer **entre** a aditiva e o aperto, e não existe flag de "aplicar
+até aqui".
