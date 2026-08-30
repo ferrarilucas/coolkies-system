@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "./theme-toggle";
+import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 
 type NavItem = {
   href: string;
@@ -49,7 +50,15 @@ const items: NavItem[] = [
 const STORAGE_KEY = "sidebar:collapsed";
 
 /** Sidebar visível apenas em desktop (md+). Mobile usa BottomNav. */
-export function SideNav({ user }: { user: SessionUser }) {
+export function SideNav({
+  user,
+  workspaces,
+  activeWorkspaceId,
+}: {
+  user: SessionUser;
+  workspaces: WorkspaceOption[];
+  activeWorkspaceId: string;
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -100,6 +109,16 @@ export function SideNav({ user }: { user: SessionUser }) {
           )}
         </button>
       </div>
+
+      {!collapsed && workspaces.length > 0 && (
+        <div className="border-b p-2">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeId={activeWorkspaceId}
+            variant="sidebar"
+          />
+        </div>
+      )}
 
       {/* Navegação */}
       <nav className="flex-1 p-2">
