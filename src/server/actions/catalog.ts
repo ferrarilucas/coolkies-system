@@ -1,28 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb, requireRole } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
 async function requireAdmin() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (role !== "ADMIN") throw new Error("Não autorizado");
+  await requireRole("OWNER", "ADMIN");
 }
 
 // ─── Products ───────────────────────────────────────
 
 export async function createProduct(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
+  const { db, workspaceId } = await getScopedDb();
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
-    await db.product.create({ data: { name } });
+    await db.product.create({ data: { name, workspaceId } });
   } catch {
     return { ok: false, error: "Já existe um produto com esse nome." };
   }
@@ -33,6 +30,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
 
 export async function updateProduct(id: string, formData: FormData): Promise<ActionResult> {
   await requireAdmin();
+  const { db } = await getScopedDb();
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
@@ -48,6 +46,7 @@ export async function updateProduct(id: string, formData: FormData): Promise<Act
 
 export async function toggleProductActive(id: string, active: boolean): Promise<ActionResult> {
   await requireAdmin();
+  const { db } = await getScopedDb();
   await db.product.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -57,6 +56,7 @@ export async function toggleProductActive(id: string, active: boolean): Promise<
 
 export async function createFlavor(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
+  const { db, workspaceId } = await getScopedDb();
   const name = normalizeName(String(formData.get("name") ?? ""));
   const productId = String(formData.get("productId") ?? "").trim();
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
@@ -64,7 +64,7 @@ export async function createFlavor(formData: FormData): Promise<ActionResult> {
   if (!productId) return { ok: false, error: "Produto obrigatório." };
 
   try {
-    await db.flavor.create({ data: { name, productId, fillingRecipeId } });
+    await db.flavor.create({ data: { name, productId, fillingRecipeId, workspaceId } });
   } catch {
     return { ok: false, error: "Já existe um sabor com esse nome para este produto." };
   }
@@ -75,6 +75,7 @@ export async function createFlavor(formData: FormData): Promise<ActionResult> {
 
 export async function updateFlavor(id: string, formData: FormData): Promise<ActionResult> {
   await requireAdmin();
+  const { db } = await getScopedDb();
   const name = normalizeName(String(formData.get("name") ?? ""));
   const fillingRecipeId = String(formData.get("fillingRecipeId") ?? "").trim() || null;
   if (!name) return { ok: false, error: "Nome obrigatório." };
@@ -91,6 +92,7 @@ export async function updateFlavor(id: string, formData: FormData): Promise<Acti
 
 export async function toggleFlavorActive(id: string, active: boolean): Promise<ActionResult> {
   await requireAdmin();
+  const { db } = await getScopedDb();
   await db.flavor.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -100,6 +102,7 @@ export async function toggleFlavorActive(id: string, active: boolean): Promise<A
 
 export async function upsertPrice(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
+  const { db, workspaceId } = await getScopedDb();
   const productId = String(formData.get("productId") ?? "").trim();
   const flavorId = String(formData.get("flavorId") ?? "").trim() || null;
   const priceCents = parseInt(String(formData.get("priceCents") ?? "0"), 10);
@@ -107,16 +110,14 @@ export async function upsertPrice(formData: FormData): Promise<ActionResult> {
   if (!productId) return { ok: false, error: "Produto obrigatório." };
   if (isNaN(priceCents) || priceCents < 0) return { ok: false, error: "Preço inválido." };
 
-  // upsert PriceListItem — findFirst lida melhor com flavorId nullable
   const existing = await db.priceListItem.findFirst({
     where: { productId, flavorId: flavorId ?? null },
   });
 
   if (existing) {
     if (existing.priceCents !== priceCents) {
-      // save history before update
       await db.priceHistory.create({
-        data: { priceListItemId: existing.id, priceCents: existing.priceCents },
+        data: { priceListItemId: existing.id, priceCents: existing.priceCents, workspaceId },
       });
       await db.priceListItem.update({
         where: { id: existing.id },
@@ -125,7 +126,7 @@ export async function upsertPrice(formData: FormData): Promise<ActionResult> {
     }
   } else {
     await db.priceListItem.create({
-      data: { productId, flavorId, priceCents },
+      data: { productId, flavorId, priceCents, workspaceId },
     });
   }
 
@@ -135,6 +136,7 @@ export async function upsertPrice(formData: FormData): Promise<ActionResult> {
 
 export async function togglePriceActive(id: string, active: boolean): Promise<ActionResult> {
   await requireAdmin();
+  const { db } = await getScopedDb();
   await db.priceListItem.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };

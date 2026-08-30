@@ -1,10 +1,11 @@
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 export type ProductWithFlavorsAndPrices = Awaited<
   ReturnType<typeof getProductsWithFlavorsAndPrices>
 >[number];
 
 export async function getProductsWithFlavorsAndPrices() {
+  const db = await getWorkspaceDb();
   return db.product.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -29,6 +30,7 @@ export type PriceListItemWithHistory = Awaited<
 >[number];
 
 export async function getPriceHistory(priceListItemId: string) {
+  const db = await getWorkspaceDb();
   return db.priceHistory.findMany({
     where: { priceListItemId },
     orderBy: { changedAt: "desc" },

@@ -37,3 +37,10 @@ export async function requireRole(...allowed: MemberRole[]): Promise<WorkspaceCo
   if (!allowed.includes(context.role)) throw new Error("Não autorizado");
   return context;
 }
+
+export type ScopedDb = WorkspaceContext & { db: PrismaClient };
+
+export async function getScopedDb(): Promise<ScopedDb> {
+  const context = await getWorkspaceContext();
+  return { ...context, db: scopedDb(context.workspaceId) };
+}
