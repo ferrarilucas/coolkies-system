@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getProductsWithFlavorsAndPrices } from "@/server/queries/catalog";
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 import { ProductDialog } from "@/components/catalog/product-dialog";
 import { FlavorDialog } from "@/components/catalog/flavor-dialog";
 import { PriceDialog } from "@/components/catalog/price-dialog";
@@ -13,6 +13,8 @@ import { ActiveToggle } from "@/components/catalog/active-toggle";
 import { formatBRL } from "@/lib/money";
 
 export default async function CatalogPage() {
+  const db = await getWorkspaceDb();
+
   const [products, recipes] = await Promise.all([
     getProductsWithFlavorsAndPrices(),
     db.recipe.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

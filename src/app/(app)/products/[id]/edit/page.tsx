@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { PageHeader } from "@/components/shared/page-header";
 import { ProductionForm } from "@/components/production/production-form";
 import { getProductionBatchById } from "@/server/queries/production";
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 export default async function EditProductionPage({
   params,
@@ -11,6 +11,7 @@ export default async function EditProductionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const db = await getWorkspaceDb();
 
   const [batch, products, flavors, recipes] = await Promise.all([
     getProductionBatchById(id),

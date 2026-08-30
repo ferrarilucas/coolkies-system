@@ -1,8 +1,10 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { ProductionForm } from "@/components/production/production-form";
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 export default async function NewProductionPage() {
+  const db = await getWorkspaceDb();
+
   const [products, flavors, recipes] = await Promise.all([
     db.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.flavor.findMany({

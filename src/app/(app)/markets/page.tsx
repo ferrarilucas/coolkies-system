@@ -4,13 +4,15 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { getMarkets, getPurchases } from "@/server/queries/markets";
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 import { PurchaseDialog } from "@/components/markets/purchase-dialog";
 import { MarketDialog } from "@/components/markets/market-dialog";
 import { PurchasesList } from "@/components/markets/purchases-list";
 import { MarketsList } from "@/components/markets/markets-list";
 
 export default async function MarketsPage() {
+  const db = await getWorkspaceDb();
+
   const [markets, purchases, ingredients] = await Promise.all([
     getMarkets(),
     getPurchases(),
