@@ -3,13 +3,39 @@ import { AlertTriangle } from "lucide-react";
 
 export function PlanBanner({
   status,
+  isOverLimit,
   workspaceName,
   canManage,
 }: {
   status: string;
+  isOverLimit: boolean;
   workspaceName: string;
   canManage: boolean;
 }) {
+  if (isOverLimit) {
+    return (
+      <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
+        <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-medium text-warning">
+              Este workspace está além do limite do seu plano. Os mais antigos
+              continuam ativos — faça upgrade para liberar este.
+            </p>
+            {canManage && (
+              <Link
+                href="/workspaces/plan"
+                className="mt-1 inline-block font-medium text-primary underline underline-offset-4"
+              >
+                Fazer upgrade
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (status === "ACTIVE" || status === "TRIALING") return null;
 
   const overdue = status === "PAST_DUE";

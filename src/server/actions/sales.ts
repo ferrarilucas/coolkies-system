@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -36,6 +36,7 @@ function parseDiscount(formData: FormData): { discountType: DiscountType | null;
 
 export async function createSale(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const { db, workspaceId, userId } = await getScopedDb();
+  await assertCanWrite();
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -119,6 +120,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
 
 export async function updateSale(id: string, formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb();
+  await assertCanWrite();
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -205,6 +207,7 @@ export async function markAsPaid(
   id: string,
 ): Promise<ActionResult<{ forecastDate: string | null; forecastPreset: string | null }>> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   const sale = await db.sale.findUnique({
     where: { id },
     select: { paymentForecastDate: true, forecastPreset: true },
@@ -229,6 +232,7 @@ export async function markCustomerSalesAsPaid(
   customerId: string,
 ): Promise<ActionResult<{ count: number; totalCents: number }>> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
 
   const pending = await db.sale.aggregate({
     where: { customerId, status: "PENDING" },
@@ -261,6 +265,7 @@ export async function markSalesAsPaid(
   }
 
   const { db } = await getScopedDb();
+  await assertCanWrite();
 
   const pending = await db.sale.aggregate({
     where: { id: { in: saleIds }, status: "PENDING" },
@@ -289,6 +294,7 @@ export async function markAsPending(
   forecastPreset: string | null,
 ): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   try {
     await db.sale.update({
       where: { id },
@@ -310,6 +316,7 @@ export async function markAsPending(
 
 export async function deleteSale(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   try {
     await db.stockMovement.deleteMany({ where: { saleId: id } });
     await db.sale.delete({ where: { id } });

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { toBaseUnit, type InputUnit } from "@/lib/units";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -12,6 +12,7 @@ export async function createMarket(
   formData: FormData,
 ): Promise<ActionResult<{ id: string; name: string }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
@@ -29,6 +30,7 @@ export async function updateMarket(
   formData: FormData,
 ): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
@@ -43,6 +45,7 @@ export async function updateMarket(
 
 export async function deleteMarket(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
   try {
     await db.market.delete({ where: { id } });
     revalidatePath("/markets");
@@ -58,6 +61,7 @@ export async function createPurchase(
   formData: FormData,
 ): Promise<ActionResult> {
   const { db, workspaceId, userId } = await getScopedDb();
+  await assertCanWrite();
 
   const marketId = String(formData.get("marketId") ?? "").trim();
   const ingredientId = String(formData.get("ingredientId") ?? "").trim();
@@ -95,6 +99,7 @@ export async function createPurchase(
 
 export async function deletePurchase(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   await db.ingredientPurchase.delete({ where: { id } });
   revalidatePath("/markets");
   return { ok: true };

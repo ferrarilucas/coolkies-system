@@ -12,6 +12,7 @@ vi.mock("@/server/tenant/context", () => ({
     role: "OWNER",
     db: scopedDb(context.workspaceId),
   }),
+  assertCanWrite: async () => {},
 }));
 
 const { markSalesAsPaid } = await import("./sales");

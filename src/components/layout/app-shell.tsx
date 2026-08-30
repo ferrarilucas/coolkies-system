@@ -11,12 +11,14 @@ export function AppShell({
   workspaces,
   activeWorkspaceId,
   planStatus,
+  isOverLimit,
   children,
 }: {
   user: SessionUser;
   workspaces: WorkspaceOption[];
   activeWorkspaceId: string;
   planStatus: string;
+  isOverLimit: boolean;
   children: ReactNode;
 }) {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -40,6 +42,7 @@ export function AppShell({
         )}
         <PlanBanner
           status={planStatus}
+          isOverLimit={isOverLimit}
           workspaceName={active?.name ?? "este workspace"}
           canManage={canManage}
         />

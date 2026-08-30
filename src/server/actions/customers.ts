@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import type { CustomerSummary } from "@/server/queries/customers";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -10,6 +10,7 @@ export async function createCustomer(
   formData: FormData,
 ): Promise<ActionResult<CustomerSummary>> {
   const { db, workspaceId } = await getScopedDb();
+  await assertCanWrite();
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim() || null;
@@ -40,6 +41,7 @@ export async function updateCustomer(
   formData: FormData,
 ): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim() || null;
@@ -64,6 +66,7 @@ export async function updateCustomer(
 
 export async function deleteCustomer(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   try {
     await db.customer.delete({ where: { id } });
     revalidatePath("/customers");

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { AppShell } from "@/components/layout/app-shell";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import { getWorkspaceContext } from "@/server/tenant/context";
+import { getWorkspacePlanState } from "@/server/tenant/subscription";
 import type { SessionUser } from "@/lib/session-user";
 
 export default async function AppLayout({
@@ -19,6 +20,7 @@ export default async function AppLayout({
 
   const { workspaceId } = await getWorkspaceContext();
   const active = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0];
+  const { status, isOverLimit } = await getWorkspacePlanState(active.id);
 
   const u = session.user as typeof session.user & { role?: string };
   const user: SessionUser = {
@@ -33,7 +35,8 @@ export default async function AppLayout({
       user={user}
       workspaces={workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }))}
       activeWorkspaceId={active.id}
-      planStatus="TRIALING"
+      planStatus={status}
+      isOverLimit={isOverLimit}
     >
       {children}
     </AppShell>

@@ -4,11 +4,13 @@ import type { MemberRole, PrismaClient } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { scopedDb } from "./extension";
+import { canWriteInWorkspace } from "./subscription";
 
 export type WorkspaceContext = {
   userId: string;
   workspaceId: string;
   role: MemberRole;
+  canWrite: boolean;
 };
 
 export class NoWorkspaceError extends Error {
@@ -40,10 +42,13 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext> => 
 
   if (!fallback) throw new NoWorkspaceError();
 
+  const canWrite = await canWriteInWorkspace(fallback.workspaceId);
+
   return {
     userId: session.user.id,
     workspaceId: fallback.workspaceId,
     role: fallback.role,
+    canWrite,
   };
 });
 
@@ -66,4 +71,13 @@ export async function getScopedDb(...allowedRoles: MemberRole[]): Promise<Scoped
     throw new Error("Não autorizado");
   }
   return { ...context, db: scopedDb(context.workspaceId) };
+}
+
+export async function assertCanWrite(): Promise<void> {
+  const { canWrite } = await getWorkspaceContext();
+  if (!canWrite) {
+    throw new Error(
+      "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
+    );
+  }
 }

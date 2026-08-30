@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb, testDb } from "@/test/db";
-import { activeWorkspaceIds, isSubscriptionUsable } from "./subscription";
+import { activeWorkspaceIds, canWriteInWorkspace, isSubscriptionUsable } from "./subscription";
 
 describe("model de assinatura", () => {
   beforeEach(async () => {
@@ -143,5 +143,50 @@ describe("assinatura utilizavel", () => {
 
   it("sem assinatura nao vale", () => {
     expect(isSubscriptionUsable(null, now)).toBe(false);
+  });
+});
+
+describe("permissao de escrita", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("workspace excedente fica somente leitura", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-write", name: "Dono", email: "write@example.com" },
+    });
+    await testDb.subscription.create({
+      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+    });
+
+    const primeiro = await testDb.workspace.create({
+      data: { name: "Primeiro", slug: "primeiro-write" },
+    });
+    const segundo = await testDb.workspace.create({
+      data: { name: "Segundo", slug: "segundo-write" },
+    });
+    await testDb.member.create({
+      data: { userId: user.id, workspaceId: primeiro.id, role: "OWNER" },
+    });
+    await testDb.member.create({
+      data: { userId: user.id, workspaceId: segundo.id, role: "OWNER" },
+    });
+
+    expect(await canWriteInWorkspace(primeiro.id)).toBe(true);
+    expect(await canWriteInWorkspace(segundo.id)).toBe(false);
+  });
+
+  it("workspace sem owner com assinatura utilizavel fica somente leitura", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-nosub", name: "Sem plano", email: "nosub@example.com" },
+    });
+    const ws = await testDb.workspace.create({
+      data: { name: "Sem plano", slug: "sem-plano" },
+    });
+    await testDb.member.create({
+      data: { userId: user.id, workspaceId: ws.id, role: "OWNER" },
+    });
+
+    expect(await canWriteInWorkspace(ws.id)).toBe(false);
   });
 });

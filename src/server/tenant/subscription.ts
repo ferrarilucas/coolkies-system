@@ -1,4 +1,4 @@
-import type { Subscription } from "@prisma/client";
+import type { Subscription, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
 
@@ -34,4 +34,40 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
   const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
   const allowed = owned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
   return new Set(allowed.map((m) => m.workspaceId));
+}
+
+export async function canWriteInWorkspace(workspaceId: string): Promise<boolean> {
+  const owner = await db.member.findFirst({
+    where: { workspaceId, role: "OWNER" },
+    select: { userId: true },
+  });
+  if (!owner) return false;
+
+  const sub = await getSubscription(owner.userId);
+  if (!isSubscriptionUsable(sub)) return false;
+
+  const active = await activeWorkspaceIds(owner.userId);
+  return active.has(workspaceId);
+}
+
+export type WorkspacePlanState = {
+  status: SubscriptionStatus | "NONE";
+  isOverLimit: boolean;
+};
+
+export async function getWorkspacePlanState(workspaceId: string): Promise<WorkspacePlanState> {
+  const owner = await db.member.findFirst({
+    where: { workspaceId, role: "OWNER" },
+    select: { userId: true },
+  });
+  if (!owner) return { status: "NONE", isOverLimit: false };
+
+  const sub = await getSubscription(owner.userId);
+  const usable = isSubscriptionUsable(sub);
+  const active = await activeWorkspaceIds(owner.userId);
+
+  return {
+    status: sub?.status ?? "NONE",
+    isOverLimit: usable && !active.has(workspaceId),
+  };
 }
