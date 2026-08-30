@@ -11,20 +11,39 @@ export type WorkspaceContext = {
   role: MemberRole;
 };
 
+export class NoWorkspaceError extends Error {
+  constructor() {
+    super("Nenhum workspace disponível");
+    this.name = "NoWorkspaceError";
+  }
+}
+
 export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext> => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Não autenticado");
 
-  const membership = await db.member.findFirst({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!membership) throw new Error("Nenhum workspace disponível");
+  const activeId = (session.session as { activeWorkspaceId?: string | null })
+    .activeWorkspaceId;
+
+  const membership = activeId
+    ? await db.member.findFirst({
+        where: { userId: session.user.id, workspaceId: activeId },
+      })
+    : null;
+
+  const fallback =
+    membership ??
+    (await db.member.findFirst({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "asc" },
+    }));
+
+  if (!fallback) throw new NoWorkspaceError();
 
   return {
     userId: session.user.id,
-    workspaceId: membership.workspaceId,
-    role: membership.role,
+    workspaceId: fallback.workspaceId,
+    role: fallback.role,
   };
 });
 

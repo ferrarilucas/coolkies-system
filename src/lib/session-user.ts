@@ -7,5 +7,5 @@ export type SessionUser = {
 };
 
 export function isAdmin(user: SessionUser | null | undefined): boolean {
-  return user?.role === "ADMIN";
+  return user?.role === "ADMIN" || user?.role === "OWNER";
 }
