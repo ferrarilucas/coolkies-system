@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 
 export type CustomerSummary = {
   id: string;
@@ -14,6 +14,7 @@ export type CustomerFull = Awaited<ReturnType<typeof getCustomers>>[number];
 
 /** Busca clientes por nome (case-insensitive). Sem query = retorna todos. */
 export async function searchCustomers(query?: string): Promise<CustomerSummary[]> {
+  const db = await getWorkspaceDb();
   return db.customer.findMany({
     where: query?.trim()
       ? { name: { contains: query.trim(), mode: "insensitive" } }
@@ -31,6 +32,7 @@ export async function searchCustomersPage(
   query: string | undefined,
   page = 1,
 ): Promise<{ items: CustomerSummary[]; hasMore: boolean }> {
+  const db = await getWorkspaceDb();
   const items = await db.customer.findMany({
     where: query?.trim()
       ? { name: { contains: query.trim(), mode: "insensitive" } }
@@ -46,6 +48,7 @@ export async function searchCustomersPage(
 
 /** Lista completa para a página de clientes. */
 export async function getCustomers() {
+  const db = await getWorkspaceDb();
   return db.customer.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -55,5 +58,6 @@ export async function getCustomers() {
 }
 
 export async function getCustomerById(id: string) {
+  const db = await getWorkspaceDb();
   return db.customer.findUnique({ where: { id } });
 }

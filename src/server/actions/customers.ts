@@ -1,23 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 import type { CustomerSummary } from "@/server/queries/customers";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) throw new Error("Não autenticado");
-  return session.user;
-}
-
 export async function createCustomer(
   formData: FormData,
 ): Promise<ActionResult<CustomerSummary>> {
-  await requireSession();
+  const { db, workspaceId } = await getScopedDb();
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim() || null;
@@ -29,7 +21,7 @@ export async function createCustomer(
 
   try {
     const customer = await db.customer.create({
-      data: { name, email, phone, sector, notes },
+      data: { name, email, phone, sector, notes, workspaceId },
       select: { id: true, name: true, email: true, phone: true, sector: true },
     });
     revalidatePath("/customers");
@@ -47,7 +39,7 @@ export async function updateCustomer(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim() || null;
@@ -71,7 +63,7 @@ export async function updateCustomer(
 }
 
 export async function deleteCustomer(id: string): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
   try {
     await db.customer.delete({ where: { id } });
     revalidatePath("/customers");

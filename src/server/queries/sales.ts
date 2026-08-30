@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { getWorkspaceDb } from "@/server/tenant/context";
 import type { Prisma } from "@prisma/client";
 
 // ─── Lista de vendas (paginada) ───────────────────────────────────────────────
@@ -64,6 +64,7 @@ function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
 }
 
 export async function getSales(filters: SalesFilters = {}, page = 1) {
+  const db = await getWorkspaceDb();
   const where = buildSalesWhere(filters);
   const skip = (page - 1) * SALES_PAGE_SIZE;
 
@@ -91,6 +92,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
 }
 
 export async function getSalesCounts(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
+  const db = await getWorkspaceDb();
   const groups = await db.sale.groupBy({
     by: ["status"],
     where: buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined }),
@@ -107,6 +109,7 @@ export async function getSalesCounts(filters: Omit<SalesFilters, "status" | "ove
 export type SalesSummary = Awaited<ReturnType<typeof getSalesSummary>>;
 
 export async function getSalesSummary(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
+  const db = await getWorkspaceDb();
   const base = buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined });
 
   const groups = await db.sale.groupBy({
@@ -142,6 +145,7 @@ export async function getSalesSummary(filters: Omit<SalesFilters, "status" | "ov
 export type SaleDetail = Awaited<ReturnType<typeof getSaleById>>;
 
 export async function getSaleById(id: string) {
+  const db = await getWorkspaceDb();
   return db.sale.findUnique({
     where: { id },
     include: {
@@ -165,6 +169,7 @@ export async function getSaleById(id: string) {
 export type CatalogProduct = Awaited<ReturnType<typeof getCatalogForSale>>[number];
 
 export async function getCatalogForSale() {
+  const db = await getWorkspaceDb();
   const products = await db.product.findMany({
     where: { active: true },
     orderBy: { name: "asc" },

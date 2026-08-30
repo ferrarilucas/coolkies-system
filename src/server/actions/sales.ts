@@ -1,18 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) throw new Error("Não autenticado");
-  return session.user as { id: string; role?: string };
-}
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -43,7 +35,7 @@ function parseDiscount(formData: FormData): { discountType: DiscountType | null;
 // ─── Criar venda ─────────────────────────────────────────────────────────────
 
 export async function createSale(formData: FormData): Promise<ActionResult<{ id: string }>> {
-  const user = await requireSession();
+  const { db, workspaceId, userId } = await getScopedDb();
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -73,10 +65,9 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
   const totalCents = subtotalCents - discountCents;
 
   try {
-    // Cria a venda com os itens
     const sale = await db.sale.create({
       data: {
-        userId: user.id,
+        userId,
         customerId,
         customerName,
         soldAt,
@@ -88,6 +79,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
         discountType,
         discountValue,
         totalCents,
+        workspaceId,
         items: {
           create: items.map((item) => ({
             productId: item.productId,
@@ -96,12 +88,12 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
             flavorNameSnapshot: item.flavorName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
+            workspaceId,
           })),
         },
       },
     });
 
-    // Cria movimentos de estoque sequencialmente
     for (const item of items) {
       await db.stockMovement.create({
         data: {
@@ -110,6 +102,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: sale.id,
+          workspaceId,
         },
       });
     }
@@ -125,7 +118,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
 // ─── Atualizar venda ─────────────────────────────────────────────────────────
 
 export async function updateSale(id: string, formData: FormData): Promise<ActionResult> {
-  await requireSession();
+  const { db, workspaceId } = await getScopedDb();
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -154,11 +147,9 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const totalCents = subtotalCents - discountCents;
 
   try {
-    // Remove movimentos e itens antigos
     await db.stockMovement.deleteMany({ where: { saleId: id } });
     await db.saleItem.deleteMany({ where: { saleId: id } });
 
-    // Atualiza a venda e recria os itens
     await db.sale.update({
       where: { id },
       data: {
@@ -181,12 +172,12 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
             flavorNameSnapshot: item.flavorName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
+            workspaceId,
           })),
         },
       },
     });
 
-    // Recria movimentos de estoque sequencialmente
     for (const item of items) {
       await db.stockMovement.create({
         data: {
@@ -195,6 +186,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: id,
+          workspaceId,
         },
       });
     }
@@ -212,7 +204,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
 export async function markAsPaid(
   id: string,
 ): Promise<ActionResult<{ forecastDate: string | null; forecastPreset: string | null }>> {
-  await requireSession();
+  const { db } = await getScopedDb();
   const sale = await db.sale.findUnique({
     where: { id },
     select: { paymentForecastDate: true, forecastPreset: true },
@@ -236,7 +228,7 @@ export async function markAsPaid(
 export async function markCustomerSalesAsPaid(
   customerId: string,
 ): Promise<ActionResult<{ count: number; totalCents: number }>> {
-  await requireSession();
+  const { db } = await getScopedDb();
 
   const pending = await db.sale.aggregate({
     where: { customerId, status: "PENDING" },
@@ -266,7 +258,7 @@ export async function markAsPending(
   forecastDate: string | null,
   forecastPreset: string | null,
 ): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
   try {
     await db.sale.update({
       where: { id },
@@ -287,7 +279,7 @@ export async function markAsPending(
 // ─── Excluir venda ───────────────────────────────────────────────────────────
 
 export async function deleteSale(id: string): Promise<ActionResult> {
-  await requireSession();
+  const { db } = await getScopedDb();
   try {
     await db.stockMovement.deleteMany({ where: { saleId: id } });
     await db.sale.delete({ where: { id } });
