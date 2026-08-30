@@ -12,7 +12,7 @@ dependências instaladas (`npm install`).
 
 **Não aplique este runbook até as Tasks 10, 11 e 12 (Fase 3 — migração de
 `src/server/actions/*` para `getWorkspaceDb()`) estarem implementadas e
-**deployadas em produção**.**
+_deployadas em produção_.**
 
 Hoje, 8 arquivos ainda escrevem pelo client cru importado de `@/lib/db`, sem
 informar `workspaceId`:
