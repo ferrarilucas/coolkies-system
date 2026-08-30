@@ -11,3 +11,4 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 .claude/worktrees
 .env.test
+.vercel
