@@ -123,6 +123,23 @@ model Workspace {
   members     Member[]
   invitations Invitation[]
 
+  products           Product[]
+  flavors            Flavor[]
+  priceListItems     PriceListItem[]
+  priceHistories     PriceHistory[]
+  customers          Customer[]
+  sales              Sale[]
+  saleItems          SaleItem[]
+  ingredients        Ingredient[]
+  markets            Market[]
+  ingredientPurchases IngredientPurchase[]
+  recipes            Recipe[]
+  recipeIngredients  RecipeIngredient[]
+  productionBatches  ProductionBatch[]
+  productionFillings ProductionFilling[]
+  stockMovements     StockMovement[]
+  shoppingListItems  ShoppingListItem[]
+
   @@map("workspace")
 }
 
@@ -172,9 +189,10 @@ model Product {
   stockMovements StockMovement[]
   productionBatches ProductionBatch[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([name])
+  @@unique([workspaceId, name])
   @@map("product")
 }
 
@@ -198,7 +216,8 @@ model Flavor {
   productionBatches ProductionBatch[]
   productionFillings ProductionFilling[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([productId, name])
   @@map("flavor")
@@ -218,7 +237,8 @@ model PriceListItem {
 
   history PriceHistory[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([productId, flavorId])
   @@map("price_list_item")
@@ -231,7 +251,8 @@ model PriceHistory {
   priceCents      Int
   changedAt       DateTime      @default(now())
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("price_history")
 }
@@ -243,7 +264,7 @@ model PriceHistory {
 model Customer {
   id        String   @id @default(cuid())
   name      String
-  email     String?  @unique
+  email     String?
   phone     String?
   sector    String?
   notes     String?
@@ -252,8 +273,10 @@ model Customer {
 
   sales Sale[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([workspaceId, email])
   @@map("customer")
 }
 
@@ -305,10 +328,11 @@ model Sale {
 
   items SaleItem[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([status, paymentForecastDate])
-  @@index([soldAt])
+  @@index([workspaceId, status, paymentForecastDate])
+  @@index([workspaceId, soldAt])
   @@map("sale")
 }
 
@@ -328,7 +352,8 @@ model SaleItem {
   flavorNameSnapshot String?
   productNameSnapshot String
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("sale_item")
 }
@@ -355,9 +380,10 @@ model Ingredient {
   recipeIngredients RecipeIngredient[]
   shoppingItems     ShoppingListItem[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([name])
+  @@unique([workspaceId, name])
   @@map("ingredient")
 }
 
@@ -369,9 +395,10 @@ model Market {
 
   purchases IngredientPurchase[]
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([name])
+  @@unique([workspaceId, name])
   @@map("market")
 }
 
@@ -391,9 +418,10 @@ model IngredientPurchase {
   purchasedAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([ingredientId, purchasedAt])
+  @@index([workspaceId, ingredientId, purchasedAt])
   @@map("ingredient_purchase")
 }
 
@@ -415,9 +443,10 @@ model Recipe {
   // Sabores que usam esta receita como recheio
   flavorFillings Flavor[] @relation("FlavorFillingRecipe")
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([name])
+  @@unique([workspaceId, name])
   @@map("recipe")
 }
 
@@ -429,7 +458,8 @@ model RecipeIngredient {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   quantity     Float // quantidade na unidade base do ingrediente
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([recipeId, ingredientId])
   @@map("recipe_ingredient")
@@ -460,7 +490,8 @@ model ProductionBatch {
   movements StockMovement[]
   fillings  ProductionFilling[] // recheios aplicados neste lote
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("production_batch")
 }
@@ -474,7 +505,8 @@ model ProductionFilling {
   flavor            Flavor          @relation(fields: [flavorId], references: [id])
   quantity          Int             // quantos cookies deste lote receberam este recheio
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("production_filling")
 }
@@ -502,9 +534,10 @@ model StockMovement {
 
   createdAt DateTime @default(now())
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([productId, flavorId])
+  @@index([workspaceId, productId, flavorId])
   @@map("stock_movement")
 }
 
@@ -520,7 +553,8 @@ model ShoppingListItem {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  workspaceId String?
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("shopping_list_item")
 }

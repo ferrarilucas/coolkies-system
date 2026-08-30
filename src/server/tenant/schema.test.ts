@@ -13,9 +13,4 @@ describe("schema multi-tenant", () => {
     });
     expect(product.workspaceId).toBe(ws.id);
   });
-
-  it("permite produto sem workspace enquanto a coluna for nullable", async () => {
-    const product = await testDb.product.create({ data: { name: "Brownie" } });
-    expect(product.workspaceId).toBeNull();
-  });
 });

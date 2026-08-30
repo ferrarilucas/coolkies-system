@@ -227,4 +227,14 @@ describe("escopo por workspace", () => {
     const items = await testDb.saleItem.findMany();
     expect(items).toHaveLength(0);
   });
+
+  it("permite o mesmo nome de produto em workspaces diferentes", async () => {
+    const a = await createWorkspace("A");
+    const b = await createWorkspace("B");
+
+    await scopedDb(a.id).product.create({ data: { name: "Cookie" } });
+    const outro = await scopedDb(b.id).product.create({ data: { name: "Cookie" } });
+
+    expect(outro.name).toBe("Cookie");
+  });
 });
