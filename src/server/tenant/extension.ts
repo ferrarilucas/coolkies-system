@@ -10,11 +10,30 @@ const WHERE_OPS = new Set([
   "aggregate",
   "groupBy",
   "updateMany",
+  "updateManyAndReturn",
   "deleteMany",
 ]);
 
-const CREATE_OPS = new Set(["create", "createMany"]);
+const CREATE_MANY_OPS = new Set(["createMany", "createManyAndReturn"]);
+const CREATE_OPS = new Set(["create", ...CREATE_MANY_OPS]);
 const SINGLE_TARGET_OPS = new Set(["update", "delete"]);
+const UPSERT_OPS = new Set(["upsert"]);
+
+export const SCOPED_OPERATIONS = new Set([
+  ...WHERE_OPS,
+  ...CREATE_OPS,
+  ...SINGLE_TARGET_OPS,
+  ...UPSERT_OPS,
+]);
+
+export function unsupportedOperation(model: string, operation: string): never {
+  throw new Error(
+    `A operação "${operation}" não é suportada pelo client escopado por workspace (model "${model}"). ` +
+      `O client escopado só executa operações para as quais sabe injetar o workspaceId; qualquer outra rodaria ` +
+      `sem escopo e poderia ler ou alterar dados de outros workspaces. ` +
+      `Se você precisa dessa operação, adicione o tratamento explícito dela em src/server/tenant/extension.ts.`,
+  );
+}
 
 function withWhere(args: Record<string, unknown>, workspaceId: string) {
   const where = (args.where ?? {}) as Record<string, unknown>;
@@ -44,6 +63,8 @@ export function scopedDb(workspaceId: string): PrismaClient {
         async $allOperations({ model, operation, args, query }) {
           if (UNSCOPED_MODELS.has(model)) return query(args);
 
+          if (!SCOPED_OPERATIONS.has(operation)) unsupportedOperation(model, operation);
+
           const typed = (args ?? {}) as Record<string, unknown>;
 
           if (operation === "update") {
@@ -58,7 +79,7 @@ export function scopedDb(workspaceId: string): PrismaClient {
           }
 
           if (CREATE_OPS.has(operation)) {
-            if (operation === "createMany") {
+            if (CREATE_MANY_OPS.has(operation)) {
               const data = typed.data;
               const rows = Array.isArray(data) ? data : [data];
               return query({
@@ -72,7 +93,7 @@ export function scopedDb(workspaceId: string): PrismaClient {
             } as never);
           }
 
-          if (operation === "upsert") {
+          if (UPSERT_OPS.has(operation)) {
             return query({
               ...withWhere(typed, workspaceId),
               create: injectWorkspaceId(model, typed.create ?? {}, workspaceId),
@@ -80,7 +101,7 @@ export function scopedDb(workspaceId: string): PrismaClient {
             } as never);
           }
 
-          return query(typed);
+          return unsupportedOperation(model, operation);
         },
       },
     },

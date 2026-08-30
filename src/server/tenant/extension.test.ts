@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Prisma } from "@prisma/client";
 import { createWorkspace, resetDb, testDb } from "@/test/db";
-import { scopedDb } from "./extension";
+import { SCOPED_OPERATIONS, scopedDb } from "./extension";
 
 describe("escopo por workspace", () => {
   beforeEach(async () => {
@@ -233,6 +233,75 @@ describe("escopo por workspace", () => {
 
     const items = await testDb.saleItem.findMany();
     expect(items).toHaveLength(0);
+  });
+
+  it("updateManyAndReturn não atinge linhas de outro workspace", async () => {
+    const a = await createWorkspace("A");
+    const b = await createWorkspace("B");
+    await testDb.product.create({ data: { name: "Meu", workspaceId: a.id, active: true } });
+    await testDb.product.create({ data: { name: "Alheio", workspaceId: b.id, active: true } });
+
+    const returned = await scopedDb(a.id).product.updateManyAndReturn({
+      where: {},
+      data: { active: false },
+    });
+
+    expect(returned).toHaveLength(1);
+    expect(returned[0].workspaceId).toBe(a.id);
+
+    const alheio = await testDb.product.findFirst({ where: { workspaceId: b.id } });
+    expect(alheio?.active).toBe(true);
+  });
+
+  it("createManyAndReturn grava no workspace do client mesmo se outro for informado", async () => {
+    const a = await createWorkspace("A");
+    const b = await createWorkspace("B");
+
+    const returned = await scopedDb(a.id).product.createManyAndReturn({
+      data: [{ name: "Novo", workspaceId: b.id }],
+    } as Prisma.ProductCreateManyAndReturnArgs);
+
+    expect(returned).toHaveLength(1);
+    expect(returned[0].workspaceId).toBe(a.id);
+
+    const noOutro = await testDb.product.count({ where: { workspaceId: b.id } });
+    expect(noOutro).toBe(0);
+  });
+
+  it("operação não suportada lança em vez de rodar sem escopo", async () => {
+    const a = await createWorkspace("A");
+    const scoped = scopedDb(a.id) as unknown as {
+      product: { findRaw: (args: unknown) => Promise<unknown> };
+    };
+
+    await expect(scoped.product.findRaw({})).rejects.toThrow(
+      /não é suportada pelo client escopado/,
+    );
+    await expect(scoped.product.findRaw({})).rejects.toThrow(
+      /src\/server\/tenant\/extension\.ts/,
+    );
+  });
+
+  it("a allowlist cobre exatamente as operações que a extension sabe escopar", () => {
+    expect([...SCOPED_OPERATIONS].sort()).toEqual(
+      [
+        "aggregate",
+        "count",
+        "create",
+        "createMany",
+        "createManyAndReturn",
+        "delete",
+        "deleteMany",
+        "findFirst",
+        "findFirstOrThrow",
+        "findMany",
+        "groupBy",
+        "update",
+        "updateMany",
+        "updateManyAndReturn",
+        "upsert",
+      ].sort(),
+    );
   });
 
   it("permite o mesmo nome de produto em workspaces diferentes", async () => {

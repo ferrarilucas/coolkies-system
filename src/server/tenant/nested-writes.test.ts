@@ -1,5 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { injectIntoNestedWrites, injectWorkspaceId } from "./nested-writes";
+import { Prisma } from "@prisma/client";
+import {
+  injectIntoNestedWrites,
+  injectWorkspaceId,
+  TENANCY_CONTROL_PLANE_MODELS,
+  UNSCOPED_MODELS,
+} from "./nested-writes";
+
+describe("UNSCOPED_MODELS", () => {
+  it("ter workspaceId equivale a ser escopado, fora do control plane de tenancy", () => {
+    for (const model of Prisma.dmmf.datamodel.models) {
+      const hasWorkspaceId = model.fields.some((field) => field.name === "workspaceId");
+      const shouldBeUnscoped =
+        !hasWorkspaceId || TENANCY_CONTROL_PLANE_MODELS.has(model.name);
+
+      expect({ model: model.name, unscoped: UNSCOPED_MODELS.has(model.name) }).toEqual({
+        model: model.name,
+        unscoped: shouldBeUnscoped,
+      });
+    }
+  });
+
+  it("o control plane de tenancy é uma exceção fechada", () => {
+    expect([...TENANCY_CONTROL_PLANE_MODELS].sort()).toEqual(["Invitation", "Member"]);
+
+    for (const model of TENANCY_CONTROL_PLANE_MODELS) {
+      expect(UNSCOPED_MODELS.has(model)).toBe(true);
+    }
+  });
+
+  it("todo model de domínio com workspaceId é escopado", () => {
+    const scoped = Prisma.dmmf.datamodel.models
+      .filter((model) => model.fields.some((field) => field.name === "workspaceId"))
+      .filter((model) => !TENANCY_CONTROL_PLANE_MODELS.has(model.name))
+      .map((model) => model.name);
+
+    expect(scoped.length).toBeGreaterThan(0);
+    for (const model of scoped) {
+      expect(UNSCOPED_MODELS.has(model)).toBe(false);
+    }
+  });
+});
 
 describe("injectWorkspaceId", () => {
   it("injeta no nível de topo", () => {

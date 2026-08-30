@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+export const TENANCY_CONTROL_PLANE_MODELS = new Set(["Member", "Invitation"]);
+
 export const UNSCOPED_MODELS = new Set([
   "User",
   "Session",
@@ -7,8 +9,7 @@ export const UNSCOPED_MODELS = new Set([
   "Verification",
   "AllowedEmail",
   "Workspace",
-  "Member",
-  "Invitation",
+  ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 
 const relationTargets = new Map<string, Map<string, string>>();
