@@ -6,6 +6,7 @@ const UNSCOPED_MODELS = new Set([
   "Session",
   "Account",
   "Verification",
+  "AllowedEmail",
   "Workspace",
   "Member",
   "Invitation",
