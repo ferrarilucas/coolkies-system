@@ -246,7 +246,7 @@ export function CustomerCombobox({ value, onChange }: CustomerComboboxProps) {
                     onClick={() => setShowCreate(true)}
                   >
                     <Plus className="size-3.5" />
-                    Criar "{query}"
+                    Criar &quot;{query}&quot;
                   </Button>
                 </div>
               ) : noResults ? (
