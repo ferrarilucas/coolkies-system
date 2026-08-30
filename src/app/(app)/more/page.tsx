@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { isAdmin, type SessionUser } from "@/lib/session-user";
+import { getWorkspaceContext } from "@/server/tenant/context";
+import { listUserWorkspaces } from "@/server/tenant/workspaces";
+import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
 import { PageHeader } from "@/components/shared/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -27,12 +30,16 @@ export default async function MorePage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const u = session.user as typeof session.user & { role?: string };
+  const [{ workspaceId, role }, workspaces] = await Promise.all([
+    getWorkspaceContext(),
+    listUserWorkspaces(),
+  ]);
+
   const user: SessionUser = {
-    name: u.name,
-    email: u.email,
-    image: u.image ?? null,
-    role: u.role ?? "USER",
+    name: session.user.name,
+    email: session.user.email,
+    image: session.user.image ?? null,
+    role,
   };
 
   const links: MoreLink[] = [
@@ -80,6 +87,22 @@ export default async function MorePage() {
           <p className="truncate font-medium">{user.name}</p>
           <p className="truncate text-sm text-muted-foreground">{user.email}</p>
         </div>
+      </div>
+
+      <div className="space-y-2 md:hidden">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Store className="size-3.5" />
+          Workspace
+        </p>
+        <WorkspaceSwitcher
+          workspaces={workspaces.map((w) => ({
+            id: w.id,
+            name: w.name,
+            role: w.role,
+          }))}
+          activeId={workspaceId}
+          variant="sidebar"
+        />
       </div>
 
       <div className="divide-y rounded-lg border bg-card">

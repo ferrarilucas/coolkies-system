@@ -329,6 +329,10 @@ Os limites por plano (`solo` = 1, `team` = 4, `unlimited` = sem teto) vivem como
 
 **O trial e da conta, nao do workspace.** No desenho antigo, cada workspace novo daria 14 dias — teste infinito de graca.
 
+**Durante o trial o limite e sempre 1 workspace**, qualquer que seja o plano registrado. Quem quiser um segundo workspace precisa assinar. O limite efetivo e portanto `status === TRIALING ? 1 : planLimit(plan)`.
+
+**O tempo restante do trial fica visivel.** Enquanto a assinatura esta em `TRIALING`, uma faixa fina no topo mostra quantos dias faltam. Ela desaparece assim que a assinatura vira `ACTIVE` — nao e um aviso de erro, e uma contagem, e some quando deixa de importar.
+
 ### 10.3 Estado derivado, não copiado
 
 **O Asaas não emite webhook de assinatura — apenas de cobrança.** Toda cobrança pertencente a uma assinatura carrega o campo `subscription` no JSON do webhook, e é por ele que se faz o vínculo.
