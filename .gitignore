@@ -8,3 +8,4 @@ build
 .DS_Store
 next-env.d.ts
 /prisma/migrations/dev.db*
+tsconfig.tsbuildinfo
