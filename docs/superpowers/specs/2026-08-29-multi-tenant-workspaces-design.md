@@ -292,18 +292,42 @@ Escolhido por reunir Pix Automático, cartão recorrente e boleto num só lugar,
 
 **Pix Automático** é o método principal: regulado pela Resolução BCB nº 422/2025 e em operação desde janeiro de 2026, com ampla cobertura bancária e MDR de 0,4%–1,2%, contra 3%–4,5% de cartão recorrente. Exige conta **PJ**. Cartão fica como alternativa para quem não autorizar o débito.
 
-### 10.2 Campos em `Workspace`
+### 10.2 A assinatura pertence à pessoa, não ao workspace
 
-| Campo | Conteúdo |
+**Correção de desenho, decidida em 2026-08-30.** A versão original desta secão punha `plan` e `subscriptionStatus` em `Workspace`, assumindo uma assinatura por workspace. Isso nao suporta a tabela de precos definida depois, que cobra por **quantidade de workspaces**:
+
+| Plano | Workspaces | Mensal | Anual |
+|---|---|---|---|
+| `solo` | 1 | R$ 29,90 | R$ 19,90/mes |
+| `team` | ate 4 | R$ 99,90 | R$ 89,90/mes |
+| `unlimited` | sem teto | sob consulta | sob consulta |
+
+Como "ate 4 workspaces por R$ 99,90" precisa de algo que agrupe os workspaces, a assinatura passa a viver no **usuario**, e o workspace herda o estado do seu `OWNER`. Para saber se o Douce Vie esta ativo, consulta-se a assinatura de quem e OWNER dele.
+
+Model `Subscription`, um por usuario:
+
+| Campo | Conteudo |
 |---|---|
-| `plan` | identificador do plano; inicia com um único valor, `pro` |
-| `subscriptionStatus` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED` |
-| `trialEndsAt` | fim do período de teste (14 dias a partir da criação do workspace) |
-| `graceUntil` | fim da tolerância após falha de pagamento |
-| `asaasCustomerId` | id do cliente no gateway |
-| `asaasSubscriptionId` | id da assinatura no gateway |
+| `userId` | dono da assinatura; unico |
+| `plan` | `solo`, `team` ou `unlimited` |
+| `status` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED` |
+| `source` | `ASAAS` ou `MANUAL` |
+| `asaasCustomerId` | opcional — ausente em assinatura manual |
+| `asaasSubscriptionId` | opcional — ausente em assinatura manual |
+| `trialEndsAt` | fim do teste, 14 dias a partir do primeiro workspace |
+| `graceUntil` | fim da tolerancia apos falha de pagamento |
+| `currentPeriodEnd` | fim do ciclo pago |
+| `notes` | por que e manual, com quem foi negociado |
 
-`plan` é string livre justamente para que criar novos planos seja dado, não migration. A tabela de preços é decisão comercial e não afeta este desenho.
+Os limites por plano (`solo` = 1, `team` = 4, `unlimited` = sem teto) vivem como constante no codigo, nao no banco: atribuir um plano manualmente passa a ser um `UPDATE` de duas colunas, sem inventar linha de configuracao.
+
+**`source` nao e opcional no desenho.** O plano `unlimited` e vendido por conversa, nao por checkout, entao existe assinatura sem contraparte no Asaas. Sem esse campo, a rotina de reconciliacao da secao 10.3 consultaria a API do Asaas por um id inexistente e marcaria como invalida justamente a assinatura do cliente negociado a mao. A reconciliacao ignora `source = MANUAL`.
+
+**Contagem do limite:** conta-se em quantos workspaces a pessoa e `OWNER`. Participar do workspace de outra pessoa como ADMIN ou MEMBER nao consome cota — voce paga pelos negocios que sao seus.
+
+**Quando alguem excede o limite** (por exemplo, ao baixar de plano), a criacao de novos workspaces e bloqueada e os existentes continuam acessiveis. Escolher por conta propria qual negocio da pessoa vira somente-leitura nao e decisao que o sistema deva tomar.
+
+**O trial e da conta, nao do workspace.** No desenho antigo, cada workspace novo daria 14 dias — teste infinito de graca.
 
 ### 10.3 Estado derivado, não copiado
 
@@ -322,7 +346,7 @@ O endpoint de webhook valida o token configurado no Asaas antes de processar, e 
 
 ### 10.4 Liberação: somente-leitura, nunca bloqueio total
 
-`assertCanWrite()` vive ao lado de `getWorkspaceContext()` na camada de acesso e recusa **escritas** quando o workspace não está em `TRIALING` ou `ACTIVE` e a tolerância expirou.
+`assertCanWrite()` vive ao lado de `getWorkspaceContext()` na camada de acesso e recusa **escritas** quando a assinatura do `OWNER` do workspace ativo não está em `TRIALING` ou `ACTIVE` e a tolerância expirou.
 
 Leitura nunca é bloqueada. O dono continua vendo vendas, clientes e histórico; apenas não registra nada novo. Bloquear acesso a dados que o cliente criou gera contestação e ressentimento — travar escrita converte. A UI mostra um banner persistente com o link de regularização.
 
