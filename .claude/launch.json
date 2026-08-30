@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "cookies-dev",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "-p", "3000"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
   ]

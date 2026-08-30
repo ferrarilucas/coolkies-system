@@ -10,5 +10,11 @@ export default defineConfig({
     environment: "node",
     fileParallelism: false,
     hookTimeout: 30000,
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/.claude/worktrees/**",
+    ],
   },
 });
