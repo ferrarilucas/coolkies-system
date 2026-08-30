@@ -87,7 +87,13 @@ describe("workspaces ativos por plano", () => {
   });
 
   it("ser member nao consome cota do proprio plano", async () => {
-    const { user, ids } = await ownerWith("solo", 1);
+    const user = await testDb.user.create({
+      data: { id: "u-member-nao-consome", name: "Dono", email: "membernaoconsome@example.com" },
+    });
+    await testDb.subscription.create({
+      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+    });
+
     const alheio = await testDb.workspace.create({
       data: { name: "Alheio", slug: "alheio-cota" },
     });
@@ -95,8 +101,16 @@ describe("workspaces ativos por plano", () => {
       data: { userId: user.id, workspaceId: alheio.id, role: "MEMBER" },
     });
 
+    const proprio = await testDb.workspace.create({
+      data: { name: "Proprio", slug: "proprio-cota" },
+    });
+    await testDb.member.create({
+      data: { userId: user.id, workspaceId: proprio.id, role: "OWNER" },
+    });
+
     const active = await activeWorkspaceIds(user.id);
-    expect(active.has(ids[0])).toBe(true);
+    expect(active.has(proprio.id)).toBe(true);
+    expect(active.has(alheio.id)).toBe(false);
   });
 });
 
