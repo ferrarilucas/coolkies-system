@@ -1,12 +1,52 @@
 import { Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
-import { getCustomers } from "@/server/queries/customers";
+import {
+  getCustomersWithBalance,
+  getCustomerSectors,
+} from "@/server/queries/customers";
 import { CustomerList } from "@/components/customers/customer-list";
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog";
+import { CustomersFilters } from "@/components/customers/customers-filters";
+import { formatBRL } from "@/lib/money";
+import type { CustomerSituation } from "@/lib/customer-balance";
 
-export default async function CustomersPage() {
-  const customers = await getCustomers();
+type SearchParams = Promise<{
+  q?: string;
+  situation?: string;
+  sector?: string;
+  mindue?: string;
+}>;
+
+const SITUATIONS: CustomerSituation[] = ["all", "pending", "overdue", "clear"];
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
+  const q = (sp.q ?? "").trim();
+  const sector = (sp.sector ?? "").trim();
+  const minDue = Math.max(0, parseInt(sp.mindue ?? "0") || 0);
+  const situation = SITUATIONS.includes(sp.situation as CustomerSituation)
+    ? (sp.situation as CustomerSituation)
+    : "all";
+
+  const [customers, sectors] = await Promise.all([
+    getCustomersWithBalance({
+      q: q || undefined,
+      sector: sector || undefined,
+      situation,
+      minDueCents: minDue || undefined,
+    }),
+    getCustomerSectors(),
+  ]);
+
+  const hasFilters = Boolean(q || sector || minDue || situation !== "all");
+  const totalPendingCents = customers.reduce((sum, c) => sum + c.pendingCents, 0);
+  const debtorCount = customers.filter((c) => c.pendingCents > 0).length;
+  const overdueCount = customers.filter((c) => c.isOverdue).length;
 
   return (
     <div>
@@ -16,16 +56,66 @@ export default async function CustomersPage() {
         action={<CustomerCreateDialog />}
       />
 
+      <CustomersFilters
+        values={{ q, situation, sector, minDue }}
+        sectors={sectors}
+      />
+
+      {totalPendingCents > 0 && (
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          <SummaryStat
+            label="A receber"
+            value={formatBRL(totalPendingCents)}
+            valueClass="text-warning-text"
+          />
+          <SummaryStat
+            label="Devendo"
+            value={String(debtorCount)}
+            hint={debtorCount === 1 ? "cliente" : "clientes"}
+          />
+          <SummaryStat
+            label="Em atraso"
+            value={String(overdueCount)}
+            hint={overdueCount === 1 ? "cliente" : "clientes"}
+            valueClass={overdueCount > 0 ? "text-destructive" : "text-muted-foreground"}
+          />
+        </div>
+      )}
+
       {customers.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="Nenhum cliente cadastrado"
-          description="Adicione clientes para vincular às suas vendas."
-          action={<CustomerCreateDialog />}
+          title={hasFilters ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+          description={
+            hasFilters
+              ? "Ajuste os filtros para ver outros clientes."
+              : "Adicione clientes para vincular às suas vendas."
+          }
+          action={hasFilters ? undefined : <CustomerCreateDialog />}
         />
       ) : (
         <CustomerList customers={customers} />
       )}
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  hint,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-base font-semibold ${valueClass ?? ""}`}>{value}</p>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

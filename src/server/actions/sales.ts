@@ -253,6 +253,36 @@ export async function markCustomerSalesAsPaid(
   };
 }
 
+export async function markSalesAsPaid(
+  saleIds: string[],
+): Promise<ActionResult<{ count: number; totalCents: number }>> {
+  if (saleIds.length === 0) {
+    return { ok: false, error: "Selecione ao menos uma venda." };
+  }
+
+  const { db } = await getScopedDb();
+
+  const pending = await db.sale.aggregate({
+    where: { id: { in: saleIds }, status: "PENDING" },
+    _sum: { totalCents: true },
+    _count: { _all: true },
+  });
+  const count = pending._count._all;
+  if (count === 0) {
+    return { ok: false, error: "Nenhuma venda pendente selecionada." };
+  }
+
+  await db.sale.updateMany({
+    where: { id: { in: saleIds }, status: "PENDING" },
+    data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/customers");
+  revalidatePath("/dashboard");
+  return { ok: true, data: { count, totalCents: pending._sum.totalCents ?? 0 } };
+}
+
 export async function markAsPending(
   id: string,
   forecastDate: string | null,
