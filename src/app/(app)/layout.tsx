@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { getWorkspacePlanState } from "@/server/tenant/subscription";
+import { daysUntil } from "@/lib/trial";
 import type { SessionUser } from "@/lib/session-user";
 
 export default async function AppLayout({
@@ -20,7 +21,8 @@ export default async function AppLayout({
 
   const { workspaceId, canWrite } = await getWorkspaceContext();
   const active = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0];
-  const { status, isOverLimit } = await getWorkspacePlanState(active.id);
+  const { status, isOverLimit, trialEndsAt } = await getWorkspacePlanState(active.id);
+  const daysLeft = status === "TRIALING" ? daysUntil(trialEndsAt) : null;
 
   const u = session.user as typeof session.user & { role?: string };
   const user: SessionUser = {
@@ -38,6 +40,7 @@ export default async function AppLayout({
       planStatus={status}
       isOverLimit={isOverLimit}
       isReadOnly={!canWrite}
+      trialDaysLeft={daysLeft}
     >
       {children}
     </AppShell>

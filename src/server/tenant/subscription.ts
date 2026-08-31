@@ -78,6 +78,7 @@ export async function canWriteInWorkspace(workspaceId: string): Promise<boolean>
 export type WorkspacePlanState = {
   status: SubscriptionStatus | "NONE";
   isOverLimit: boolean;
+  trialEndsAt: Date | null;
 };
 
 export async function getWorkspacePlanState(workspaceId: string): Promise<WorkspacePlanState> {
@@ -85,7 +86,7 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
     where: { workspaceId, role: "OWNER" },
     select: { userId: true },
   });
-  if (!owner) return { status: "NONE", isOverLimit: false };
+  if (!owner) return { status: "NONE", isOverLimit: false, trialEndsAt: null };
 
   const sub = await getSubscription(owner.userId);
   const usable = isSubscriptionUsable(sub);
@@ -94,5 +95,6 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
   return {
     status: sub?.status ?? "NONE",
     isOverLimit: usable && !active.has(workspaceId),
+    trialEndsAt: sub?.trialEndsAt ?? null,
   };
 }

@@ -3,6 +3,7 @@ import { BottomNav } from "./bottom-nav";
 import { SideNav } from "./side-nav";
 import { MainArea } from "./main-area";
 import { PlanBanner } from "./plan-banner";
+import { TrialBanner } from "./trial-banner";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import type { SessionUser } from "@/lib/session-user";
 
@@ -13,6 +14,7 @@ export function AppShell({
   planStatus,
   isOverLimit,
   isReadOnly,
+  trialDaysLeft,
   children,
 }: {
   user: SessionUser;
@@ -21,6 +23,7 @@ export function AppShell({
   planStatus: string;
   isOverLimit: boolean;
   isReadOnly: boolean;
+  trialDaysLeft: number | null;
   children: ReactNode;
 }) {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -42,6 +45,7 @@ export function AppShell({
             variant="bar"
           />
         )}
+        <TrialBanner daysLeft={trialDaysLeft} />
         <PlanBanner
           status={planStatus}
           isOverLimit={isOverLimit}
