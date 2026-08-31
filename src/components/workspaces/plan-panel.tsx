@@ -85,7 +85,10 @@ export function PlanPanel({
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
-  const isSwitchingPlan = hasAsaasSubscriptionId && checkoutPlan !== null && checkoutPlan !== currentPlan;
+  const isSwitchingPlan =
+    hasAsaasSubscriptionId &&
+    checkoutPlan !== null &&
+    (checkoutPlan !== currentPlan || cycle !== currentCycle);
 
   function openCheckout(planId: string) {
     setSwitchConfirmed(false);
@@ -175,7 +178,8 @@ export function PlanPanel({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {PLANS.map((plan) => {
               const priceCents = planPriceCents(plan.id, cycle);
-              const isCurrent = currentPlan === plan.id;
+              const isCurrent =
+                hasAsaasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
 
               return (
                 <Card key={plan.id} className={isCurrent ? "border-primary" : undefined}>

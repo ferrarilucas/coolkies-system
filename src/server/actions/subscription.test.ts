@@ -74,6 +74,34 @@ describe("subscribe", () => {
     expect(sub?.source).toBe("ASAAS");
   });
 
+  it("usuário em trial, sem asaasSubscriptionId, consegue contratar o mesmo plano do trial", async () => {
+    const { user } = await userWithWorkspace("u-sub-trial-checkout", "trialcheckout@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "TRIALING",
+        trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
+    expect(sub?.plan).toBe("solo");
+  });
+
   it("não vira ACTIVE só por ter contratado", async () => {
     const { user } = await userWithWorkspace("u-sub-status", "status@example.com");
     stubAsaasFetch();
