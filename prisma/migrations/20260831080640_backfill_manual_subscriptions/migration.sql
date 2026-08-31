@@ -13,7 +13,7 @@ INSERT INTO "subscription" (
     "updatedAt"
 )
 SELECT
-    gen_random_uuid()::text,
+    md5(random()::text || clock_timestamp()::text || m."userId"),
     m."userId",
     CASE
         WHEN COUNT(*) = 1 THEN 'solo'
