@@ -7,6 +7,7 @@ const TABLES = [
   "invitation",
   "workspace",
   "user",
+  "processed_webhook_event",
   "stock_movement",
   "production_filling",
   "production_batch",

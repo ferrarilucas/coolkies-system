@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 import { BaseUnit } from "@prisma/client";
 
@@ -15,6 +15,7 @@ function parseBaseUnit(value: string): BaseUnit {
 
 export async function createIngredient(formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
@@ -36,6 +37,7 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
 
 export async function updateIngredient(id: string, formData: FormData): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const baseUnit = parseBaseUnit(String(formData.get("baseUnit") ?? "G"));
@@ -57,6 +59,7 @@ export async function updateIngredient(id: string, formData: FormData): Promise<
 
 export async function deleteIngredient(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
 
   try {
     await db.ingredient.delete({ where: { id } });

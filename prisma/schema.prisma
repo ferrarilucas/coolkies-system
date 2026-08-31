@@ -38,6 +38,7 @@ model User {
   productionBatches ProductionBatch[]
   ingredientPurchases IngredientPurchase[]
   members          Member[]
+  subscription     Subscription?
 
   @@map("user")
 }
@@ -120,17 +121,55 @@ enum SubscriptionStatus {
   CANCELED
 }
 
+enum SubscriptionSource {
+  ASAAS
+  MANUAL
+}
+
+enum SubscriptionCycle {
+  MONTHLY
+  YEARLY
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan   String             @default("solo")
+  status SubscriptionStatus @default(TRIALING)
+  source SubscriptionSource @default(ASAAS)
+  cycle  SubscriptionCycle  @default(MONTHLY)
+
+  asaasCustomerId     String?
+  asaasSubscriptionId String?
+
+  trialEndsAt      DateTime?
+  graceUntil       DateTime?
+  currentPeriodEnd DateTime?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscription")
+}
+
+model ProcessedWebhookEvent {
+  id         String   @id
+  event      String
+  receivedAt DateTime @default(now())
+
+  @@map("processed_webhook_event")
+}
+
 model Workspace {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  plan               String             @default("pro")
-  subscriptionStatus SubscriptionStatus @default(TRIALING)
-  trialEndsAt        DateTime?
-  graceUntil         DateTime?
 
   members     Member[]
   invitations Invitation[]

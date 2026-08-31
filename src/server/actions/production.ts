@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -11,6 +11,7 @@ type FillingInput = { flavorId: string; quantity: number };
 
 export async function createProductionBatch(formData: FormData): Promise<ActionResult> {
   const { db, workspaceId, userId } = await getScopedDb();
+  await assertCanWrite();
 
   const productId = String(formData.get("productId") ?? "").trim();
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
@@ -60,6 +61,7 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
 
 export async function updateProductionBatch(id: string, formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb();
+  await assertCanWrite();
 
   const productId = String(formData.get("productId") ?? "").trim();
   const recipeId = String(formData.get("recipeId") ?? "").trim() || null;
@@ -113,6 +115,7 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
 
 export async function deleteProductionBatch(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
+  await assertCanWrite();
   try {
     await db.productionFilling.deleteMany({ where: { productionBatchId: id } });
     await db.productionBatch.delete({ where: { id } });

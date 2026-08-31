@@ -2,7 +2,9 @@ import { headers } from "next/headers";
 import type { MemberRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { effectiveLimit } from "@/lib/plans";
 import { normalizeName } from "@/lib/text";
+import { ensureTrialSubscription, getSubscription } from "./subscription";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 8;
@@ -15,7 +17,6 @@ export type WorkspaceSummary = {
   name: string;
   slug: string;
   role: MemberRole;
-  subscriptionStatus: string;
 };
 
 export type MemberSummary = {
@@ -91,7 +92,6 @@ export async function listUserWorkspaces(): Promise<WorkspaceSummary[]> {
     name: m.workspace.name,
     slug: m.workspace.slug,
     role: m.role,
-    subscriptionStatus: m.workspace.subscriptionStatus,
   }));
 }
 
@@ -115,12 +115,24 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
   const clean = normalizeName(name);
   if (!clean) throw new Error("Informe um nome para o workspace.");
 
+  await ensureTrialSubscription(userId);
+
+  const sub = await getSubscription(userId);
+  const owned = await db.member.count({ where: { userId, role: "OWNER" } });
+  const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
+  if (owned + 1 > limit) {
+    throw new Error(
+      sub?.status === "TRIALING"
+        ? "Durante o teste você pode ter um workspace. Assine um plano para criar outro."
+        : "Seu plano não permite mais workspaces. Faça upgrade para criar outro.",
+    );
+  }
+
   const workspace = await db.$transaction(async (tx) => {
     const created = await tx.workspace.create({
       data: {
         name: clean,
         slug: await uniqueSlug(clean),
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       },
     });
     await tx.member.create({

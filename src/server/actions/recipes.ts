@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getScopedDb } from "@/server/tenant/context";
+import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { BaseUnit, Prisma } from "@prisma/client";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -12,6 +12,7 @@ type IngredientLine = { ingredientId: string; quantity: number };
 
 export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const name = String(formData.get("name") ?? "").trim();
@@ -88,6 +89,7 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
 
 export async function deleteRecipe(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
   try {
     await db.recipe.delete({ where: { id } });
   } catch {
@@ -105,6 +107,7 @@ export async function createIngredientInline(
   formData: FormData,
 ): Promise<ActionResult<IngredientData>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
+  await assertCanWrite();
 
   const name = String(formData.get("name") ?? "").trim();
   const baseUnitRaw = String(formData.get("baseUnit") ?? "G");

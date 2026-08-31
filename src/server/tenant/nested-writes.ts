@@ -9,6 +9,8 @@ export const UNSCOPED_MODELS = new Set([
   "Verification",
   "AllowedEmail",
   "Workspace",
+  "Subscription",
+  "ProcessedWebhookEvent",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 
