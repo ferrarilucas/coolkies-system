@@ -48,6 +48,7 @@ describe("subscribe", () => {
   beforeEach(async () => {
     await resetDb();
     vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
   });
 
   afterEach(() => {
@@ -316,6 +317,7 @@ describe("subscribe com assinatura atribuída manualmente", () => {
   beforeEach(async () => {
     await resetDb();
     vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
   });
 
   afterEach(() => {

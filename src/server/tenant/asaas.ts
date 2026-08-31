@@ -2,7 +2,12 @@ const SANDBOX = "https://api-sandbox.asaas.com/v3";
 const PRODUCTION = "https://api.asaas.com/v3";
 
 function baseUrl(): string {
-  return process.env.ASAAS_ENV === "production" ? PRODUCTION : SANDBOX;
+  const env = process.env.ASAAS_ENV;
+  if (env === "production") return PRODUCTION;
+  if (env === "sandbox") return SANDBOX;
+  throw new Error(
+    `ASAAS_ENV precisa ser "production" ou "sandbox" — valor atual: ${env === undefined ? "ausente" : `"${env}"`}`,
+  );
 }
 
 export function brlFromCents(cents: number): number {
