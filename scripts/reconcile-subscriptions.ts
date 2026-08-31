@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { DIRECT_DATABASE_URL } from "./direct-database-url";
-import { expectedStatusFor } from "./reconcile-status";
-import { getAsaasSubscription } from "../src/server/tenant/asaas";
+import { decideReconcile } from "./reconcile-status";
+import { listAsaasPaymentsOfSubscription } from "../src/server/tenant/asaas";
 
 const db = new PrismaClient({
   datasources: { db: { url: DIRECT_DATABASE_URL } },
@@ -13,29 +13,35 @@ async function main() {
   });
 
   let checked = 0;
-  let corrected = 0;
+  let activated = 0;
+  let reported = 0;
   let failed = 0;
-  let unknown = 0;
+  const now = new Date();
 
   for (const sub of subs) {
     checked += 1;
     try {
-      const remote = await getAsaasSubscription(sub.asaasSubscriptionId as string);
-      const expected = expectedStatusFor(remote.status);
+      const charges = await listAsaasPaymentsOfSubscription(sub.asaasSubscriptionId as string);
+      const decision = decideReconcile({
+        localStatus: sub.status,
+        cycle: sub.cycle,
+        charges,
+        now,
+      });
 
-      if (expected === null) {
-        unknown += 1;
-        console.log(`status remoto desconhecido para ${sub.id}: ${remote.status}`);
+      if (decision.action === "activate") {
+        await db.subscription.update({
+          where: { id: sub.id },
+          data: { status: "ACTIVE", graceUntil: null },
+        });
+        activated += 1;
+        console.log(`ativada ${sub.id}: ${sub.status} -> ACTIVE (${decision.reason})`);
         continue;
       }
 
-      if (sub.status !== expected && sub.status !== "CANCELED") {
-        await db.subscription.update({
-          where: { id: sub.id },
-          data: { status: expected },
-        });
-        corrected += 1;
-        console.log(`corrigido ${sub.id}: ${sub.status} -> ${expected}`);
+      if (decision.action === "report") {
+        reported += 1;
+        console.log(`divergencia em ${sub.id}: ${decision.reason}`);
       }
     } catch (e) {
       failed += 1;
@@ -44,7 +50,7 @@ async function main() {
   }
 
   console.log(
-    `verificadas: ${checked}, corrigidas: ${corrected}, falhas: ${failed}, desconhecidas: ${unknown}`,
+    `verificadas: ${checked}, ativadas: ${activated}, divergencias: ${reported}, falhas: ${failed}`,
   );
 }
 

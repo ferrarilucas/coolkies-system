@@ -64,6 +64,17 @@ export async function createAsaasSubscription(input: {
   });
 }
 
-export async function getAsaasSubscription(id: string): Promise<AsaasSubscription> {
-  return asaasFetch<AsaasSubscription>(`/subscriptions/${id}`);
+export type AsaasPayment = { id: string; status: string; dueDate: string | null };
+
+const PAYMENT_PAGE_LIMIT = 100;
+
+export async function listAsaasPaymentsOfSubscription(
+  subscriptionId: string,
+): Promise<AsaasPayment[]> {
+  const query = new URLSearchParams({
+    subscription: subscriptionId,
+    limit: String(PAYMENT_PAGE_LIMIT),
+  });
+  const body = await asaasFetch<{ data?: AsaasPayment[] }>(`/payments?${query.toString()}`);
+  return body.data ?? [];
 }
