@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 const GRACE_DAYS = 7;
@@ -11,15 +12,48 @@ export type PaymentEvent = {
 
 export type EventOutcome = "applied" | "duplicate" | "unknown";
 
+function isDuplicateEventError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+async function recordEvent(event: PaymentEvent): Promise<boolean> {
+  try {
+    await db.processedWebhookEvent.create({
+      data: { id: event.id, event: event.event },
+    });
+    return true;
+  } catch (error) {
+    if (isDuplicateEventError(error)) return false;
+    throw error;
+  }
+}
+
+async function applyAndRecord(
+  event: PaymentEvent,
+  subscriptionId: string,
+  data: Prisma.SubscriptionUpdateInput,
+): Promise<boolean> {
+  try {
+    await db.$transaction([
+      db.subscription.update({ where: { id: subscriptionId }, data }),
+      db.processedWebhookEvent.create({
+        data: { id: event.id, event: event.event },
+      }),
+    ]);
+    return true;
+  } catch (error) {
+    if (isDuplicateEventError(error)) return false;
+    throw error;
+  }
+}
+
 export async function applyPaymentEvent(event: PaymentEvent): Promise<EventOutcome> {
   const seen = await db.processedWebhookEvent.findUnique({ where: { id: event.id } });
   if (seen) return "duplicate";
 
   if (!event.subscriptionId) {
-    await db.processedWebhookEvent.create({
-      data: { id: event.id, event: event.event },
-    });
-    return "unknown";
+    const recorded = await recordEvent(event);
+    return recorded ? "unknown" : "duplicate";
   }
 
   const sub = await db.subscription.findFirst({
@@ -27,28 +61,19 @@ export async function applyPaymentEvent(event: PaymentEvent): Promise<EventOutco
   });
 
   if (!sub) {
-    await db.processedWebhookEvent.create({
-      data: { id: event.id, event: event.event },
-    });
-    return "unknown";
+    const recorded = await recordEvent(event);
+    return recorded ? "unknown" : "duplicate";
   }
 
   const data = statusFor(event.event, event.dueDate);
 
   if (data) {
-    await db.$transaction([
-      db.subscription.update({ where: { id: sub.id }, data }),
-      db.processedWebhookEvent.create({
-        data: { id: event.id, event: event.event },
-      }),
-    ]);
-    return "applied";
+    const applied = await applyAndRecord(event, sub.id, data);
+    return applied ? "applied" : "duplicate";
   }
 
-  await db.processedWebhookEvent.create({
-    data: { id: event.id, event: event.event },
-  });
-  return "applied";
+  const recorded = await recordEvent(event);
+  return recorded ? "applied" : "duplicate";
 }
 
 function statusFor(event: string, dueDate: string | null) {
