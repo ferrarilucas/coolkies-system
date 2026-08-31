@@ -10,6 +10,7 @@ export const UNSCOPED_MODELS = new Set([
   "AllowedEmail",
   "Workspace",
   "Subscription",
+  "ProcessedWebhookEvent",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 

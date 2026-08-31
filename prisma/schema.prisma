@@ -150,6 +150,14 @@ model Subscription {
   @@map("subscription")
 }
 
+model ProcessedWebhookEvent {
+  id         String   @id
+  event      String
+  receivedAt DateTime @default(now())
+
+  @@map("processed_webhook_event")
+}
+
 model Workspace {
   id        String   @id @default(cuid())
   name      String
