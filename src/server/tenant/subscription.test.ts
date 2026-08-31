@@ -91,6 +91,39 @@ describe("workspaces ativos por plano", () => {
     expect(active.size).toBe(ids.length);
   });
 
+  it("empate de createdAt resolve sempre no mesmo workspace", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-empate", name: "Dona", email: "empate@example.com" },
+    });
+    await testDb.subscription.create({
+      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+    });
+
+    const mesmoInstante = new Date("2026-08-01T12:00:00Z");
+    const ids = ["ws-empate-c", "ws-empate-a", "ws-empate-b"];
+    for (const id of ids) {
+      await testDb.workspace.create({
+        data: { id, name: id, slug: id },
+      });
+      await testDb.member.create({
+        data: {
+          userId: user.id,
+          workspaceId: id,
+          role: "OWNER",
+          createdAt: mesmoInstante,
+        },
+      });
+    }
+
+    const menorId = [...ids].sort()[0];
+
+    for (let i = 0; i < 5; i += 1) {
+      const active = await activeWorkspaceIds(user.id);
+      expect(active.size).toBe(1);
+      expect(active.has(menorId)).toBe(true);
+    }
+  });
+
   it("ser member nao consome cota do proprio plano", async () => {
     const user = await testDb.user.create({
       data: { id: "u-member-nao-consome", name: "Dono", email: "membernaoconsome@example.com" },

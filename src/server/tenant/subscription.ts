@@ -89,7 +89,7 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
     getSubscription(userId),
     db.member.findMany({
       where: { userId, role: "OWNER" },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { workspaceId: "asc" }],
       select: { workspaceId: true },
     }),
   ]);
