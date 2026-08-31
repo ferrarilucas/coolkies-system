@@ -128,12 +128,11 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
     );
   }
 
+  const slug = await uniqueSlug(clean);
+
   const workspace = await db.$transaction(async (tx) => {
     const created = await tx.workspace.create({
-      data: {
-        name: clean,
-        slug: await uniqueSlug(clean),
-      },
+      data: { name: clean, slug },
     });
     await tx.member.create({
       data: { userId, workspaceId: created.id, role: "OWNER" },

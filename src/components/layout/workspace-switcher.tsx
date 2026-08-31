@@ -36,10 +36,12 @@ export function WorkspaceSwitcher({
   workspaces,
   activeId,
   variant = "bar",
+  side,
 }: {
   workspaces: WorkspaceOption[];
   activeId: string;
   variant?: "bar" | "sidebar";
+  side?: "bottom" | "right";
 }) {
   const [dialog, setDialog] = useState<"create" | "join" | null>(null);
   const [pending, startTransition] = useTransition();
@@ -97,7 +99,7 @@ export function WorkspaceSwitcher({
         <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          side={variant === "sidebar" ? "right" : "bottom"}
+          side={side ?? (variant === "sidebar" ? "right" : "bottom")}
           sideOffset={6}
           className="w-[min(20rem,calc(100vw-2rem))]"
         >

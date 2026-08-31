@@ -102,6 +102,7 @@ export default async function MorePage() {
           }))}
           activeId={workspaceId}
           variant="sidebar"
+          side="bottom"
         />
       </div>
 
