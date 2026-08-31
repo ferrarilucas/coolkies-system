@@ -24,6 +24,9 @@ const CYCLE_LABEL: Record<PlanCycle, string> = {
 
 const GENERIC_ERROR = "Não foi possível concluir a contratação agora. Tente novamente em instantes.";
 
+const MANUAL_SUBSCRIPTION_ERROR =
+  "Sua assinatura foi combinada manualmente com a equipe Coolkies e não pode ser alterada por aqui. Fale com a gente em contato@coolkies.com.br para mudar de plano.";
+
 export async function subscribe(formData: FormData): Promise<ActionResult> {
   const plan = String(formData.get("plan") ?? "");
   const rawCycle = String(formData.get("cycle") ?? "MONTHLY");
@@ -48,10 +51,14 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
 
   try {
     const { userId } = await getWorkspaceContext();
+    const existing = await getSubscription(userId);
+
+    if (existing?.source === "MANUAL") {
+      return { ok: false, error: MANUAL_SUBSCRIPTION_ERROR };
+    }
+
     const user = await getBillingUser(userId);
     if (!user) return { ok: false, error: "Usuário não encontrado." };
-
-    const existing = await getSubscription(userId);
 
     if (existing?.asaasSubscriptionId) {
       const samePlanAndCycle = existing.plan === plan && existing.cycle === cycle;

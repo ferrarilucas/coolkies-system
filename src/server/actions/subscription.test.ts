@@ -311,3 +311,46 @@ describe("subscribe", () => {
     expect(result.error).toBe("CPF inválido");
   });
 });
+
+describe("subscribe com assinatura atribuída manualmente", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("recusa a contratação, não chama o Asaas e preserva o plano negociado", async () => {
+    const { user } = await userWithWorkspace("u-sub-manual", "manual@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "unlimited",
+        cycle: "MONTHLY",
+        source: "MANUAL",
+        status: "ACTIVE",
+      },
+    });
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+    formData.set("confirmSwitch", "true");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("manualmente");
+    expect(result.error).toContain("contato@coolkies.com.br");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.plan).toBe("unlimited");
+    expect(sub?.source).toBe("MANUAL");
+    expect(sub?.asaasSubscriptionId).toBeNull();
+  });
+});
