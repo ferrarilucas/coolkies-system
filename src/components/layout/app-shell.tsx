@@ -28,7 +28,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
-  const canManage = active?.role === "OWNER" || active?.role === "ADMIN";
+  const canManageBilling = active?.role === "OWNER";
   const showMobileBar = workspaces.length > 1;
 
   return (
@@ -46,13 +46,13 @@ export function AppShell({
             variant="bar"
           />
         )}
-        <TrialBanner trial={trial} canManage={canManage} />
+        <TrialBanner trial={trial} canManageBilling={canManageBilling} />
         <PlanBanner
           status={planStatus}
           isOverLimit={isOverLimit}
           isReadOnly={isReadOnly}
           workspaceName={active?.name ?? "este workspace"}
-          canManage={canManage}
+          canManageBilling={canManageBilling}
         />
         <MainArea>{children}</MainArea>
       </div>

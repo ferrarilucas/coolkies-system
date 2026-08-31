@@ -10,12 +10,12 @@ function runningLabel(daysLeft: number): string {
 
 export function TrialBanner({
   trial,
-  canManage,
+  canManageBilling,
 }: {
   trial: TrialState | null;
-  canManage: boolean;
+  canManageBilling: boolean;
 }) {
-  if (!trial || !canManage) return null;
+  if (!trial || !canManageBilling) return null;
 
   const expired = trial.kind === "expired";
 
