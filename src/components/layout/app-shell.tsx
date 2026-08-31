@@ -45,7 +45,7 @@ export function AppShell({
             variant="bar"
           />
         )}
-        <TrialBanner daysLeft={trialDaysLeft} />
+        <TrialBanner daysLeft={trialDaysLeft} canManage={canManage} />
         <PlanBanner
           status={planStatus}
           isOverLimit={isOverLimit}

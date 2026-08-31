@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { Clock } from "lucide-react";
 
-export function TrialBanner({ daysLeft }: { daysLeft: number | null }) {
-  if (daysLeft === null) return null;
+export function TrialBanner({
+  daysLeft,
+  canManage,
+}: {
+  daysLeft: number | null;
+  canManage: boolean;
+}) {
+  if (daysLeft === null || !canManage) return null;
 
   const label =
     daysLeft === 0

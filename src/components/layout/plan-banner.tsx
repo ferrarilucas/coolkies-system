@@ -21,8 +21,9 @@ export function PlanBanner({
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-medium text-warning">
-              Este workspace está além do limite do seu plano. Os mais antigos
-              continuam ativos — faça upgrade para liberar este.
+              {canManage
+                ? "Este workspace está além do limite do seu plano. Os mais antigos continuam ativos — faça upgrade para liberar este."
+                : "Este workspace está além do limite do plano de quem o criou. Os mais antigos continuam ativos — só quem administra a conta pode fazer o upgrade que libera este."}
             </p>
             {canManage && (
               <Link
@@ -53,7 +54,8 @@ export function PlanBanner({
             </p>
             <p className="text-muted-foreground">
               Você continua vendo tudo de {workspaceName}, mas não é possível
-              registrar vendas ou alterar dados até regularizar.
+              registrar vendas ou alterar dados até que{" "}
+              {canManage ? "você regularize" : "quem administra a conta regularize"}.
             </p>
             {canManage && (
               <Link
@@ -78,8 +80,8 @@ export function PlanBanner({
             <p className="font-medium text-warning">Pagamento pendente.</p>
             <p className="text-muted-foreground">
               {workspaceName} continua com o cadastro liberado durante a
-              carência, mas regularize antes que ela termine para não perder o
-              acesso de escrita.
+              carência, mas o pagamento precisa ser regularizado antes que ela
+              termine para não perder o acesso de escrita.
             </p>
             {canManage && (
               <Link
