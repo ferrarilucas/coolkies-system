@@ -23,8 +23,10 @@ export default async function PlanPage() {
       />
       <PlanPanel
         currentPlan={sub?.plan ?? null}
+        currentCycle={sub?.cycle ?? null}
         status={sub?.status ?? null}
         source={sub?.source ?? null}
+        hasAsaasSubscriptionId={Boolean(sub?.asaasSubscriptionId)}
         ownedCount={owned}
         activeCount={active.size}
       />

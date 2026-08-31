@@ -11,6 +11,8 @@ export function brlFromCents(cents: number): number {
 
 type AsaasError = { errors?: Array<{ description?: string }> };
 
+export class AsaasApiError extends Error {}
+
 export async function asaasFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const key = process.env.ASAAS_API_KEY;
   if (!key) throw new Error("ASAAS_API_KEY não configurada");
@@ -28,7 +30,7 @@ export async function asaasFetch<T>(path: string, init: RequestInit = {}): Promi
 
   if (!response.ok) {
     const message = body.errors?.[0]?.description ?? `Asaas respondeu ${response.status}`;
-    throw new Error(message);
+    throw new AsaasApiError(message);
   }
 
   return body;

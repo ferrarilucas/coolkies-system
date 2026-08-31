@@ -34,6 +34,11 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELED: "Cancelado",
 };
 
+const CYCLE_LABEL: Record<PlanCycle, string> = {
+  MONTHLY: "mensal",
+  YEARLY: "anual",
+};
+
 const CONTACT_EMAIL = "contato@coolkies.com.br";
 
 function applyCpfCnpjMask(raw: string): string {
@@ -57,24 +62,40 @@ function planThatCovers(count: number) {
 
 export function PlanPanel({
   currentPlan,
+  currentCycle,
   status,
   source,
+  hasAsaasSubscriptionId,
   ownedCount,
   activeCount,
 }: {
   currentPlan: string | null;
+  currentCycle: PlanCycle | null;
   status: string | null;
   source: string | null;
+  hasAsaasSubscriptionId: boolean;
   ownedCount: number;
   activeCount: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+  const [switchConfirmed, setSwitchConfirmed] = useState(false);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
+  const isSwitchingPlan = hasAsaasSubscriptionId && checkoutPlan !== null && checkoutPlan !== currentPlan;
+
+  function openCheckout(planId: string) {
+    setSwitchConfirmed(false);
+    setCheckoutPlan(planId);
+  }
+
+  function closeCheckout() {
+    setCheckoutPlan(null);
+    setSwitchConfirmed(false);
+  }
 
   function onSubscribe(formData: FormData) {
     startTransition(async () => {
@@ -86,7 +107,7 @@ export function PlanPanel({
       toast.success(
         "Assinatura criada. Confirme o pagamento pelo Pix para ativar o plano.",
       );
-      setCheckoutPlan(null);
+      closeCheckout();
       router.refresh();
     });
   }
@@ -181,12 +202,16 @@ export function PlanPanel({
                     </CardContent>
                   )}
                   <CardFooter>
-                    {priceCents === null ? (
+                    {isCurrent ? (
+                      <Button className="w-full" variant="outline" disabled>
+                        Plano atual
+                      </Button>
+                    ) : priceCents === null ? (
                       <Button asChild variant="outline" className="w-full">
                         <a href={`mailto:${CONTACT_EMAIL}`}>Fale com a gente</a>
                       </Button>
                     ) : (
-                      <Button className="w-full" onClick={() => setCheckoutPlan(plan.id)}>
+                      <Button className="w-full" onClick={() => openCheckout(plan.id)}>
                         Contratar
                       </Button>
                     )}
@@ -198,10 +223,7 @@ export function PlanPanel({
         </div>
       )}
 
-      <Dialog
-        open={checkoutPlan !== null}
-        onOpenChange={(open) => !open && setCheckoutPlan(null)}
-      >
+      <Dialog open={checkoutPlan !== null} onOpenChange={(open) => !open && closeCheckout()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -212,6 +234,34 @@ export function PlanPanel({
           <form action={onSubscribe} className="space-y-4">
             <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
             <input type="hidden" name="cycle" value={cycle} />
+            <input type="hidden" name="confirmSwitch" value={switchConfirmed ? "true" : "false"} />
+
+            {isSwitchingPlan && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                <div className="space-y-2 text-warning">
+                  <p>
+                    Você já tem uma assinatura{" "}
+                    {currentPlan ? planLabel(currentPlan) : ""}
+                    {currentCycle ? ` (${CYCLE_LABEL[currentCycle]})` : ""} ativa no
+                    Asaas. Ela <strong>continua sendo cobrada</strong> até ser
+                    cancelada manualmente pela nossa equipe — trocar de plano por
+                    aqui não cancela a anterior.
+                  </p>
+                  <label className="flex items-start gap-2 font-normal text-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={switchConfirmed}
+                      onChange={(e) => setSwitchConfirmed(e.target.checked)}
+                    />
+                    Entendo e quero contratar{" "}
+                    {checkoutPlan ? planLabel(checkoutPlan) : ""} ({CYCLE_LABEL[cycle]})
+                    mesmo assim.
+                  </label>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
@@ -230,7 +280,11 @@ export function PlanPanel({
               </p>
             </div>
 
-            <Button type="submit" disabled={pending} className="w-full">
+            <Button
+              type="submit"
+              disabled={pending || (isSwitchingPlan && !switchConfirmed)}
+              className="w-full"
+            >
               {pending ? "Contratando..." : "Confirmar e gerar cobrança Pix"}
             </Button>
           </form>

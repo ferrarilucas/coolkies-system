@@ -125,4 +125,161 @@ describe("subscribe", () => {
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
   });
+
+  it("recusa plano que não existe em PLANS", async () => {
+    await userWithWorkspace("u-sub-plan-invalido", "planinvalido@example.com");
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "yolo");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Plano inválido.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa ciclo que não é MONTHLY nem YEARLY", async () => {
+    await userWithWorkspace("u-sub-cycle-invalido", "cicloinvalido@example.com");
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cycle", "WEEKLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Ciclo de cobrança inválido.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa reassinar o mesmo plano e ciclo sem chamar o Asaas de novo", async () => {
+    const { user } = await userWithWorkspace("u-sub-dup", "dup@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "TRIALING",
+        asaasCustomerId: "cus_existing",
+        asaasSubscriptionId: "sub_existing",
+      },
+    });
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("já tem uma assinatura ativa");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.asaasSubscriptionId).toBe("sub_existing");
+  });
+
+  it("exige confirmação explícita para trocar de plano com assinatura já ativa", async () => {
+    const { user } = await userWithWorkspace("u-sub-switch-noconfirm", "switch1@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "ACTIVE",
+        asaasCustomerId: "cus_existing",
+        asaasSubscriptionId: "sub_existing",
+      },
+    });
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "team");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Confirme a troca");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.asaasSubscriptionId).toBe("sub_existing");
+    expect(sub?.plan).toBe("solo");
+  });
+
+  it("troca de plano prossegue quando a troca é confirmada, mas não cancela a antiga no gateway", async () => {
+    const { user } = await userWithWorkspace("u-sub-switch-confirm", "switch2@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "ACTIVE",
+        asaasCustomerId: "cus_existing",
+        asaasSubscriptionId: "sub_existing",
+      },
+    });
+    stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "team");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+    formData.set("confirmSwitch", "true");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
+    expect(sub?.plan).toBe("team");
+  });
+
+  it("erro de configuração do Asaas não vaza para o cliente e é logado no servidor", async () => {
+    await userWithWorkspace("u-sub-infra", "infra@example.com");
+    vi.stubEnv("ASAAS_API_KEY", "");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain("ASAAS_API_KEY");
+    expect(result.error).toBe(
+      "Não foi possível concluir a contratação agora. Tente novamente em instantes.",
+    );
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("mensagem de validação do Asaas chega ao usuário", async () => {
+    await userWithWorkspace("u-sub-asaas-validation", "validation@example.com");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ errors: [{ description: "CPF inválido" }] }), {
+          status: 400,
+        }),
+      ),
+    );
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("CPF inválido");
+  });
 });

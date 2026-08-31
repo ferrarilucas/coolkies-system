@@ -32,6 +32,14 @@ function findPlan(plan: string): PlanDefinition {
   return PLANS.find((p) => p.id === plan) ?? PLANS[0];
 }
 
+export function isKnownPlan(plan: string): boolean {
+  return PLANS.some((p) => p.id === plan);
+}
+
+export function isKnownCycle(cycle: string): cycle is PlanCycle {
+  return cycle === "MONTHLY" || cycle === "YEARLY";
+}
+
 export function planLimit(plan: string): number {
   return findPlan(plan).maxWorkspaces;
 }

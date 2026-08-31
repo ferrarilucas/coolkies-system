@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Subscription, SubscriptionStatus } from "@prisma/client";
+import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
 
@@ -22,6 +22,7 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
 export async function recordAsaasSubscription(input: {
   userId: string;
   plan: string;
+  cycle: SubscriptionCycle;
   asaasCustomerId: string;
   asaasSubscriptionId: string;
 }): Promise<void> {
@@ -30,6 +31,7 @@ export async function recordAsaasSubscription(input: {
     create: {
       userId: input.userId,
       plan: input.plan,
+      cycle: input.cycle,
       source: "ASAAS",
       status: "TRIALING",
       asaasCustomerId: input.asaasCustomerId,
@@ -37,6 +39,7 @@ export async function recordAsaasSubscription(input: {
     },
     update: {
       plan: input.plan,
+      cycle: input.cycle,
       source: "ASAAS",
       asaasCustomerId: input.asaasCustomerId,
       asaasSubscriptionId: input.asaasSubscriptionId,

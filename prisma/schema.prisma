@@ -126,6 +126,11 @@ enum SubscriptionSource {
   MANUAL
 }
 
+enum SubscriptionCycle {
+  MONTHLY
+  YEARLY
+}
+
 model Subscription {
   id     String @id @default(cuid())
   userId String @unique
@@ -134,6 +139,7 @@ model Subscription {
   plan   String             @default("solo")
   status SubscriptionStatus @default(TRIALING)
   source SubscriptionSource @default(ASAAS)
+  cycle  SubscriptionCycle  @default(MONTHLY)
 
   asaasCustomerId     String?
   asaasSubscriptionId String?

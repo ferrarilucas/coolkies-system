@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { planPriceCents, type PlanCycle } from "@/lib/plans";
+import { isKnownCycle, isKnownPlan, planLabel, planPriceCents, type PlanCycle } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import {
   getBillingUser,
@@ -9,6 +9,7 @@ import {
   recordAsaasSubscription,
 } from "@/server/tenant/subscription";
 import {
+  AsaasApiError,
   brlFromCents,
   createAsaasCustomer,
   createAsaasSubscription,
@@ -16,10 +17,26 @@ import {
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
+const CYCLE_LABEL: Record<PlanCycle, string> = {
+  MONTHLY: "mensal",
+  YEARLY: "anual",
+};
+
+const GENERIC_ERROR = "Não foi possível concluir a contratação agora. Tente novamente em instantes.";
+
 export async function subscribe(formData: FormData): Promise<ActionResult> {
-  const plan = String(formData.get("plan") ?? "solo");
-  const cycle = String(formData.get("cycle") ?? "MONTHLY") as PlanCycle;
+  const plan = String(formData.get("plan") ?? "");
+  const rawCycle = String(formData.get("cycle") ?? "MONTHLY");
   const cpfCnpj = String(formData.get("cpfCnpj") ?? "").replace(/\D/g, "");
+  const confirmSwitch = formData.get("confirmSwitch") === "true";
+
+  if (!isKnownPlan(plan)) {
+    return { ok: false, error: "Plano inválido." };
+  }
+  if (!isKnownCycle(rawCycle)) {
+    return { ok: false, error: "Ciclo de cobrança inválido." };
+  }
+  const cycle: PlanCycle = rawCycle;
 
   const priceCents = planPriceCents(plan, cycle);
   if (priceCents === null) {
@@ -35,6 +52,22 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
     if (!user) return { ok: false, error: "Usuário não encontrado." };
 
     const existing = await getSubscription(userId);
+
+    if (existing?.asaasSubscriptionId) {
+      const samePlanAndCycle = existing.plan === plan && existing.cycle === cycle;
+      if (samePlanAndCycle) {
+        return {
+          ok: false,
+          error: `Você já tem uma assinatura ativa no plano ${planLabel(plan)} (${CYCLE_LABEL[cycle]}).`,
+        };
+      }
+      if (!confirmSwitch) {
+        return {
+          ok: false,
+          error: `Você já tem uma assinatura no plano ${planLabel(existing.plan)} (${CYCLE_LABEL[existing.cycle]}). Confirme a troca para o plano ${planLabel(plan)} (${CYCLE_LABEL[cycle]}) para continuar.`,
+        };
+      }
+    }
 
     const customerId =
       existing?.asaasCustomerId ??
@@ -54,11 +87,16 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
     await recordAsaasSubscription({
       userId,
       plan,
+      cycle,
       asaasCustomerId: customerId,
       asaasSubscriptionId: remote.id,
     });
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Falha na contratação." };
+    if (e instanceof AsaasApiError) {
+      return { ok: false, error: e.message };
+    }
+    console.error("subscribe: falha ao contratar assinatura", e);
+    return { ok: false, error: GENERIC_ERROR };
   }
 
   revalidatePath("/", "layout");
