@@ -14,3 +14,23 @@ export function daysUntil(date: Date | null, now: Date = new Date()): number | n
   if (diff <= 0) return 0;
   return diff / DAY_MS;
 }
+
+export type TrialState = { kind: "running"; daysLeft: number } | { kind: "expired" };
+
+export function trialState(
+  status: string,
+  trialEndsAt: Date | null,
+  now: Date = new Date(),
+): TrialState | null {
+  if (status !== "TRIALING" || trialEndsAt === null) return null;
+  if (trialEndsAt.getTime() <= now.getTime()) return { kind: "expired" };
+  return { kind: "running", daysLeft: daysUntil(trialEndsAt, now) ?? 0 };
+}
+
+export function isTrialExpired(
+  status: string,
+  trialEndsAt: Date | null,
+  now: Date = new Date(),
+): boolean {
+  return trialState(status, trialEndsAt, now)?.kind === "expired";
+}

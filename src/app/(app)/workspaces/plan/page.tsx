@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PlanPanel } from "@/components/workspaces/plan-panel";
+import { isTrialExpired } from "@/lib/trial";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import {
   activeWorkspaceIds,
@@ -25,6 +26,7 @@ export default async function PlanPage() {
         currentPlan={sub?.plan ?? null}
         currentCycle={sub?.cycle ?? null}
         status={sub?.status ?? null}
+        trialExpired={isTrialExpired(sub?.status ?? "NONE", sub?.trialEndsAt ?? null)}
         source={sub?.source ?? null}
         hasAsaasSubscriptionId={Boolean(sub?.asaasSubscriptionId)}
         ownedCount={owned}

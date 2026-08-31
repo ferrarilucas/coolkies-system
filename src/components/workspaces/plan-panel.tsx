@@ -64,6 +64,7 @@ export function PlanPanel({
   currentPlan,
   currentCycle,
   status,
+  trialExpired,
   source,
   hasAsaasSubscriptionId,
   ownedCount,
@@ -72,6 +73,7 @@ export function PlanPanel({
   currentPlan: string | null;
   currentCycle: PlanCycle | null;
   status: string | null;
+  trialExpired: boolean;
   source: string | null;
   hasAsaasSubscriptionId: boolean;
   ownedCount: number;
@@ -126,12 +128,12 @@ export function PlanPanel({
                 variant={
                   status === "ACTIVE"
                     ? "success"
-                    : status === "PAST_DUE" || status === "CANCELED"
+                    : status === "PAST_DUE" || status === "CANCELED" || trialExpired
                       ? "warning"
                       : "secondary"
                 }
               >
-                {STATUS_LABEL[status] ?? status}
+                {trialExpired ? "Teste encerrado" : (STATUS_LABEL[status] ?? status)}
               </Badge>
             )}
           </CardTitle>
@@ -139,6 +141,16 @@ export function PlanPanel({
             {currentPlan ? planLabel(currentPlan) : "Nenhuma assinatura ativa."}
           </CardDescription>
         </CardHeader>
+        {trialExpired && (
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Seu teste de 14 dias terminou e o cadastro está em modo somente
+              leitura — dá para ver tudo, mas não registrar vendas nem alterar
+              dados. Assinar um plano aqui embaixo destrava a escrita assim que o
+              pagamento for confirmado.
+            </p>
+          </CardContent>
+        )}
       </Card>
 
       {overLimit > 0 && suggestedPlan && (

@@ -6,6 +6,7 @@ import { PlanBanner } from "./plan-banner";
 import { TrialBanner } from "./trial-banner";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import type { SessionUser } from "@/lib/session-user";
+import type { TrialState } from "@/lib/trial";
 
 export function AppShell({
   user,
@@ -14,7 +15,7 @@ export function AppShell({
   planStatus,
   isOverLimit,
   isReadOnly,
-  trialDaysLeft,
+  trial,
   children,
 }: {
   user: SessionUser;
@@ -23,7 +24,7 @@ export function AppShell({
   planStatus: string;
   isOverLimit: boolean;
   isReadOnly: boolean;
-  trialDaysLeft: number | null;
+  trial: TrialState | null;
   children: ReactNode;
 }) {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -45,7 +46,7 @@ export function AppShell({
             variant="bar"
           />
         )}
-        <TrialBanner daysLeft={trialDaysLeft} canManage={canManage} />
+        <TrialBanner trial={trial} canManage={canManage} />
         <PlanBanner
           status={planStatus}
           isOverLimit={isOverLimit}
