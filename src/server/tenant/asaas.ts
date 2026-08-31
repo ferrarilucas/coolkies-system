@@ -58,7 +58,7 @@ export async function createAsaasSubscription(input: {
 }): Promise<AsaasSubscription> {
   return asaasFetch<AsaasSubscription>("/subscriptions", {
     method: "POST",
-    body: JSON.stringify({ ...input, paymentCreationMode: "SUBSCRIPTION" }),
+    body: JSON.stringify(input),
   });
 }
 
