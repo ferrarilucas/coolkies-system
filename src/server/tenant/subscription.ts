@@ -9,6 +9,41 @@ export async function getSubscription(userId: string): Promise<Subscription | nu
   return db.subscription.findUnique({ where: { userId } });
 }
 
+export type BillingUser = { name: string; email: string };
+
+export async function getBillingUser(userId: string): Promise<BillingUser | null> {
+  return db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+}
+
+export async function countOwnedWorkspaces(userId: string): Promise<number> {
+  return db.member.count({ where: { userId, role: "OWNER" } });
+}
+
+export async function recordAsaasSubscription(input: {
+  userId: string;
+  plan: string;
+  asaasCustomerId: string;
+  asaasSubscriptionId: string;
+}): Promise<void> {
+  await db.subscription.upsert({
+    where: { userId: input.userId },
+    create: {
+      userId: input.userId,
+      plan: input.plan,
+      source: "ASAAS",
+      status: "TRIALING",
+      asaasCustomerId: input.asaasCustomerId,
+      asaasSubscriptionId: input.asaasSubscriptionId,
+    },
+    update: {
+      plan: input.plan,
+      source: "ASAAS",
+      asaasCustomerId: input.asaasCustomerId,
+      asaasSubscriptionId: input.asaasSubscriptionId,
+    },
+  });
+}
+
 export async function ensureTrialSubscription(userId: string): Promise<void> {
   const existing = await db.subscription.findUnique({ where: { userId } });
   if (existing) return;
