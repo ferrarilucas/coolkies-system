@@ -1,12 +1,16 @@
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { toZonedTime } from "date-fns-tz";
 
-function startOfUtcDay(date: Date): number {
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TIME_ZONE = "America/Sao_Paulo";
+
+function startOfDayInTimeZone(date: Date): number {
+  const zoned = toZonedTime(date, TIME_ZONE);
+  return Date.UTC(zoned.getFullYear(), zoned.getMonth(), zoned.getDate());
 }
 
 export function daysUntil(date: Date | null, now: Date = new Date()): number | null {
   if (!date) return null;
-  const diff = startOfUtcDay(date) - startOfUtcDay(now);
+  const diff = startOfDayInTimeZone(date) - startOfDayInTimeZone(now);
   if (diff <= 0) return 0;
-  return Math.round(diff / DAY_MS);
+  return diff / DAY_MS;
 }

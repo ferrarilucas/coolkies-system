@@ -24,4 +24,10 @@ describe("contagem de dias do trial", () => {
   it("sem data devolve null", () => {
     expect(daysUntil(null, now)).toBeNull();
   });
+
+  it("compara os dias no fuso de Brasilia, nao em UTC", () => {
+    const nightInBrasilia = new Date("2026-09-02T00:30:00Z");
+    const nextNightInBrasilia = new Date("2026-09-02T22:00:00Z");
+    expect(daysUntil(nextNightInBrasilia, nightInBrasilia)).toBe(1);
+  });
 });
