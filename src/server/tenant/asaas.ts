@@ -20,6 +20,12 @@ export class AsaasApiError extends Error {}
 
 export async function asaasFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const key = process.env.ASAAS_API_KEY;
+  console.error(
+    "DIAGNOSTICO TEMPORARIO asaasFetch: length=",
+    key?.length,
+    "inicio=",
+    JSON.stringify(key?.slice(0, 4)),
+  );
   if (!key) throw new Error("ASAAS_API_KEY não configurada");
 
   const response = await fetch(`${baseUrl()}${path}`, {
