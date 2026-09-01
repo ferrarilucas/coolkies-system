@@ -7,6 +7,7 @@ import {
   getBillingUser,
   getSubscription,
   recordAsaasSubscription,
+  resolveInvoiceUrl,
 } from "@/server/tenant/subscription";
 import {
   AsaasApiError,
@@ -24,10 +25,14 @@ const CYCLE_LABEL: Record<PlanCycle, string> = {
 
 const GENERIC_ERROR = "Não foi possível concluir a contratação agora. Tente novamente em instantes.";
 
+const CONTACT_EMAIL = "contato@coolkies.com.br";
+
 const MANUAL_SUBSCRIPTION_ERROR =
   "Sua assinatura foi combinada manualmente com a equipe Coolkies e não pode ser alterada por aqui. Fale com a gente em contato@coolkies.com.br para mudar de plano.";
 
-export async function subscribe(formData: FormData): Promise<ActionResult> {
+export type SubscribeResult = { invoiceUrl: string | null };
+
+export async function subscribe(formData: FormData): Promise<ActionResult<SubscribeResult>> {
   const plan = String(formData.get("plan") ?? "");
   const rawCycle = String(formData.get("cycle") ?? "MONTHLY");
   const cpfCnpj = String(formData.get("cpfCnpj") ?? "").replace(/\D/g, "");
@@ -84,7 +89,7 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
 
     const remote = await createAsaasSubscription({
       customer: customerId,
-      billingType: "PIX",
+      billingType: "UNDEFINED",
       value,
       nextDueDate: new Date().toISOString().slice(0, 10),
       cycle,
@@ -98,6 +103,11 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
       asaasCustomerId: customerId,
       asaasSubscriptionId: remote.id,
     });
+
+    const invoiceUrl = await resolveInvoiceUrl(remote.id);
+
+    revalidatePath("/", "layout");
+    return { ok: true, data: { invoiceUrl } };
   } catch (e) {
     if (e instanceof AsaasApiError) {
       return { ok: false, error: e.message };
@@ -105,7 +115,31 @@ export async function subscribe(formData: FormData): Promise<ActionResult> {
     console.error("subscribe: falha ao contratar assinatura", e);
     return { ok: false, error: GENERIC_ERROR };
   }
+}
 
-  revalidatePath("/", "layout");
-  return { ok: true };
+export async function resumeCheckout(): Promise<ActionResult<SubscribeResult>> {
+  try {
+    const { userId } = await getWorkspaceContext();
+    const existing = await getSubscription(userId);
+
+    if (!existing?.asaasSubscriptionId) {
+      return { ok: false, error: "Nenhuma assinatura pendente de pagamento." };
+    }
+
+    const invoiceUrl = await resolveInvoiceUrl(existing.asaasSubscriptionId);
+    if (!invoiceUrl) {
+      return {
+        ok: false,
+        error: `Não encontramos uma cobrança pendente para essa assinatura. Fale com a gente em ${CONTACT_EMAIL}.`,
+      };
+    }
+
+    return { ok: true, data: { invoiceUrl } };
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      return { ok: false, error: e.message };
+    }
+    console.error("resumeCheckout: falha ao buscar cobrança pendente", e);
+    return { ok: false, error: GENERIC_ERROR };
+  }
 }

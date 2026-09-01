@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
+import { listAsaasPaymentsOfSubscription, type AsaasPayment } from "./asaas";
 
 const TRIAL_DAYS = 14;
 
@@ -45,6 +46,26 @@ export async function recordAsaasSubscription(input: {
       asaasSubscriptionId: input.asaasSubscriptionId,
     },
   });
+}
+
+const OPEN_PAYMENT_STATUSES = new Set(["PENDING", "OVERDUE"]);
+const INVOICE_RETRY_DELAY_MS = 1500;
+
+function pickOpenInvoiceUrl(payments: AsaasPayment[]): string | null {
+  const open = payments
+    .filter((p) => OPEN_PAYMENT_STATUSES.has(p.status) && p.invoiceUrl)
+    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
+  return open[0]?.invoiceUrl ?? null;
+}
+
+export async function resolveInvoiceUrl(asaasSubscriptionId: string): Promise<string | null> {
+  const first = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
+  const url = pickOpenInvoiceUrl(first);
+  if (url) return url;
+
+  await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_DELAY_MS));
+  const retry = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
+  return pickOpenInvoiceUrl(retry);
 }
 
 export async function ensureTrialSubscription(userId: string): Promise<void> {

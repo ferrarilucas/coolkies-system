@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { subscribe } from "@/server/actions/subscription";
+import { resumeCheckout, subscribe } from "@/server/actions/subscription";
 
 const STATUS_LABEL: Record<string, string> = {
   TRIALING: "Em teste",
@@ -83,6 +83,7 @@ export function PlanPanel({
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
   const [switchConfirmed, setSwitchConfirmed] = useState(false);
+  const [awaitingInvoice, setAwaitingInvoice] = useState(false);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
@@ -100,6 +101,7 @@ export function PlanPanel({
   function closeCheckout() {
     setCheckoutPlan(null);
     setSwitchConfirmed(false);
+    setAwaitingInvoice(false);
   }
 
   function onSubscribe(formData: FormData) {
@@ -109,11 +111,25 @@ export function PlanPanel({
         toast.error(result.error ?? "Não foi possível contratar o plano.");
         return;
       }
-      toast.success(
-        "Assinatura criada. Confirme o pagamento pelo Pix para ativar o plano.",
-      );
-      closeCheckout();
       router.refresh();
+      if (result.data?.invoiceUrl) {
+        window.location.href = result.data.invoiceUrl;
+        return;
+      }
+      setAwaitingInvoice(true);
+    });
+  }
+
+  function onResumeCheckout() {
+    startTransition(async () => {
+      const result = await resumeCheckout();
+      if (!result.ok) {
+        toast.error(result.error ?? "Não foi possível abrir o pagamento.");
+        return;
+      }
+      if (result.data?.invoiceUrl) {
+        window.location.href = result.data.invoiceUrl;
+      }
     });
   }
 
@@ -213,15 +229,25 @@ export function PlanPanel({
                       <p className="text-xs text-muted-foreground">
                         {cycle === "YEARLY"
                           ? `Total de ${formatBRL(priceCents * 12)} por ano, cobrado à vista.`
-                          : "Cobrado todo mês via Pix."}
+                          : "Cobrado todo mês."}
                       </p>
                     </CardContent>
                   )}
                   <CardFooter>
                     {isCurrent ? (
-                      <Button className="w-full" variant="outline" disabled>
-                        Plano atual
-                      </Button>
+                      status === "ACTIVE" ? (
+                        <Button className="w-full" variant="outline" disabled>
+                          Plano atual
+                        </Button>
+                      ) : (
+                        <Button
+                          className="w-full"
+                          onClick={onResumeCheckout}
+                          disabled={pending}
+                        >
+                          {pending ? "Abrindo..." : "Concluir pagamento"}
+                        </Button>
+                      )
                     ) : priceCents === null ? (
                       <Button asChild variant="outline" className="w-full">
                         <a href={`mailto:${CONTACT_EMAIL}`}>Fale com a gente</a>
@@ -247,7 +273,19 @@ export function PlanPanel({
             </DialogTitle>
           </DialogHeader>
 
-          <form action={onSubscribe} className="space-y-4">
+          {awaitingInvoice ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sua assinatura foi criada, mas ainda não conseguimos abrir a
+                página de pagamento. Isso costuma ser só um instante — tente de
+                novo.
+              </p>
+              <Button className="w-full" onClick={onResumeCheckout} disabled={pending}>
+                {pending ? "Abrindo..." : "Tentar novamente"}
+              </Button>
+            </div>
+          ) : (
+            <form action={onSubscribe} className="space-y-4">
             <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
             <input type="hidden" name="cycle" value={cycle} />
             <input type="hidden" name="confirmSwitch" value={switchConfirmed ? "true" : "false"} />
@@ -292,7 +330,8 @@ export function PlanPanel({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Usado para emitir a cobrança Pix no Asaas.
+                Usado para identificar você no Asaas. Na próxima tela você
+                escolhe entre Pix, boleto ou cartão.
               </p>
             </div>
 
@@ -301,9 +340,10 @@ export function PlanPanel({
               disabled={pending || (isSwitchingPlan && !switchConfirmed)}
               className="w-full"
             >
-              {pending ? "Contratando..." : "Confirmar e gerar cobrança Pix"}
+              {pending ? "Continuando..." : "Continuar para pagamento"}
             </Button>
-          </form>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

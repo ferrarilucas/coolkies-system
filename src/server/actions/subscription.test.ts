@@ -9,7 +9,7 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getSession: async () => sessionResult } },
 }));
 
-const { subscribe } = await import("./subscription");
+const { subscribe, resumeCheckout } = await import("./subscription");
 
 async function userWithWorkspace(id: string, email: string) {
   const user = await testDb.user.create({ data: { id, name: "Dona", email } });
@@ -26,10 +26,22 @@ async function userWithWorkspace(id: string, email: string) {
   return { user, ws };
 }
 
+const OPEN_INVOICE_URL = "https://asaas.test/i/aberta";
+
 function stubAsaasFetch() {
   const fetchMock = vi.fn().mockImplementation(async (url: string) => {
     if (url.includes("/customers")) {
       return new Response(JSON.stringify({ id: "cus_123" }), { status: 200 });
+    }
+    if (url.includes("/payments")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            { id: "pay_1", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: OPEN_INVOICE_URL },
+          ],
+        }),
+        { status: 200 },
+      );
     }
     return new Response(
       JSON.stringify({
@@ -67,12 +79,30 @@ describe("subscribe", () => {
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(true);
+    expect(result.data?.invoiceUrl).toBe(OPEN_INVOICE_URL);
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
     expect(sub?.asaasCustomerId).toBe("cus_123");
     expect(sub?.status).toBe("TRIALING");
     expect(sub?.source).toBe("ASAAS");
+  });
+
+  it("deixa o pagador escolher a forma de pagamento no Asaas em vez de forçar Pix", async () => {
+    await userWithWorkspace("u-sub-billing-type", "billingtype@example.com");
+    const fetchMock = stubAsaasFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "solo");
+    formData.set("cpfCnpj", "12345678909");
+
+    await subscribe(formData);
+
+    const subscriptionCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/subscriptions"),
+    );
+    const body = JSON.parse(subscriptionCall?.[1]?.body as string);
+    expect(body.billingType).toBe("UNDEFINED");
   });
 
   it("usuário em trial, sem asaasSubscriptionId, consegue contratar o mesmo plano do trial", async () => {
@@ -310,6 +340,77 @@ describe("subscribe", () => {
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
     expect(result.error).toBe("CPF inválido");
+  });
+});
+
+describe("resumeCheckout", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("recusa quando não existe assinatura pendente no gateway", async () => {
+    await userWithWorkspace("u-resume-none", "resumenone@example.com");
+
+    const result = await resumeCheckout();
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Nenhuma assinatura pendente");
+  });
+
+  it("busca a cobrança em aberto da assinatura existente e devolve o link", async () => {
+    const { user } = await userWithWorkspace("u-resume-ok", "resumeok@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "TRIALING",
+        asaasCustomerId: "cus_existing",
+        asaasSubscriptionId: "sub_existing",
+      },
+    });
+    stubAsaasFetch();
+
+    const result = await resumeCheckout();
+    expect(result.ok).toBe(true);
+    expect(result.data?.invoiceUrl).toBe(OPEN_INVOICE_URL);
+  });
+
+  it("avisa quando não encontra cobrança em aberto mesmo depois da segunda tentativa", async () => {
+    const { user } = await userWithWorkspace("u-resume-empty", "resumeempty@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "solo",
+        cycle: "MONTHLY",
+        source: "ASAAS",
+        status: "TRIALING",
+        asaasCustomerId: "cus_existing",
+        asaasSubscriptionId: "sub_existing",
+      },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      ),
+    );
+
+    const promise = resumeCheckout();
+    await vi.advanceTimersByTimeAsync(1500);
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("contato@coolkies.com.br");
   });
 });
 

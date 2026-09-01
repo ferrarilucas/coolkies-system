@@ -57,7 +57,7 @@ export async function createAsaasCustomer(input: {
 
 export async function createAsaasSubscription(input: {
   customer: string;
-  billingType: "PIX" | "CREDIT_CARD" | "BOLETO";
+  billingType: "UNDEFINED" | "PIX" | "CREDIT_CARD" | "BOLETO";
   value: number;
   nextDueDate: string;
   cycle: "MONTHLY" | "YEARLY";
@@ -69,7 +69,12 @@ export async function createAsaasSubscription(input: {
   });
 }
 
-export type AsaasPayment = { id: string; status: string; dueDate: string | null };
+export type AsaasPayment = {
+  id: string;
+  status: string;
+  dueDate: string | null;
+  invoiceUrl: string | null;
+};
 
 const PAYMENT_PAGE_LIMIT = 100;
 

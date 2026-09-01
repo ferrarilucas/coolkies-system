@@ -1,11 +1,84 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDb, testDb } from "@/test/db";
 import {
   activeWorkspaceIds,
   canWriteInWorkspace,
   ensureTrialSubscription,
   isSubscriptionUsable,
+  resolveInvoiceUrl,
 } from "./subscription";
+
+function stubPaymentsResponse(...payloads: unknown[]) {
+  const fetchMock = vi.fn();
+  for (const payload of payloads) {
+    fetchMock.mockImplementationOnce(async () =>
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+  }
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("resolveInvoiceUrl", () => {
+  beforeEach(() => {
+    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("prefere a cobrança pendente em aberto e ignora a já paga", async () => {
+    stubPaymentsResponse({
+      data: [
+        { id: "pay_old", status: "RECEIVED", dueDate: "2026-08-01", invoiceUrl: "https://asaas.test/i/old" },
+        { id: "pay_open", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: "https://asaas.test/i/open" },
+      ],
+    });
+
+    const url = await resolveInvoiceUrl("sub_1");
+    expect(url).toBe("https://asaas.test/i/open");
+  });
+
+  it("aceita cobrança OVERDUE como aberta", async () => {
+    stubPaymentsResponse({
+      data: [{ id: "pay_over", status: "OVERDUE", dueDate: "2026-08-01", invoiceUrl: "https://asaas.test/i/over" }],
+    });
+
+    const url = await resolveInvoiceUrl("sub_1");
+    expect(url).toBe("https://asaas.test/i/over");
+  });
+
+  it("tenta de novo uma vez quando a primeira consulta não acha cobrança aberta", async () => {
+    vi.useFakeTimers();
+    const fetchMock = stubPaymentsResponse(
+      { data: [] },
+      { data: [{ id: "pay_new", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: "https://asaas.test/i/new" }] },
+    );
+
+    const promise = resolveInvoiceUrl("sub_1");
+    await vi.advanceTimersByTimeAsync(1500);
+    const url = await promise;
+
+    expect(url).toBe("https://asaas.test/i/new");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("desiste depois da segunda tentativa e retorna null", async () => {
+    vi.useFakeTimers();
+    const fetchMock = stubPaymentsResponse({ data: [] }, { data: [] });
+
+    const promise = resolveInvoiceUrl("sub_1");
+    await vi.advanceTimersByTimeAsync(1500);
+    const url = await promise;
+
+    expect(url).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("model de assinatura", () => {
   beforeEach(async () => {
