@@ -305,6 +305,7 @@ describe("subscribe", () => {
   it("erro de configuração do Asaas não vaza para o cliente e é logado no servidor", async () => {
     await userWithWorkspace("u-sub-infra", "infra@example.com");
     vi.stubEnv("ASAAS_API_KEY", "");
+    vi.stubEnv("ASAAS_API_KEY_BASE64", "");
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const formData = new FormData();

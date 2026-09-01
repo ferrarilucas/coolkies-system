@@ -18,14 +18,14 @@ type AsaasError = { errors?: Array<{ description?: string }> };
 
 export class AsaasApiError extends Error {}
 
+function resolveApiKey(): string | undefined {
+  const b64 = process.env.ASAAS_API_KEY_BASE64;
+  if (b64) return Buffer.from(b64, "base64").toString("utf8");
+  return process.env.ASAAS_API_KEY;
+}
+
 export async function asaasFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const key = process.env.ASAAS_API_KEY;
-  console.error(
-    "DIAGNOSTICO TEMPORARIO asaasFetch: length=",
-    key?.length,
-    "inicio=",
-    JSON.stringify(key?.slice(0, 4)),
-  );
+  const key = resolveApiKey();
   if (!key) throw new Error("ASAAS_API_KEY não configurada");
 
   const response = await fetch(`${baseUrl()}${path}`, {

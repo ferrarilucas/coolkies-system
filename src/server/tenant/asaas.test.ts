@@ -45,9 +45,43 @@ describe("cliente asaas", () => {
 
   it("lanca quando a chave nao esta configurada", async () => {
     vi.stubEnv("ASAAS_API_KEY", "");
+    vi.stubEnv("ASAAS_API_KEY_BASE64", "");
     vi.stubEnv("ASAAS_ENV", "sandbox");
     await expect(asaasFetch("/subscriptions")).rejects.toThrow(
       "ASAAS_API_KEY não configurada",
+    );
+  });
+
+  it("prefere ASAAS_API_KEY_BASE64 e decodifica antes de enviar", async () => {
+    const chave = "$aact_valor_com_cifrao";
+    vi.stubEnv("ASAAS_API_KEY_BASE64", Buffer.from(chave, "utf8").toString("base64"));
+    vi.stubEnv("ASAAS_API_KEY", "nunca-deveria-usar-essa");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "sub_1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await asaasFetch("/subscriptions");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init.headers as Record<string, string>).access_token).toBe(chave);
+  });
+
+  it("cai para ASAAS_API_KEY quando a versao base64 nao esta definida", async () => {
+    vi.stubEnv("ASAAS_API_KEY", "$aact_direto_sem_base64");
+    vi.stubEnv("ASAAS_API_KEY_BASE64", "");
+    vi.stubEnv("ASAAS_ENV", "sandbox");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "sub_1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await asaasFetch("/subscriptions");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init.headers as Record<string, string>).access_token).toBe(
+      "$aact_direto_sem_base64",
     );
   });
 });
