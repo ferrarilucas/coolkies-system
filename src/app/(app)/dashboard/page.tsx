@@ -10,9 +10,12 @@ import {
   Store,
   Users,
   ArrowDownRight,
+  Plus,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
+import { CustomerName } from "@/components/customers/customer-name";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatBRL } from "@/lib/money";
@@ -76,6 +79,14 @@ export default async function DashboardPage({
       <PageHeader
         title="Painel"
         description="Visão geral do negócio"
+        action={
+          <Button asChild size="sm" className="hidden md:inline-flex">
+            <Link href="/sales/new">
+              <Plus />
+              Nova venda
+            </Link>
+          </Button>
+        }
       />
 
       <DashboardFilters
@@ -220,7 +231,11 @@ export default async function DashboardPage({
                         {i + 1}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{c.name}</p>
+                        <CustomerName
+                          name={c.name}
+                          sector={c.sector}
+                          className="text-sm font-medium"
+                        />
                         <p className="text-xs text-muted-foreground">
                           {c.count} venda{c.count > 1 ? "s" : ""} ·{" "}
                           {formatBRL(c.avgTicketCents)}/venda

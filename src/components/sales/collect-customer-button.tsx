@@ -14,15 +14,18 @@ import {
 } from "@/components/ui/dialog";
 import { markCustomerSalesAsPaid } from "@/server/actions/sales";
 import { formatBRL } from "@/lib/money";
+import { SectorBadge } from "@/components/customers/customer-name";
 
 export function CollectCustomerButton({
   customerId,
   customerName,
+  customerSector,
   totalCents,
   count,
 }: {
   customerId: string;
   customerName: string;
+  customerSector?: string | null;
   totalCents: number;
   count: number;
 }) {
@@ -47,7 +50,9 @@ export function CollectCustomerButton({
     <>
       <Button className="w-full" size="lg" onClick={() => setOpen(true)}>
         <HandCoins />
-        Receber tudo de {customerName} · {formatBRL(totalCents)}
+        Receber tudo de {customerName}
+        <SectorBadge sector={customerSector} className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground" />
+        · {formatBRL(totalCents)}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -56,7 +61,11 @@ export function CollectCustomerButton({
             <DialogTitle>Receber pagamentos</DialogTitle>
             <DialogDescription>
               Marcar como {count === 1 ? "paga a venda pendente" : `pagas as ${count} vendas pendentes`}{" "}
-              de <strong>{customerName}</strong>, totalizando{" "}
+              de{" "}
+              <strong>
+                {[customerName, customerSector].filter(Boolean).join(" · ")}
+              </strong>
+              , totalizando{" "}
               <strong>{formatBRL(totalCents)}</strong>?
             </DialogDescription>
           </DialogHeader>

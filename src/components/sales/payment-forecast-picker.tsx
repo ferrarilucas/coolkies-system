@@ -59,7 +59,7 @@ export function PaymentForecastPicker() {
           type="date"
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="h-10 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
         />
       ) : null}
 

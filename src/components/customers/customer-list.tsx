@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { SectorBadge } from "@/components/customers/customer-name";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -48,9 +48,7 @@ function CustomerCard({ customer }: { customer: CustomerWithBalance }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{customer.name}</span>
-            {customer.sector && (
-              <Badge variant="secondary" className="text-xs">{customer.sector}</Badge>
-            )}
+            <SectorBadge sector={customer.sector} />
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {customer.email && (
@@ -87,6 +85,7 @@ function CustomerCard({ customer }: { customer: CustomerWithBalance }) {
             <CustomerCollectDialog
               customerId={customer.id}
               customerName={customer.name}
+              customerSector={customer.sector}
               pendingCents={customer.pendingCents}
               pendingCount={customer.pendingCount}
             />

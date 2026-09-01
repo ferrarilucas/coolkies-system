@@ -42,6 +42,7 @@ function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
       ? {
           OR: [
             { customerName: { contains: search, mode: "insensitive" as const } },
+            { customer: { sector: { contains: search, mode: "insensitive" as const } } },
             { notes: { contains: search, mode: "insensitive" as const } },
             {
               items: {
@@ -75,6 +76,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
       skip,
       take: SALES_PAGE_SIZE,
       include: {
+        customer: { select: { sector: true } },
         items: {
           select: {
             quantity: true,
@@ -149,6 +151,7 @@ export async function getSaleById(id: string) {
   return db.sale.findUnique({
     where: { id },
     include: {
+      customer: { select: { id: true, name: true, email: true, phone: true, sector: true } },
       items: {
         select: {
           id: true,

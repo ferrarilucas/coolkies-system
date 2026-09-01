@@ -25,11 +25,13 @@ type PendingSale = Awaited<ReturnType<typeof getPendingSalesByCustomer>>[number]
 export function CustomerCollectDialog({
   customerId,
   customerName,
+  customerSector,
   pendingCents,
   pendingCount,
 }: {
   customerId: string;
   customerName: string;
+  customerSector?: string | null;
   pendingCents: number;
   pendingCount: number;
 }) {
@@ -93,7 +95,9 @@ export function CustomerCollectDialog({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Receber de {customerName}</DialogTitle>
+            <DialogTitle>
+              Receber de {[customerName, customerSector].filter(Boolean).join(" · ")}
+            </DialogTitle>
             <DialogDescription>
               {pendingCount} {pendingCount === 1 ? "venda pendente" : "vendas pendentes"},
               totalizando {formatBRL(pendingCents)}. Selecione o que foi pago.

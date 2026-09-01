@@ -15,6 +15,7 @@ import { MarkAsPaidButton } from "@/components/sales/mark-as-paid-button";
 import { RowActions } from "@/components/shared/row-actions";
 import { deleteSale } from "@/server/actions/sales";
 import { SalesFilters } from "@/components/sales/sales-filters";
+import { CustomerName } from "@/components/customers/customer-name";
 import { CollectCustomerButton } from "@/components/sales/collect-customer-button";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
           <CollectCustomerButton
             customerId={selectedCustomer.id}
             customerName={selectedCustomer.name}
+            customerSector={selectedCustomer.sector}
             totalCents={summary.pendingCents}
             count={summary.pendingCount}
           />
@@ -258,9 +260,11 @@ function SaleCard({ sale }: { sale: Sale }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="font-medium truncate">
-              {sale.customerName ?? <span className="text-muted-foreground italic">Sem identificação</span>}
-            </p>
+            <CustomerName
+              name={sale.customerName}
+              sector={sale.customer?.sector}
+              className="font-medium"
+            />
             <StatusBadge sale={sale} />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">

@@ -183,7 +183,7 @@ export function DashboardFilters({
                 value={current.from}
                 max={current.to}
                 onChange={(e) => apply({ from: e.target.value })}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 md:text-sm"
               />
             </div>
             <div className="space-y-1.5">
@@ -193,7 +193,7 @@ export function DashboardFilters({
                 value={current.to}
                 min={current.from}
                 onChange={(e) => apply({ to: e.target.value })}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 md:text-sm"
               />
             </div>
 

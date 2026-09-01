@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { searchCustomers, type CustomerSummary } from "@/server/queries/customers";
 import { createCustomer } from "@/server/actions/customers";
 import { toast } from "sonner";
+import { SectorBadge } from "@/components/customers/customer-name";
 
 // ─── Formulário rápido de novo cliente ───────────────────────────────────────
 
@@ -59,7 +60,7 @@ function QuickCreateForm({ initialName, onCreated, onCancel }: QuickCreateFormPr
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nome do cliente"
-            className="h-8 text-sm"
+            className="h-8 text-base md:text-sm"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -69,7 +70,7 @@ function QuickCreateForm({ initialName, onCreated, onCancel }: QuickCreateFormPr
               value={sector}
               onChange={(e) => setSector(e.target.value)}
               placeholder="Ex.: Empresa"
-              className="h-8 text-sm"
+              className="h-8 text-base md:text-sm"
             />
           </div>
           <div>
@@ -77,7 +78,7 @@ function QuickCreateForm({ initialName, onCreated, onCancel }: QuickCreateFormPr
             <PhoneInput
               value={phone}
               onChange={setPhone}
-              className="h-8 text-sm"
+              className="h-8 text-base md:text-sm"
             />
           </div>
         </div>
@@ -88,7 +89,7 @@ function QuickCreateForm({ initialName, onCreated, onCancel }: QuickCreateFormPr
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="email@exemplo.com"
-            className="h-8 text-sm"
+            className="h-8 text-base md:text-sm"
           />
         </div>
       </div>
@@ -174,15 +175,13 @@ export function CustomerCombobox({ value, onChange }: CustomerComboboxProps) {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal"
+          className="w-full justify-between text-base font-normal md:text-sm"
         >
           {value ? (
             <span className="flex items-center gap-2 min-w-0">
               <User className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{value.name}</span>
-              {value.sector && (
-                <span className="text-xs text-muted-foreground shrink-0">· {value.sector}</span>
-              )}
+              <SectorBadge sector={value.sector} />
             </span>
           ) : (
             <span className="text-muted-foreground">Selecionar ou criar cliente…</span>
@@ -206,8 +205,8 @@ export function CustomerCombobox({ value, onChange }: CustomerComboboxProps) {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar cliente…"
-                className="h-7 border-0 p-0 shadow-none focus-visible:ring-0 text-sm"
+                placeholder="Buscar por nome ou setor…"
+                className="h-7 border-0 p-0 shadow-none focus-visible:ring-0 text-base md:text-sm"
               />
               {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground shrink-0" />}
             </div>
@@ -225,10 +224,13 @@ export function CustomerCombobox({ value, onChange }: CustomerComboboxProps) {
                     className={cn("size-4 shrink-0", value?.id === c.id ? "opacity-100" : "opacity-0")}
                   />
                   <span className="flex-1 min-w-0">
-                    <span className="block truncate font-medium">{c.name}</span>
-                    {(c.sector || c.phone) && (
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate font-medium">{c.name}</span>
+                      <SectorBadge sector={c.sector} />
+                    </span>
+                    {c.phone && (
                       <span className="block text-xs text-muted-foreground truncate">
-                        {[c.sector, c.phone].filter(Boolean).join(" · ")}
+                        {c.phone}
                       </span>
                     )}
                   </span>
