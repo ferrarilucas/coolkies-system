@@ -80,7 +80,7 @@ export function CustomersFilters({
           enterKeyHint="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nome, e-mail ou telefone…"
+          placeholder="Buscar por nome, setor, e-mail ou telefone…"
           className="pl-9 pr-9"
         />
         {q && (

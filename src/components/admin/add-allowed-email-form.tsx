@@ -30,12 +30,12 @@ export function AddAllowedEmailForm() {
           type="email"
           required
           placeholder="email@exemplo.com"
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="h-10 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
         />
         <select
           name="role"
           defaultValue="USER"
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-10 rounded-md border border-input bg-background px-3 text-base md:text-sm"
         >
           <option value="USER">Usuário</option>
           <option value="ADMIN">Admin</option>
@@ -45,7 +45,7 @@ export function AddAllowedEmailForm() {
         name="note"
         type="text"
         placeholder="Observação (opcional)"
-        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+        className="h-10 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
       />
       <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         <Plus />

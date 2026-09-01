@@ -95,7 +95,7 @@ export function MoneyInput({
         onFocus={handleFocus}
         autoFocus={autoFocus}
         className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm",
           "ring-offset-background focus-visible:outline-none focus-visible:ring-2",
           "focus-visible:ring-ring focus-visible:ring-offset-2 tabular-nums",
           "disabled:cursor-not-allowed disabled:opacity-50",

@@ -18,10 +18,10 @@ export default async function EditSalePage({
     customer: sale.customerId
       ? {
           id: sale.customerId,
-          name: sale.customerName ?? "",
-          email: null,
-          phone: null,
-          sector: null,
+          name: sale.customer?.name ?? sale.customerName ?? "",
+          email: sale.customer?.email ?? null,
+          phone: sale.customer?.phone ?? null,
+          sector: sale.customer?.sector ?? null,
         }
       : null,
     soldAt: format(sale.soldAt, "yyyy-MM-dd"),
@@ -47,7 +47,11 @@ export default async function EditSalePage({
     <div>
       <PageHeader
         title="Editar venda"
-        description={sale.customerName ? `Cliente: ${sale.customerName}` : undefined}
+        description={
+          sale.customerName
+            ? `Cliente: ${[sale.customerName, sale.customer?.sector].filter(Boolean).join(" · ")}`
+            : undefined
+        }
         backHref="/sales"
       />
       <SaleForm saleId={sale.id} catalog={catalog} initial={initial} />

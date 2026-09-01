@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import {
   ChevronRight,
+  Cookie,
   Palette,
   Settings,
   Store,
-  Users,
+  UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -44,10 +45,16 @@ export default async function MorePage() {
 
   const links: MoreLink[] = [
     {
-      href: "/customers",
-      label: "Clientes",
-      description: "Sua base de clientes",
-      icon: Users,
+      href: "/products",
+      label: "Produtos",
+      description: "Estoque de produto final e produções",
+      icon: Cookie,
+    },
+    {
+      href: "/pantry",
+      label: "Despensa",
+      description: "Ingredientes e lista de compras",
+      icon: UtensilsCrossed,
     },
     {
       href: "/markets",

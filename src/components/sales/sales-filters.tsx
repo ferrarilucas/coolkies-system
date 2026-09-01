@@ -94,7 +94,7 @@ export function SalesFilters({
           enterKeyHint="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por cliente, produto ou observação…"
+          placeholder="Buscar por cliente, setor, produto ou observação…"
           className="pl-9 pr-9"
         />
         {q && (

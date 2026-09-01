@@ -18,13 +18,23 @@ export type CustomerSummary = {
 
 export type CustomerFull = Awaited<ReturnType<typeof getCustomers>>[number];
 
-/** Busca clientes por nome (case-insensitive). Sem query = retorna todos. */
+/** Filtro por nome ou setor (case-insensitive). Sem termo = sem filtro. */
+function nameOrSectorWhere(query?: string) {
+  const term = query?.trim();
+  if (!term) return undefined;
+  return {
+    OR: [
+      { name: { contains: term, mode: "insensitive" as const } },
+      { sector: { contains: term, mode: "insensitive" as const } },
+    ],
+  };
+}
+
+/** Busca clientes por nome ou setor (case-insensitive). Sem query = retorna todos. */
 export async function searchCustomers(query?: string): Promise<CustomerSummary[]> {
   const db = await getWorkspaceDb();
   return db.customer.findMany({
-    where: query?.trim()
-      ? { name: { contains: query.trim(), mode: "insensitive" } }
-      : undefined,
+    where: nameOrSectorWhere(query),
     orderBy: { name: "asc" },
     take: 20,
     select: { id: true, name: true, email: true, phone: true, sector: true },
@@ -33,16 +43,14 @@ export async function searchCustomers(query?: string): Promise<CustomerSummary[]
 
 const CUSTOMER_PAGE_SIZE = 20;
 
-/** Busca paginada por nome. Usa take+1 para detectar próxima página sem count extra. */
+/** Busca paginada por nome ou setor. Usa take+1 para detectar próxima página sem count extra. */
 export async function searchCustomersPage(
   query: string | undefined,
   page = 1,
 ): Promise<{ items: CustomerSummary[]; hasMore: boolean }> {
   const db = await getWorkspaceDb();
   const items = await db.customer.findMany({
-    where: query?.trim()
-      ? { name: { contains: query.trim(), mode: "insensitive" } }
-      : undefined,
+    where: nameOrSectorWhere(query),
     orderBy: { name: "asc" },
     skip: (page - 1) * CUSTOMER_PAGE_SIZE,
     take: CUSTOMER_PAGE_SIZE + 1,
@@ -93,6 +101,7 @@ export async function getCustomersWithBalance(
         ? {
             OR: [
               { name: { contains: term, mode: "insensitive" as const } },
+              { sector: { contains: term, mode: "insensitive" as const } },
               { email: { contains: term, mode: "insensitive" as const } },
               { phone: { contains: term } },
             ],

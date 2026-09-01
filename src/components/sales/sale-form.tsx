@@ -57,18 +57,21 @@ type SaleItemLine = {
 type DiscountType = "PERCENTAGE" | "FIXED";
 type PayStatus = "PAID" | ForecastPreset;
 
-const NO_FLAVOR = "__none__";
+function defaultFlavor(product: CatalogProduct | null | undefined) {
+  return product?.flavors.length === 1 ? product.flavors[0] : null;
+}
 
 function blankLine(catalog: CatalogProduct[]): SaleItemLine {
   const only = catalog.length === 1 ? catalog[0] : null;
+  const flavor = defaultFlavor(only);
   return {
     key: crypto.randomUUID(),
     productId: only?.id ?? "",
     productName: only?.name ?? "",
-    flavorId: null,
-    flavorName: null,
+    flavorId: flavor?.id ?? null,
+    flavorName: flavor?.name ?? null,
     quantity: 1,
-    unitPriceCents: only?.genericPriceCents ?? 0,
+    unitPriceCents: flavor?.priceCents ?? only?.genericPriceCents ?? 0,
   };
 }
 
@@ -117,7 +120,7 @@ function QuantityStepper({ value, onChange }: { value: number; onChange: (v: num
           const n = parseInt(e.target.value);
           if (!isNaN(n) && n >= 1) onChange(n);
         }}
-        className="h-10 w-10 border-y bg-background text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-10 w-10 border-y bg-background text-center text-base tabular-nums md:text-sm focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <button
         type="button"
@@ -151,20 +154,20 @@ function ItemRow({
 
   function handleProductChange(pid: string) {
     const p = catalog.find((x) => x.id === pid);
+    const flavor = defaultFlavor(p);
     onChange({
       productId: pid,
       productName: p?.name ?? "",
-      flavorId: null,
-      flavorName: null,
-      unitPriceCents: p?.genericPriceCents ?? 0,
+      flavorId: flavor?.id ?? null,
+      flavorName: flavor?.name ?? null,
+      unitPriceCents: flavor?.priceCents ?? p?.genericPriceCents ?? 0,
     });
   }
 
   function handleFlavorChange(fid: string) {
-    const flavorId = fid === NO_FLAVOR ? null : fid;
-    const flavor = product?.flavors.find((f) => f.id === flavorId);
+    const flavor = product?.flavors.find((f) => f.id === fid);
     onChange({
-      flavorId,
+      flavorId: fid,
       flavorName: flavor?.name ?? null,
       unitPriceCents:
         flavor?.priceCents ?? product?.genericPriceCents ?? line.unitPriceCents,
@@ -187,21 +190,18 @@ function ItemRow({
           </SelectContent>
         </Select>
 
-        <Select
-          value={line.flavorId ?? NO_FLAVOR}
-          onValueChange={handleFlavorChange}
-          disabled={!line.productId || flavors.length === 0}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Sabor…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_FLAVOR}>Sem sabor específico</SelectItem>
-            {flavors.map((f) => (
-              <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {flavors.length > 0 && (
+          <Select value={line.flavorId ?? ""} onValueChange={handleFlavorChange}>
+            <SelectTrigger className={cn(!line.flavorId && "text-muted-foreground")}>
+              <SelectValue placeholder="Sabor…" />
+            </SelectTrigger>
+            <SelectContent>
+              {flavors.map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -323,6 +323,15 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   function handleSubmit() {
     if (filledLines.length === 0) {
       toast.error("Adicione pelo menos um produto.");
+      return;
+    }
+
+    const missingFlavor = filledLines.find((l) => {
+      const p = catalog.find((x) => x.id === l.productId);
+      return (p?.flavors.length ?? 0) > 0 && !l.flavorId;
+    });
+    if (missingFlavor) {
+      toast.error(`Escolha o sabor de ${missingFlavor.productName}.`);
       return;
     }
 

@@ -104,6 +104,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       totalCents: true,
       customerId: true,
       customerName: true,
+      customer: { select: { sector: true } },
       items: {
         select: {
           productId: true,
@@ -221,7 +222,10 @@ export async function getDashboardData(filters: DashboardFilters) {
   let soldCookies = 0;
 
   const mixMap = new Map<string, { label: string; revenue: number; qty: number }>();
-  const customerMap = new Map<string, { name: string; revenue: number; count: number }>();
+  const customerMap = new Map<
+    string,
+    { name: string; sector: string | null; revenue: number; count: number }
+  >();
 
   for (const sale of sales) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
@@ -258,7 +262,12 @@ export async function getDashboardData(filters: DashboardFilters) {
 
     const cid = sale.customerId ?? "__none__";
     const cname = sale.customerName ?? "Sem identificação";
-    const cc = customerMap.get(cid) ?? { name: cname, revenue: 0, count: 0 };
+    const cc = customerMap.get(cid) ?? {
+      name: cname,
+      sector: sale.customer?.sector ?? null,
+      revenue: 0,
+      count: 0,
+    };
     cc.revenue += saleRevenue;
     cc.count += 1;
     customerMap.set(cid, cc);
@@ -330,6 +339,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     .slice(0, 6)
     .map((c) => ({
       name: c.name,
+      sector: c.sector,
       revenueCents: c.revenue,
       count: c.count,
       avgTicketCents: c.count > 0 ? Math.round(c.revenue / c.count) : 0,
