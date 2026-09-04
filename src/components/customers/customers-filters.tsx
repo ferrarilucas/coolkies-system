@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { endOfMonth, format } from "date-fns";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ export type CustomersFilterValues = {
   situation: CustomerSituation;
   sector: string;
   minDue: number;
+  forecastTo: string;
 };
 
 const SITUATIONS: { value: CustomerSituation; label: string }[] = [
@@ -44,7 +46,17 @@ export function CustomersFilters({
   const [q, setQ] = useState(values.q);
   const [minDue, setMinDue] = useState(values.minDue);
 
-  const activeCount = [values.sector, values.minDue > 0 ? "1" : ""].filter(Boolean).length;
+  const today = format(new Date(), "yyyy-MM-dd");
+  const forecastPresets = [
+    { label: "Até hoje", value: today },
+    { label: "Até o fim do mês", value: format(endOfMonth(new Date()), "yyyy-MM-dd") },
+  ];
+
+  const activeCount = [
+    values.sector,
+    values.minDue > 0 ? "1" : "",
+    values.forecastTo,
+  ].filter(Boolean).length;
   const [open, setOpen] = useState(activeCount > 0);
 
   function navigate(next: Partial<CustomersFilterValues>) {
@@ -54,6 +66,7 @@ export function CustomersFilters({
     if (v.q) params.set("q", v.q);
     if (v.sector) params.set("sector", v.sector);
     if (v.minDue > 0) params.set("mindue", String(v.minDue));
+    if (v.forecastTo) params.set("pto", v.forecastTo);
     const qs = params.toString();
     router.push(`/customers${qs ? `?${qs}` : ""}`);
   }
@@ -61,7 +74,7 @@ export function CustomersFilters({
   function clearAll() {
     setQ("");
     setMinDue(0);
-    navigate({ q: "", sector: "", minDue: 0 });
+    navigate({ q: "", sector: "", minDue: 0, forecastTo: "" });
   }
 
   return (
@@ -131,6 +144,35 @@ export function CustomersFilters({
 
       {open && (
         <div className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="filter-pto">Previsto até</Label>
+            <div className="flex flex-wrap gap-2">
+              {forecastPresets.map((p) => (
+                <Button
+                  key={p.label}
+                  type="button"
+                  size="sm"
+                  variant={values.forecastTo === p.value ? "default" : "outline"}
+                  onClick={() =>
+                    navigate({ forecastTo: values.forecastTo === p.value ? "" : p.value })
+                  }
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+            <Input
+              id="filter-pto"
+              type="date"
+              value={values.forecastTo}
+              onChange={(e) => navigate({ forecastTo: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Considera só as vendas com previsão até essa data — o total a receber e o
+              recebimento seguem esse recorte. Vendas sem previsão entram sempre.
+            </p>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Setor</Label>
             <Select

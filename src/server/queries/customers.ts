@@ -3,6 +3,7 @@
 import { getWorkspaceDb } from "@/server/tenant/context";
 import {
   buildCustomerBalances,
+  parseForecastCutoff,
   type CustomerPendingRow,
   type CustomerSituation,
   type WithBalance,
@@ -81,7 +82,20 @@ export type CustomerBalanceQuery = {
   sector?: string;
   situation: CustomerSituation;
   minDueCents?: number;
+  forecastTo?: string;
 };
+
+/**
+ * Recorte das vendas pendentes por data prevista de pagamento.
+ * Vendas sem previsão entram no recorte: não há data futura a esperar.
+ */
+function pendingForecastWhere(forecastTo?: string) {
+  const cutoff = parseForecastCutoff(forecastTo);
+  if (!cutoff) return {};
+  return {
+    OR: [{ paymentForecastDate: { lte: cutoff } }, { paymentForecastDate: null }],
+  };
+}
 
 export type CustomerWithBalance = WithBalance<
   Awaited<ReturnType<typeof getCustomers>>[number]
@@ -114,7 +128,11 @@ export async function getCustomersWithBalance(
 
   const grouped = await db.sale.groupBy({
     by: ["customerId"],
-    where: { status: "PENDING", customerId: { in: customers.map((c) => c.id) } },
+    where: {
+      status: "PENDING",
+      customerId: { in: customers.map((c) => c.id) },
+      ...pendingForecastWhere(filters.forecastTo),
+    },
     _sum: { totalCents: true },
     _count: { _all: true },
     _min: { paymentForecastDate: true },
@@ -133,10 +151,10 @@ export async function getCustomersWithBalance(
 }
 
 /** Vendas pendentes de um cliente, da mais antiga para a mais recente. */
-export async function getPendingSalesByCustomer(customerId: string) {
+export async function getPendingSalesByCustomer(customerId: string, forecastTo?: string) {
   const db = await getWorkspaceDb();
   return db.sale.findMany({
-    where: { customerId, status: "PENDING" },
+    where: { customerId, status: "PENDING", ...pendingForecastWhere(forecastTo) },
     orderBy: { soldAt: "asc" },
     select: {
       id: true,

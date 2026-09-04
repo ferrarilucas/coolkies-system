@@ -18,17 +18,29 @@ import { updateCustomer, deleteCustomer } from "@/server/actions/customers";
 import { formatBRL } from "@/lib/money";
 import type { CustomerWithBalance } from "@/server/queries/customers";
 
-export function CustomerList({ customers }: { customers: CustomerWithBalance[] }) {
+export function CustomerList({
+  customers,
+  forecastTo,
+}: {
+  customers: CustomerWithBalance[];
+  forecastTo?: string;
+}) {
   return (
     <div className="space-y-2">
       {customers.map((c) => (
-        <CustomerCard key={c.id} customer={c} />
+        <CustomerCard key={c.id} customer={c} forecastTo={forecastTo} />
       ))}
     </div>
   );
 }
 
-function CustomerCard({ customer }: { customer: CustomerWithBalance }) {
+function CustomerCard({
+  customer,
+  forecastTo,
+}: {
+  customer: CustomerWithBalance;
+  forecastTo?: string;
+}) {
   const [editOpen, setEditOpen] = useState(false);
   const [saving, startSave] = useTransition();
 
@@ -88,6 +100,7 @@ function CustomerCard({ customer }: { customer: CustomerWithBalance }) {
               customerSector={customer.sector}
               pendingCents={customer.pendingCents}
               pendingCount={customer.pendingCount}
+              forecastTo={forecastTo}
             />
           )}
           <RowActions

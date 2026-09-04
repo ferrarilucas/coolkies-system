@@ -13,6 +13,15 @@ const { getCustomersWithBalance, getPendingSalesByCustomer, getCustomerSectors }
 
 const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000);
 const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000);
+const NEXT_MONTH = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000);
+
+function isoDay(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 async function seedSale(
   customerId: string,
@@ -93,6 +102,33 @@ describe("getCustomersWithBalance", () => {
     expect(result.map((c) => c.id)).toEqual([bruno]);
   });
 
+  it("soma só as pendências previstas até a data do filtro", async () => {
+    await seedSale(ana, { totalCents: 1000, forecast: YESTERDAY });
+    await seedSale(ana, { totalCents: 2000, forecast: TOMORROW });
+    await seedSale(ana, { totalCents: 5000, forecast: NEXT_MONTH });
+
+    const result = await getCustomersWithBalance({
+      situation: "all",
+      forecastTo: isoDay(TOMORROW),
+    });
+
+    const anaRow = result.find((c) => c.id === ana);
+    expect(anaRow?.pendingCents).toBe(3000);
+    expect(anaRow?.pendingCount).toBe(2);
+  });
+
+  it("mantém no recorte as vendas sem previsão de pagamento", async () => {
+    await seedSale(ana, { totalCents: 1000 });
+    await seedSale(ana, { totalCents: 5000, forecast: NEXT_MONTH });
+
+    const result = await getCustomersWithBalance({
+      situation: "all",
+      forecastTo: isoDay(new Date()),
+    });
+
+    expect(result.find((c) => c.id === ana)?.pendingCents).toBe(1000);
+  });
+
   it("busca por nome, e-mail ou telefone", async () => {
     expect((await getCustomersWithBalance({ situation: "all", q: "souza" })).map((c) => c.id))
       .toEqual([ana]);
@@ -136,6 +172,16 @@ describe("getPendingSalesByCustomer", () => {
 
     expect(result.map((s) => s.id)).toEqual([antiga.id, nova.id]);
     expect(result[0].totalCents).toBe(200);
+  });
+
+  it("lista só as vendas previstas até a data do filtro, incluindo as sem previsão", async () => {
+    const semPrevisao = await seedSale(ana, { totalCents: 100 });
+    const proxima = await seedSale(ana, { totalCents: 200, forecast: TOMORROW });
+    await seedSale(ana, { totalCents: 300, forecast: NEXT_MONTH });
+
+    const result = await getPendingSalesByCustomer(ana, isoDay(TOMORROW));
+
+    expect(new Set(result.map((s) => s.id))).toEqual(new Set([semPrevisao.id, proxima.id]));
   });
 });
 

@@ -9,16 +9,22 @@ import { CustomerList } from "@/components/customers/customer-list";
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog";
 import { CustomersFilters } from "@/components/customers/customers-filters";
 import { formatBRL } from "@/lib/money";
-import type { CustomerSituation } from "@/lib/customer-balance";
+import { parseForecastCutoff, type CustomerSituation } from "@/lib/customer-balance";
 
 type SearchParams = Promise<{
   q?: string;
   situation?: string;
   sector?: string;
   mindue?: string;
+  pto?: string;
 }>;
 
 const SITUATIONS: CustomerSituation[] = ["all", "pending", "overdue", "clear"];
+
+function formatShortDate(value: string) {
+  const [, month, day] = value.split("-");
+  return `${day}/${month}`;
+}
 
 export default async function CustomersPage({
   searchParams,
@@ -29,6 +35,8 @@ export default async function CustomersPage({
   const q = (sp.q ?? "").trim();
   const sector = (sp.sector ?? "").trim();
   const minDue = Math.max(0, parseInt(sp.mindue ?? "0") || 0);
+  const forecastToRaw = (sp.pto ?? "").trim();
+  const forecastTo = parseForecastCutoff(forecastToRaw) ? forecastToRaw : "";
   const situation = SITUATIONS.includes(sp.situation as CustomerSituation)
     ? (sp.situation as CustomerSituation)
     : "all";
@@ -39,11 +47,12 @@ export default async function CustomersPage({
       sector: sector || undefined,
       situation,
       minDueCents: minDue || undefined,
+      forecastTo: forecastTo || undefined,
     }),
     getCustomerSectors(),
   ]);
 
-  const hasFilters = Boolean(q || sector || minDue || situation !== "all");
+  const hasFilters = Boolean(q || sector || minDue || forecastTo || situation !== "all");
   const totalPendingCents = customers.reduce((sum, c) => sum + c.pendingCents, 0);
   const debtorCount = customers.filter((c) => c.pendingCents > 0).length;
   const overdueCount = customers.filter((c) => c.isOverdue).length;
@@ -57,14 +66,14 @@ export default async function CustomersPage({
       />
 
       <CustomersFilters
-        values={{ q, situation, sector, minDue }}
+        values={{ q, situation, sector, minDue, forecastTo }}
         sectors={sectors}
       />
 
       {totalPendingCents > 0 && (
         <div className="mb-4 grid grid-cols-3 gap-2">
           <SummaryStat
-            label="A receber"
+            label={forecastTo ? `A receber até ${formatShortDate(forecastTo)}` : "A receber"}
             value={formatBRL(totalPendingCents)}
             valueClass="text-warning-text"
           />
@@ -94,7 +103,7 @@ export default async function CustomersPage({
           action={hasFilters ? undefined : <CustomerCreateDialog />}
         />
       ) : (
-        <CustomerList customers={customers} />
+        <CustomerList customers={customers} forecastTo={forecastTo || undefined} />
       )}
     </div>
   );

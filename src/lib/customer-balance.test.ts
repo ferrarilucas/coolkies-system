@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCustomerBalances, type CustomerPendingRow } from "./customer-balance";
+import {
+  buildCustomerBalances,
+  parseForecastCutoff,
+  type CustomerPendingRow,
+} from "./customer-balance";
 
 const NOW = new Date("2026-08-30T12:00:00Z");
 
@@ -147,5 +151,20 @@ describe("buildCustomerBalances", () => {
     );
 
     expect(result.map((c) => c.id)).toEqual(["bru"]);
+  });
+});
+
+describe("parseForecastCutoff", () => {
+  it("leva a data para o fim do dia local", () => {
+    const cutoff = parseForecastCutoff("2026-09-04");
+    expect(cutoff).toEqual(new Date("2026-09-04T23:59:59.999"));
+  });
+
+  it("ignora entrada vazia ou fora do formato", () => {
+    expect(parseForecastCutoff()).toBeUndefined();
+    expect(parseForecastCutoff("")).toBeUndefined();
+    expect(parseForecastCutoff("  ")).toBeUndefined();
+    expect(parseForecastCutoff("04/09/2026")).toBeUndefined();
+    expect(parseForecastCutoff("2026-13-45")).toBeUndefined();
   });
 });

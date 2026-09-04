@@ -1,5 +1,16 @@
 export type CustomerSituation = "all" | "pending" | "overdue" | "clear";
 
+/**
+ * Converte "yyyy-MM-dd" no fim daquele dia, no fuso local.
+ * Entrada vazia ou inválida vira undefined (sem corte).
+ */
+export function parseForecastCutoff(value?: string | null): Date | undefined {
+  const raw = value?.trim();
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  const date = new Date(`${raw}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 export type CustomerPendingRow = {
   customerId: string;
   pendingCents: number;

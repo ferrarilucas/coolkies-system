@@ -18,6 +18,7 @@ import {
 import { getPendingSalesByCustomer } from "@/server/queries/customers";
 import { markSalesAsPaid } from "@/server/actions/sales";
 import { formatBRL } from "@/lib/money";
+import { parseForecastCutoff } from "@/lib/customer-balance";
 import { cn } from "@/lib/utils";
 
 type PendingSale = Awaited<ReturnType<typeof getPendingSalesByCustomer>>[number];
@@ -28,12 +29,14 @@ export function CustomerCollectDialog({
   customerSector,
   pendingCents,
   pendingCount,
+  forecastTo,
 }: {
   customerId: string;
   customerName: string;
   customerSector?: string | null;
   pendingCents: number;
   pendingCount: number;
+  forecastTo?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [sales, setSales] = useState<PendingSale[] | null>(null);
@@ -44,7 +47,7 @@ export function CustomerCollectDialog({
     if (!open) return;
     let active = true;
     setSales(null);
-    getPendingSalesByCustomer(customerId).then((rows) => {
+    getPendingSalesByCustomer(customerId, forecastTo).then((rows) => {
       if (!active) return;
       setSales(rows);
       setSelected(new Set(rows.map((r) => r.id)));
@@ -52,8 +55,10 @@ export function CustomerCollectDialog({
     return () => {
       active = false;
     };
-  }, [open, customerId]);
+  }, [open, customerId, forecastTo]);
 
+  const cutoff = parseForecastCutoff(forecastTo);
+  const cutoffLabel = cutoff ? format(cutoff, "dd/MM/yyyy", { locale: ptBR }) : null;
   const selectedSales = (sales ?? []).filter((s) => selected.has(s.id));
   const selectedCents = selectedSales.reduce((sum, s) => sum + s.totalCents, 0);
   const allSelected = sales !== null && sales.length > 0 && selected.size === sales.length;
@@ -99,8 +104,9 @@ export function CustomerCollectDialog({
               Receber de {[customerName, customerSector].filter(Boolean).join(" · ")}
             </DialogTitle>
             <DialogDescription>
-              {pendingCount} {pendingCount === 1 ? "venda pendente" : "vendas pendentes"},
-              totalizando {formatBRL(pendingCents)}. Selecione o que foi pago.
+              {pendingCount} {pendingCount === 1 ? "venda pendente" : "vendas pendentes"}
+              {cutoffLabel ? ` com previsão até ${cutoffLabel}` : ""}, totalizando{" "}
+              {formatBRL(pendingCents)}. Selecione o que foi pago.
             </DialogDescription>
           </DialogHeader>
 
