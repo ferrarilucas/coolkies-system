@@ -56,53 +56,49 @@ function CustomerCard({
 
   return (
     <>
-      <div className="rounded-lg border bg-card px-4 py-3 flex items-center gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">{customer.name}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3 rounded-lg border bg-card p-3 sm:flex-nowrap sm:gap-4 sm:px-4">
+        <div className="order-1 min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium">{customer.name}</span>
             <SectorBadge sector={customer.sector} />
           </div>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
             {customer.email && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Mail className="size-3" />{customer.email}
+              <span className="flex min-w-0 max-w-full items-center gap-1">
+                <Mail className="size-3 shrink-0" />
+                <span className="truncate">{customer.email}</span>
               </span>
             )}
             {customer.phone && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Phone className="size-3" />{customer.phone}
+              <span className="flex shrink-0 items-center gap-1">
+                <Phone className="size-3" />
+                {customer.phone}
               </span>
             )}
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1">
               <ShoppingCart className="size-3" />
               {customer._count.sales} {customer._count.sales === 1 ? "venda" : "vendas"}
             </span>
-            {customer.pendingCents > 0 && (
-              <span
-                className={
-                  customer.isOverdue
-                    ? "flex items-center gap-1 text-xs font-medium text-destructive"
-                    : "flex items-center gap-1 text-xs font-medium text-warning-text"
-                }
-              >
-                {customer.isOverdue && <AlertTriangle className="size-3" />}
-                {formatBRL(customer.pendingCents)} em {customer.pendingCount}{" "}
+          </div>
+          {customer.pendingCents > 0 && (
+            <p
+              className={
+                customer.isOverdue
+                  ? "mt-1.5 flex items-center gap-1 text-xs font-medium text-destructive"
+                  : "mt-1.5 flex items-center gap-1 text-xs font-medium text-warning-text"
+              }
+            >
+              {customer.isOverdue && <AlertTriangle className="size-3 shrink-0" />}
+              <span className="tabular-nums">{formatBRL(customer.pendingCents)}</span>
+              <span>
+                em {customer.pendingCount}{" "}
                 {customer.pendingCount === 1 ? "pendência" : "pendências"}
               </span>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {customer.pendingCents > 0 && (
-            <CustomerCollectDialog
-              customerId={customer.id}
-              customerName={customer.name}
-              customerSector={customer.sector}
-              pendingCents={customer.pendingCents}
-              pendingCount={customer.pendingCount}
-              forecastTo={forecastTo}
-            />
+            </p>
           )}
+        </div>
+
+        <div className="order-2 shrink-0 sm:order-3">
           <RowActions
             onEdit={() => setEditOpen(true)}
             deleteTitle="Excluir cliente"
@@ -116,6 +112,20 @@ function CustomerCard({
             onDelete={() => deleteCustomer(customer.id)}
           />
         </div>
+
+        {customer.pendingCents > 0 && (
+          <div className="order-3 w-full sm:order-2 sm:w-auto">
+            <CustomerCollectDialog
+              customerId={customer.id}
+              customerName={customer.name}
+              customerSector={customer.sector}
+              pendingCents={customer.pendingCents}
+              pendingCount={customer.pendingCount}
+              forecastTo={forecastTo}
+              triggerClassName="w-full sm:w-auto"
+            />
+          </div>
+        )}
       </div>
 
       {/* Dialog de edição */}

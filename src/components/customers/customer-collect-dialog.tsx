@@ -30,6 +30,7 @@ export function CustomerCollectDialog({
   pendingCents,
   pendingCount,
   forecastTo,
+  triggerClassName,
 }: {
   customerId: string;
   customerName: string;
@@ -37,6 +38,7 @@ export function CustomerCollectDialog({
   pendingCents: number;
   pendingCount: number;
   forecastTo?: string;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [sales, setSales] = useState<PendingSale[] | null>(null);
@@ -92,7 +94,7 @@ export function CustomerCollectDialog({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" className={triggerClassName} onClick={() => setOpen(true)}>
         <HandCoins />
         Receber
       </Button>

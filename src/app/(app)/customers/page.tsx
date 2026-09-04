@@ -71,10 +71,12 @@ export default async function CustomersPage({
       />
 
       {totalPendingCents > 0 && (
-        <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <SummaryStat
-            label={forecastTo ? `A receber até ${formatShortDate(forecastTo)}` : "A receber"}
+            className="col-span-2 sm:col-span-1"
+            label="A receber"
             value={formatBRL(totalPendingCents)}
+            hint={forecastTo ? `previsto até ${formatShortDate(forecastTo)}` : undefined}
             valueClass="text-warning-text"
           />
           <SummaryStat
@@ -114,16 +116,18 @@ function SummaryStat({
   value,
   hint,
   valueClass,
+  className,
 }: {
   label: string;
   value: string;
   hint?: string;
   valueClass?: string;
+  className?: string;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className={`rounded-lg border bg-card p-3 ${className ?? ""}`}>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-base font-semibold ${valueClass ?? ""}`}>{value}</p>
+      <p className={`text-base font-semibold tabular-nums ${valueClass ?? ""}`}>{value}</p>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );

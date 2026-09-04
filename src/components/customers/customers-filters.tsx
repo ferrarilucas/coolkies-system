@@ -111,12 +111,13 @@ export function CustomersFilters({
         )}
       </form>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {SITUATIONS.map((s) => (
           <Button
             key={s.value}
             type="button"
             size="sm"
+            className="shrink-0"
             variant={values.situation === s.value ? "default" : "outline"}
             onClick={() => navigate({ situation: s.value })}
           >
@@ -152,6 +153,7 @@ export function CustomersFilters({
                   key={p.label}
                   type="button"
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   variant={values.forecastTo === p.value ? "default" : "outline"}
                   onClick={() =>
                     navigate({ forecastTo: values.forecastTo === p.value ? "" : p.value })
@@ -168,8 +170,7 @@ export function CustomersFilters({
               onChange={(e) => navigate({ forecastTo: e.target.value })}
             />
             <p className="text-xs text-muted-foreground">
-              Considera só as vendas com previsão até essa data — o total a receber e o
-              recebimento seguem esse recorte. Vendas sem previsão entram sempre.
+              Recorta o total a receber e o recebimento. Vendas sem previsão entram sempre.
             </p>
           </div>
 
