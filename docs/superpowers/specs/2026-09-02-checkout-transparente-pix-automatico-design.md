@@ -1,8 +1,14 @@
 # Checkout transparente com Pix Automático — Fase 1
 
 **Data:** 2026-09-02
-**Status:** aprovado para planejamento
-**Substitui:** seção 10 de `2026-08-29-multi-tenant-workspaces-design.md` na parte de contratação
+**Status:** SUBSTITUÍDA no mesmo dia, sem ter sido implementada
+**Substituída por:** `2026-09-02-checkout-interpix-design.md`
+
+> O dono passou a operar um gateway Pix próprio (InterPix API, self-hosted, integrado ao
+> Banco Inter), o que tira o Asaas da equação inteira. Este documento fica no repositório
+> por dois motivos que continuam válidos: o registro de **por que o Stripe não serve para
+> recorrência via Pix no Brasil** (seção 2) e o de **por que cartão embutido no Asaas
+> exigiria SAQ-D** (seção 3). O resto foi superado.
 
 ## 1. Problema
 
