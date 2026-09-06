@@ -68,6 +68,38 @@ que recebemos, não por espelhar o status remoto. Ainda assim, a implementação
 verificar** o que `GET /subscriptions/:id` reporta logo após um `authorized`, e registrar a
 resposta na task. É a diferença entre um cliente pagante e um caroneiro.
 
+## 3.1 Preços
+
+Os preços em `src/lib/plans.ts` estão desatualizados em valor, em id e em forma. A fonte de
+verdade é a página pública, conferida em 2026-09-06:
+
+| Plano | | Pix | Cartão |
+|---|---|---|---|
+| **corre** (1 workspace) | Mensal | R$ 34,50 | R$ 39,50 |
+| | Anual | R$ 24,50 → R$ 294,00/ano | R$ 29,50 → R$ 354,00/ano |
+| **cresce** (até 4 workspaces) | Mensal | R$ 94,90 | R$ 99,90 |
+| | Anual | R$ 84,90 → R$ 1.018,80/ano | R$ 89,90 → R$ 1.078,80/ano |
+| **escala** (ilimitado) | — | sob medida | sob medida |
+
+Em vez de tabelar oito números, o código codifica a regra que a própria página enuncia
+("R$ 120 por assinar o ano inteiro e mais R$ 60 por deixar a cobrança no Pix"):
+
+- base mensal no cartão: `corre` 3950, `cresce` 9990 (centavos)
+- ciclo anual: −1000 centavos/mês
+- pagamento por Pix: −500 centavos/mês
+- cobrança anual = mensal resultante × 12
+
+As oito células da tabela caem exatamente dessa regra. Um teste deve provar isso célula a
+célula, porque é o tipo de conta que ninguém confere depois.
+
+**A forma de pagamento entra só no cálculo do valor, no momento do checkout.** Depois que a
+assinatura é criada com um `amount`, quem administra a cobrança é a InterPix. Não é dimensão
+do modelo de dados; é argumento de uma função pura.
+
+Os ids mudam de `solo|team|unlimited` para `corre|cresce|escala`. Como não há assinante real,
+não há migração de dados de plano a fazer — mas o backfill pré-billing gravou `plan: 'solo'`
+nas linhas MANUAL, e a migração precisa reescrever esse valor.
+
 ## 4. Modelo de dados
 
 ### `Subscription`
@@ -101,6 +133,10 @@ Campos:
   `subscriptionId`. Como `cycle.paid` é justamente o evento que libera o plano, sem esse
   mapeamento gravado na criação não há como saber de quem é o pagamento.
 - `lastAppliedEventId BigInt?` — guarda de ordenação (seção 6).
+- `interpixPixCopyPaste String?` — o copia-e-cola devolvido na criação. Guardado porque
+  **`GET /subscriptions/:id` não o devolve** — só a criação devolve. Sem isso, quem fechar a
+  aba antes de autorizar não tem como recuperar o código, e `resumeCheckout` fica sem fonte.
+  Não é credencial: é um código de pagamento, equivalente a um número de boleto.
 - `graceUntil` — reaproveitado para a carência da seção 2.
 - Saem: `asaasCustomerId`, `asaasSubscriptionId`, `SubscriptionSource`.
 
@@ -304,7 +340,7 @@ Cobertura mínima, cada item por um motivo concreto:
 - **`cycle.paid` libera; `subscription.authorized` não libera.** É a Regra 1, e é o teste que
   separa cliente de caroneiro.
 - **`cycle.failed` mantém o acesso.** Dunning não é corte.
-- **`amount`:** `2990` → `"29.90"`, e o anual `2990 * 12` → `"358.80"`.
+- **`amount`:** `2990` → `"29.90"`, e o anual do solo (`1990 * 12`) → `"238.80"`.
 - **409 no cancelamento é tratado como sucesso.**
 - **Migração:** o dono pré-billing continua `MANUAL` e continua escrevendo.
 
@@ -322,8 +358,20 @@ Os três primeiros vêm da seção 11 do próprio contrato, e não são ressalva
 
 ## 13. Fora de escopo
 
-- Cartão de crédito. Se voltar à mesa, o registro de por que Stripe Elements e não Asaas
-  está na spec substituída.
+- **Cartão de crédito via Stripe — confirmado como Fase 2**, depois desta. O motivo de ser
+  Stripe e não Asaas (tokenização no navegador, SAQ-A em vez de SAQ-D) está na spec
+  substituída. Por isso a função de preço já recebe a forma de pagamento como argumento
+  nesta fase: quando o cartão entrar, o cálculo não muda.
+- **Renomeação de Coolkies para Bigas** (19 ocorrências no código, incluindo o e-mail de
+  convite e `contato@coolkies.com.br` nas mensagens de erro) — outro agente.
+- **Limite de usuários por workspace** ("até 2 usuários" no corre, ilimitado no cresce), que
+  hoje não existe no modelo — outro agente.
+
+> **Aviso de colisão:** este trabalho toca `src/lib/plans.ts`, `src/server/tenant/`,
+> `src/server/actions/subscription.ts`, `src/components/workspaces/plan-panel.tsx` e
+> `prisma/schema.prisma`. Os agentes da renomeação e do limite de usuários vão querer os
+> mesmos arquivos. Já houve nesta base um caso de commits indo parar no branch errado por
+> troca concorrente de branch no mesmo checkout — vale isolar em worktree.
 - Cancelamento pelo próprio cliente dentro do app — a API suporta; a interface fica para depois.
 - Troca de plano: hoje trocar deixa a assinatura anterior ativa no gateway, com aviso
   explícito. Com a InterPix existe `cancel`, então dá para fechar de verdade — mas isso é
