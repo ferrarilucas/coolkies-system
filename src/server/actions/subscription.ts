@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isKnownCycle, isKnownPlan, planLabel, planPriceCents, type PlanCycle } from "@/lib/plans";
+import { isKnownCycle, isKnownPlan, monthlyPriceCents, planLabel, type PlanCycle } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import {
   getBillingUser,
@@ -46,7 +46,7 @@ export async function subscribe(formData: FormData): Promise<ActionResult<Subscr
   }
   const cycle: PlanCycle = rawCycle;
 
-  const priceCents = planPriceCents(plan, cycle);
+  const priceCents = monthlyPriceCents(plan, cycle, "PIX");
   if (priceCents === null) {
     return { ok: false, error: "Este plano é contratado por atendimento." };
   }

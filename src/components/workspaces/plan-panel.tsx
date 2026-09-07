@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { PLANS, planLabel, planPriceCents, type PlanCycle } from "@/lib/plans";
+import { PLANS, monthlyPriceCents, planLabel, type PlanCycle } from "@/lib/plans";
 import { formatBRL } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -205,7 +205,7 @@ export function PlanPanel({
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {PLANS.map((plan) => {
-              const priceCents = planPriceCents(plan.id, cycle);
+              const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
               const isCurrent =
                 hasAsaasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
 

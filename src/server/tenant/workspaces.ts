@@ -119,7 +119,7 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
 
   const sub = await getSubscription(userId);
   const owned = await db.member.count({ where: { userId, role: "OWNER" } });
-  const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
+  const limit = effectiveLimit(sub?.plan ?? "corre", sub?.status ?? "TRIALING");
   if (owned + 1 > limit) {
     throw new Error(
       sub?.status === "TRIALING"

@@ -76,7 +76,7 @@ export async function ensureTrialSubscription(userId: string): Promise<void> {
     await db.subscription.create({
       data: {
         userId,
-        plan: "solo",
+        plan: "corre",
         source: "ASAAS",
         status: "TRIALING",
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
@@ -115,7 +115,7 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
     }),
   ]);
 
-  const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
+  const limit = effectiveLimit(sub?.plan ?? "corre", sub?.status ?? "TRIALING");
   const allowed = owned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
   return new Set(allowed.map((m) => m.workspaceId));
 }

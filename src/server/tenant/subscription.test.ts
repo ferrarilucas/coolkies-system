@@ -91,7 +91,7 @@ describe("model de assinatura", () => {
     });
 
     const sub = await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL" },
+      data: { userId: user.id, plan: "corre", source: "MANUAL" },
     });
 
     expect(sub.status).toBe("TRIALING");
@@ -103,12 +103,12 @@ describe("model de assinatura", () => {
       data: { id: "u-dup", name: "Bia", email: "bia@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL" },
+      data: { userId: user.id, plan: "corre", source: "MANUAL" },
     });
 
     await expect(
       testDb.subscription.create({
-        data: { userId: user.id, plan: "team", source: "MANUAL" },
+        data: { userId: user.id, plan: "cresce", source: "MANUAL" },
       }),
     ).rejects.toThrow();
   });
@@ -141,7 +141,7 @@ describe("workspaces ativos por plano", () => {
   }
 
   it("plano solo com tres workspaces ativa so o mais antigo", async () => {
-    const { user, ids } = await ownerWith("solo", 3);
+    const { user, ids } = await ownerWith("corre", 3);
     const active = await activeWorkspaceIds(user.id);
 
     expect(active.has(ids[0])).toBe(true);
@@ -150,7 +150,7 @@ describe("workspaces ativos por plano", () => {
   });
 
   it("plano team ativa os quatro primeiros", async () => {
-    const { user, ids } = await ownerWith("team", 5);
+    const { user, ids } = await ownerWith("cresce", 5);
     const active = await activeWorkspaceIds(user.id);
 
     expect(active.size).toBe(4);
@@ -158,7 +158,7 @@ describe("workspaces ativos por plano", () => {
   });
 
   it("plano unlimited ativa todos", async () => {
-    const { user, ids } = await ownerWith("unlimited", 7);
+    const { user, ids } = await ownerWith("escala", 7);
     const active = await activeWorkspaceIds(user.id);
 
     expect(active.size).toBe(ids.length);
@@ -169,7 +169,7 @@ describe("workspaces ativos por plano", () => {
       data: { id: "u-empate", name: "Dona", email: "empate@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
     });
 
     const mesmoInstante = new Date("2026-08-01T12:00:00Z");
@@ -202,7 +202,7 @@ describe("workspaces ativos por plano", () => {
       data: { id: "u-member-nao-consome", name: "Dono", email: "membernaoconsome@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
     });
 
     const alheio = await testDb.workspace.create({
@@ -267,7 +267,7 @@ describe("permissao de escrita", () => {
       data: { id: "u-write", name: "Dono", email: "write@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
     });
 
     const primeiro = await testDb.workspace.create({
@@ -316,7 +316,7 @@ describe("trial na criacao do primeiro workspace", () => {
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
 
     expect(sub?.status).toBe("TRIALING");
-    expect(sub?.plan).toBe("solo");
+    expect(sub?.plan).toBe("corre");
     const dias = Math.round(
       ((sub?.trialEndsAt?.getTime() ?? 0) - Date.now()) / 86400000,
     );
@@ -331,7 +331,7 @@ describe("trial na criacao do primeiro workspace", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         source: "MANUAL",
         trialEndsAt: antiga,
       },

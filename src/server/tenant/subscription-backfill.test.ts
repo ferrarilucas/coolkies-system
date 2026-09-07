@@ -58,7 +58,7 @@ describe("backfill de assinatura da base pre-billing", () => {
     const sub = await testDb.subscription.findUnique({ where: { userId: "u-backfill" } });
     expect(sub?.source).toBe("MANUAL");
     expect(sub?.status).toBe("ACTIVE");
-    expect(sub?.plan).toBe("solo");
+    expect(sub?.plan).toBe("corre");
     expect(sub?.trialEndsAt).toBeNull();
     expect(sub?.graceUntil).toBeNull();
     expect(sub?.notes).toContain("pre-billing");
@@ -76,9 +76,9 @@ describe("backfill de assinatura da base pre-billing", () => {
     const subs = await testDb.subscription.findMany();
     const planByUser = Object.fromEntries(subs.map((s) => [s.userId, s.plan]));
 
-    expect(planByUser["u-um"]).toBe("solo");
-    expect(planByUser["u-tres"]).toBe("team");
-    expect(planByUser["u-seis"]).toBe("unlimited");
+    expect(planByUser["u-um"]).toBe("corre");
+    expect(planByUser["u-tres"]).toBe("cresce");
+    expect(planByUser["u-seis"]).toBe("escala");
   });
 
   it("libera todos os workspaces de quem tinha mais de um", async () => {
@@ -112,7 +112,7 @@ describe("backfill de assinatura da base pre-billing", () => {
     await testDb.subscription.create({
       data: {
         userId: "u-existente",
-        plan: "solo",
+        plan: "corre",
         source: "ASAAS",
         status: "TRIALING",
       },
@@ -125,7 +125,7 @@ describe("backfill de assinatura da base pre-billing", () => {
     expect(subs).toHaveLength(1);
     expect(subs[0].source).toBe("ASAAS");
     expect(subs[0].status).toBe("TRIALING");
-    expect(subs[0].plan).toBe("solo");
+    expect(subs[0].plan).toBe("corre");
   });
 
   it("rodar duas vezes nao duplica a assinatura criada pelo proprio backfill", async () => {

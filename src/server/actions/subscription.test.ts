@@ -73,7 +73,7 @@ describe("subscribe", () => {
     stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "123.456.789-09");
 
@@ -93,7 +93,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cpfCnpj", "12345678909");
 
     await subscribe(formData);
@@ -110,7 +110,7 @@ describe("subscribe", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "TRIALING",
@@ -120,7 +120,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
 
@@ -130,7 +130,7 @@ describe("subscribe", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
-    expect(sub?.plan).toBe("solo");
+    expect(sub?.plan).toBe("corre");
   });
 
   it("não vira ACTIVE só por ter contratado", async () => {
@@ -138,7 +138,7 @@ describe("subscribe", () => {
     stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cpfCnpj", "12345678909");
 
     await subscribe(formData);
@@ -152,7 +152,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "YEARLY");
     formData.set("cpfCnpj", "12345678909");
 
@@ -162,13 +162,13 @@ describe("subscribe", () => {
       String(url).includes("/subscriptions"),
     );
     const body = JSON.parse(subscriptionCall?.[1]?.body as string);
-    expect(body.value).toBe(238.8);
+    expect(body.value).toBe(294);
   });
 
   it("não permite contratar o plano unlimited pelo checkout", async () => {
     await userWithWorkspace("u-sub-unlimited", "unlimited@example.com");
     const formData = new FormData();
-    formData.set("plan", "unlimited");
+    formData.set("plan", "escala");
     formData.set("cpfCnpj", "12345678909");
 
     const result = await subscribe(formData);
@@ -178,7 +178,7 @@ describe("subscribe", () => {
   it("recusa cpf/cnpj inválido", async () => {
     await userWithWorkspace("u-sub-doc", "doc@example.com");
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cpfCnpj", "123");
 
     const result = await subscribe(formData);
@@ -204,7 +204,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "WEEKLY");
     formData.set("cpfCnpj", "12345678909");
 
@@ -219,7 +219,7 @@ describe("subscribe", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "TRIALING",
@@ -230,7 +230,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
 
@@ -248,7 +248,7 @@ describe("subscribe", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "ACTIVE",
@@ -259,7 +259,7 @@ describe("subscribe", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "team");
+    formData.set("plan", "cresce");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
 
@@ -270,7 +270,7 @@ describe("subscribe", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.asaasSubscriptionId).toBe("sub_existing");
-    expect(sub?.plan).toBe("solo");
+    expect(sub?.plan).toBe("corre");
   });
 
   it("troca de plano prossegue quando a troca é confirmada, mas não cancela a antiga no gateway", async () => {
@@ -278,7 +278,7 @@ describe("subscribe", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "ACTIVE",
@@ -289,7 +289,7 @@ describe("subscribe", () => {
     stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "team");
+    formData.set("plan", "cresce");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
     formData.set("confirmSwitch", "true");
@@ -299,7 +299,7 @@ describe("subscribe", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
-    expect(sub?.plan).toBe("team");
+    expect(sub?.plan).toBe("cresce");
   });
 
   it("erro de configuração do Asaas não vaza para o cliente e é logado no servidor", async () => {
@@ -309,7 +309,7 @@ describe("subscribe", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cpfCnpj", "12345678909");
 
     const result = await subscribe(formData);
@@ -335,7 +335,7 @@ describe("subscribe", () => {
     );
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cpfCnpj", "12345678909");
 
     const result = await subscribe(formData);
@@ -370,7 +370,7 @@ describe("resumeCheckout", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "TRIALING",
@@ -390,7 +390,7 @@ describe("resumeCheckout", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
+        plan: "corre",
         cycle: "MONTHLY",
         source: "ASAAS",
         status: "TRIALING",
@@ -432,7 +432,7 @@ describe("subscribe com assinatura atribuída manualmente", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "unlimited",
+        plan: "escala",
         cycle: "MONTHLY",
         source: "MANUAL",
         status: "ACTIVE",
@@ -441,7 +441,7 @@ describe("subscribe com assinatura atribuída manualmente", () => {
     const fetchMock = stubAsaasFetch();
 
     const formData = new FormData();
-    formData.set("plan", "solo");
+    formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
     formData.set("confirmSwitch", "true");
@@ -453,7 +453,7 @@ describe("subscribe com assinatura atribuída manualmente", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.plan).toBe("unlimited");
+    expect(sub?.plan).toBe("escala");
     expect(sub?.source).toBe("MANUAL");
     expect(sub?.asaasSubscriptionId).toBeNull();
   });
