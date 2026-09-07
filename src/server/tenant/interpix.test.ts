@@ -110,6 +110,89 @@ describe("createInterPixSubscription", () => {
   });
 });
 
+describe("resposta com corpo que não é JSON", () => {
+  it("status 200 com corpo inválido lança InterPixApiError com code INTERNAL_ERROR e o requestId", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () =>
+          new Response("não é json", { status: 200, headers: { "X-Request-Id": "req-200" } }),
+      ),
+    );
+
+    const error = await createInterPixSubscription({
+      externalUserId: "usr_1",
+      planCode: "corre",
+      amountCents: 3450,
+      intervalMonths: 1,
+      firstDueDate: "2026-09-20",
+      debtor: { taxId: "12345678901", name: "Fulano de Tal" },
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(InterPixApiError);
+    expect(error.code).toBe("INTERNAL_ERROR");
+    expect(error.requestId).toBe("req-200");
+  });
+
+  it("status 502 com página HTML lança InterPixApiError sem deixar o SyntaxError escapar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () =>
+          new Response("<html><body>Bad Gateway</body></html>", {
+            status: 502,
+            headers: { "X-Request-Id": "req-502" },
+          }),
+      ),
+    );
+
+    const error = await createInterPixSubscription({
+      externalUserId: "usr_1",
+      planCode: "corre",
+      amountCents: 3450,
+      intervalMonths: 1,
+      firstDueDate: "2026-09-20",
+      debtor: { taxId: "12345678901", name: "Fulano de Tal" },
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(InterPixApiError);
+    expect(error).not.toBeInstanceOf(SyntaxError);
+    expect(error.code).toBe("INTERNAL_ERROR");
+    expect(error.requestId).toBe("req-502");
+  });
+
+  it("registra o X-Request-Id mesmo quando o corpo não é JSON", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () =>
+          new Response("<html><body>Bad Gateway</body></html>", {
+            status: 502,
+            headers: { "X-Request-Id": "req-502" },
+          }),
+      ),
+    );
+
+    await createInterPixSubscription({
+      externalUserId: "usr_1",
+      planCode: "corre",
+      amountCents: 3450,
+      intervalMonths: 1,
+      firstDueDate: "2026-09-20",
+      debtor: { taxId: "12345678901", name: "Fulano de Tal" },
+    }).catch(() => undefined);
+
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "interpix",
+      "/subscriptions",
+      502,
+      "req-502",
+    );
+    consoleInfoSpy.mockRestore();
+  });
+});
+
 describe("cancelInterPixSubscription", () => {
   it("trata 409 INVALID_TRANSITION como sucesso, porque cancelar não é idempotente", async () => {
     vi.stubGlobal(

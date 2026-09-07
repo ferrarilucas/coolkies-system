@@ -68,9 +68,19 @@ async function request<T>(
 
   const requestId = response.headers.get("X-Request-Id");
   const text = await response.text();
-  const parsed = text ? (JSON.parse(text) as T & ErrorBody) : null;
 
   console.info("interpix", path, response.status, requestId);
+
+  let parsed: (T & ErrorBody) | null;
+  try {
+    parsed = text ? (JSON.parse(text) as T & ErrorBody) : null;
+  } catch {
+    throw new InterPixApiError(
+      "INTERNAL_ERROR",
+      `InterPix respondeu ${response.status} com corpo que não é JSON`,
+      requestId,
+    );
+  }
 
   if (!okStatuses.includes(response.status)) {
     throw new InterPixApiError(
