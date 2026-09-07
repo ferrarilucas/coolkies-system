@@ -16,9 +16,9 @@ SELECT
     md5(random()::text || clock_timestamp()::text || m."userId"),
     m."userId",
     CASE
-        WHEN COUNT(*) = 1 THEN 'corre'
-        WHEN COUNT(*) <= 4 THEN 'cresce'
-        ELSE 'escala'
+        WHEN COUNT(*) = 1 THEN 'solo'
+        WHEN COUNT(*) <= 4 THEN 'team'
+        ELSE 'unlimited'
     END,
     'ACTIVE',
     'MANUAL',

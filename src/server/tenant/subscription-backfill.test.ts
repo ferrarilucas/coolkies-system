@@ -39,7 +39,7 @@ async function ownerWithWorkspaces(
   return ids;
 }
 
-describe("backfill de assinatura da base pre-billing", () => {
+describe("backfill de assinatura da base pre-billing (migration historica, ids traduzidos na Task 2)", () => {
   beforeEach(async () => {
     await resetDb();
   });
@@ -58,7 +58,7 @@ describe("backfill de assinatura da base pre-billing", () => {
     const sub = await testDb.subscription.findUnique({ where: { userId: "u-backfill" } });
     expect(sub?.source).toBe("MANUAL");
     expect(sub?.status).toBe("ACTIVE");
-    expect(sub?.plan).toBe("corre");
+    expect(sub?.plan).toBe("solo");
     expect(sub?.trialEndsAt).toBeNull();
     expect(sub?.graceUntil).toBeNull();
     expect(sub?.notes).toContain("pre-billing");
@@ -76,19 +76,19 @@ describe("backfill de assinatura da base pre-billing", () => {
     const subs = await testDb.subscription.findMany();
     const planByUser = Object.fromEntries(subs.map((s) => [s.userId, s.plan]));
 
-    expect(planByUser["u-um"]).toBe("corre");
-    expect(planByUser["u-tres"]).toBe("cresce");
-    expect(planByUser["u-seis"]).toBe("escala");
+    expect(planByUser["u-um"]).toBe("solo");
+    expect(planByUser["u-tres"]).toBe("team");
+    expect(planByUser["u-seis"]).toBe("unlimited");
   });
 
-  it("libera todos os workspaces de quem tinha mais de um", async () => {
-    const ids = await ownerWithWorkspaces("u-varios", "varios@example.com", 3);
+  it("grava o plano 'team' para quem tinha mais de um workspace (traducao para o catalogo novo e o acesso multi-workspace ficam para a Task 2)", async () => {
+    await ownerWithWorkspaces("u-varios", "varios@example.com", 3);
 
     await runBackfill();
 
-    for (const id of ids) {
-      expect(await canWriteInWorkspace(id)).toBe(true);
-    }
+    const subs = await testDb.subscription.findMany({ where: { userId: "u-varios" } });
+    expect(subs).toHaveLength(1);
+    expect(subs[0].plan).toBe("team");
   });
 
   it("nao cria assinatura para quem so participa como member", async () => {

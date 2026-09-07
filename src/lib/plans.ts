@@ -49,10 +49,6 @@ export function isKnownCycle(cycle: string): cycle is PlanCycle {
   return cycle === "MONTHLY" || cycle === "YEARLY";
 }
 
-export function isKnownPaymentMethod(method: string): method is PaymentMethod {
-  return method === "PIX" || method === "CARD";
-}
-
 export function monthlyPriceCents(
   plan: string,
   cycle: PlanCycle,
