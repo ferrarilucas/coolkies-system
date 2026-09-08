@@ -48,6 +48,38 @@ export async function recordAsaasSubscription(input: {
   });
 }
 
+export async function recordInterPixSubscription(input: {
+  userId: string;
+  plan: string;
+  cycle: SubscriptionCycle;
+  interpixSubscriptionId: string;
+  pixCopyPaste: string | null;
+  nextDueDate: Date;
+}): Promise<void> {
+  await db.subscription.upsert({
+    where: { userId: input.userId },
+    create: {
+      userId: input.userId,
+      plan: input.plan,
+      cycle: input.cycle,
+      provider: "INTERPIX",
+      status: "PENDING_AUTH",
+      interpixSubscriptionId: input.interpixSubscriptionId,
+      interpixPixCopyPaste: input.pixCopyPaste,
+      currentPeriodEnd: input.nextDueDate,
+    },
+    update: {
+      plan: input.plan,
+      cycle: input.cycle,
+      provider: "INTERPIX",
+      status: "PENDING_AUTH",
+      interpixSubscriptionId: input.interpixSubscriptionId,
+      interpixPixCopyPaste: input.pixCopyPaste,
+      currentPeriodEnd: input.nextDueDate,
+    },
+  });
+}
+
 const OPEN_PAYMENT_STATUSES = new Set(["PENDING", "OVERDUE"]);
 const INVOICE_RETRY_DELAY_MS = 1500;
 
@@ -77,7 +109,7 @@ export async function ensureTrialSubscription(userId: string): Promise<void> {
       data: {
         userId,
         plan: "corre",
-        source: "ASAAS",
+        provider: "INTERPIX",
         status: "TRIALING",
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
       },
@@ -96,10 +128,11 @@ export function isSubscriptionUsable(
 ): boolean {
   if (!sub) return false;
   if (sub.status === "ACTIVE") return true;
+  if (sub.status === "PAST_DUE") return true;
   if (sub.status === "TRIALING") {
     return sub.trialEndsAt === null || sub.trialEndsAt > now;
   }
-  if (sub.status === "PAST_DUE") {
+  if (sub.status === "PENDING_AUTH") {
     return sub.graceUntil !== null && sub.graceUntil > now;
   }
   return false;

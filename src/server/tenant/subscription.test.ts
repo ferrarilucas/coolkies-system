@@ -226,33 +226,48 @@ describe("workspaces ativos por plano", () => {
 });
 
 describe("assinatura utilizavel", () => {
-  const now = new Date("2026-09-01T12:00:00Z");
+  const now = new Date("2026-09-20T12:00:00Z");
 
   it("ACTIVE vale", () => {
     expect(isSubscriptionUsable({ status: "ACTIVE" } as never, now)).toBe(true);
   });
 
-  it("TRIALING dentro do prazo vale", () => {
-    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-10") } as never;
+  it("PAST_DUE vale — está em dunning e ainda pode pagar", () => {
+    expect(isSubscriptionUsable({ status: "PAST_DUE" } as never, now)).toBe(true);
+  });
+
+  it("PENDING_AUTH vale enquanto a carência da autorização durar", () => {
+    const sub = { status: "PENDING_AUTH", graceUntil: new Date("2026-09-27") } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
-  it("TRIALING vencido nao vale", () => {
-    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-08-20") } as never;
+  it("PENDING_AUTH sem carência não vale — autorizar não é pagar", () => {
+    const sub = { status: "PENDING_AUTH", graceUntil: null } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
-  it("PAST_DUE dentro da tolerancia vale", () => {
-    const sub = { status: "PAST_DUE", graceUntil: new Date("2026-09-05") } as never;
+  it("PENDING_AUTH com carência vencida não vale", () => {
+    const sub = { status: "PENDING_AUTH", graceUntil: new Date("2026-09-10") } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
+  it("SUSPENDED, CANCELED e AUTH_DENIED não valem", () => {
+    expect(isSubscriptionUsable({ status: "SUSPENDED" } as never, now)).toBe(false);
+    expect(isSubscriptionUsable({ status: "CANCELED" } as never, now)).toBe(false);
+    expect(isSubscriptionUsable({ status: "AUTH_DENIED" } as never, now)).toBe(false);
+  });
+
+  it("TRIALING vale dentro do prazo", () => {
+    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-30") } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
-  it("PAST_DUE com tolerancia vencida nao vale", () => {
-    const sub = { status: "PAST_DUE", graceUntil: new Date("2026-08-25") } as never;
+  it("TRIALING vencido não vale", () => {
+    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-01") } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
-  it("sem assinatura nao vale", () => {
+  it("sem assinatura não vale", () => {
     expect(isSubscriptionUsable(null, now)).toBe(false);
   });
 });
