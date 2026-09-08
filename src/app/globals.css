@@ -126,3 +126,32 @@
 .bn-side-menu:hover {
   opacity: 1;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}
