@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb, testDb } from "@/test/db";
 import { applyInterPixEvent } from "./interpix-events";
 
-const GRACE_DAYS = 7;
-
-async function assinante(id: string, overrides: Record<string, unknown> = {}) {
+async function subscriber(id: string, overrides: Record<string, unknown> = {}) {
   const user = await testDb.user.create({
     data: { id, name: "Dono", email: `${id}@example.com` },
   });
@@ -32,7 +30,7 @@ describe("eventos da InterPix", () => {
   });
 
   it("cycle.paid ativa o plano e limpa a carência", async () => {
-    const user = await assinante("u-paid", { graceUntil: new Date("2026-09-27T00:00:00Z") });
+    const user = await subscriber("u-paid", { graceUntil: new Date("2026-09-27T00:00:00Z") });
 
     const outcome = await applyInterPixEvent({
       type: "cycle.paid",
@@ -46,8 +44,34 @@ describe("eventos da InterPix", () => {
     expect(sub?.graceUntil).toBeNull();
   });
 
+  it("cycle.paid avança o vencimento em um mês no ciclo mensal", async () => {
+    const user = await subscriber("u-period-monthly", { cycle: "MONTHLY" });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "50",
+      data: { subscriptionId: "ipx-u-period-monthly", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.currentPeriodEnd?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
+  });
+
+  it("cycle.paid avança o vencimento em um ano no ciclo anual", async () => {
+    const user = await subscriber("u-period-yearly", { cycle: "YEARLY" });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "51",
+      data: { subscriptionId: "ipx-u-period-yearly", cycleSeq: 1, amount: "345.00", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.currentPeriodEnd?.toISOString()).toBe("2027-09-20T00:00:00.000Z");
+  });
+
   it("subscription.authorized NÃO ativa o plano — autorização não é pagamento", async () => {
-    const user = await assinante("u-auth");
+    const user = await subscriber("u-auth");
 
     await applyInterPixEvent({
       type: "subscription.authorized",
@@ -56,11 +80,25 @@ describe("eventos da InterPix", () => {
     });
 
     const sub = await subOf(user.id);
-    expect(sub?.status).not.toBe("ACTIVE");
+    expect(sub?.status).toBe("PENDING_AUTH");
+  });
+
+  it("subscription.authorized não rebaixa quem já está ativo, mas estende a carência", async () => {
+    const user = await subscriber("u-auth-active", { status: "ACTIVE" });
+
+    await applyInterPixEvent({
+      type: "subscription.authorized",
+      eventId: "60",
+      data: { subscriptionId: "ipx-u-auth-active", externalUserId: user.id },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("ACTIVE");
+    expect(sub?.graceUntil?.toISOString()).toBe("2026-09-27T00:00:00.000Z");
   });
 
   it("subscription.authorized estende a carência até o vencimento mais sete dias", async () => {
-    const user = await assinante("u-grace");
+    const user = await subscriber("u-grace");
 
     await applyInterPixEvent({
       type: "subscription.authorized",
@@ -69,13 +107,11 @@ describe("eventos da InterPix", () => {
     });
 
     const sub = await subOf(user.id);
-    const esperado = new Date("2026-09-20T00:00:00Z");
-    esperado.setDate(esperado.getDate() + GRACE_DAYS);
-    expect(sub?.graceUntil?.toISOString()).toBe(esperado.toISOString());
+    expect(sub?.graceUntil?.toISOString()).toBe("2026-09-27T00:00:00.000Z");
   });
 
   it("cycle.failed mantém o acesso — dunning não é corte", async () => {
-    const user = await assinante("u-failed", { status: "ACTIVE" });
+    const user = await subscriber("u-failed", { status: "ACTIVE" });
 
     await applyInterPixEvent({
       type: "cycle.failed",
@@ -88,7 +124,7 @@ describe("eventos da InterPix", () => {
   });
 
   it("subscription.suspended corta o acesso", async () => {
-    const user = await assinante("u-susp", { status: "PAST_DUE" });
+    const user = await subscriber("u-susp", { status: "PAST_DUE" });
 
     await applyInterPixEvent({
       type: "subscription.suspended",
@@ -100,20 +136,20 @@ describe("eventos da InterPix", () => {
   });
 
   it("evento repetido não reaplica", async () => {
-    const user = await assinante("u-dup");
-    const evento = {
+    const user = await subscriber("u-dup");
+    const event = {
       type: "cycle.paid" as const,
       eventId: "20",
       data: { subscriptionId: "ipx-u-dup", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
     };
 
-    expect(await applyInterPixEvent(evento)).toBe("applied");
-    expect(await applyInterPixEvent(evento)).toBe("duplicate");
+    expect(await applyInterPixEvent(event)).toBe("applied");
+    expect(await applyInterPixEvent(event)).toBe("duplicate");
     expect((await subOf(user.id))?.lastAppliedEventId).toBe(20n);
   });
 
   it("evento atrasado não reativa quem já cancelou", async () => {
-    const user = await assinante("u-stale");
+    const user = await subscriber("u-stale");
 
     await applyInterPixEvent({
       type: "subscription.canceled",
@@ -131,8 +167,31 @@ describe("eventos da InterPix", () => {
     expect((await subOf(user.id))?.status).toBe("CANCELED");
   });
 
+  it("entregas concorrentes não deixam o evento mais antigo vencer", async () => {
+    const user = await subscriber("u-race");
+
+    const outcomes = await Promise.all([
+      applyInterPixEvent({
+        type: "subscription.canceled",
+        eventId: "41",
+        data: { subscriptionId: "ipx-u-race", externalUserId: user.id, pendingCycleSeq: null },
+      }),
+      applyInterPixEvent({
+        type: "cycle.paid",
+        eventId: "40",
+        data: { subscriptionId: "ipx-u-race", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+      }),
+    ]);
+
+    expect(outcomes).toContain("applied");
+
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("CANCELED");
+    expect(sub?.lastAppliedEventId).toBe(41n);
+  });
+
   it("compara eventId como número: 1000 é mais novo que 999", async () => {
-    const user = await assinante("u-bigint");
+    const user = await subscriber("u-bigint");
 
     await applyInterPixEvent({
       type: "subscription.past_due",
@@ -150,7 +209,37 @@ describe("eventos da InterPix", () => {
     expect((await subOf(user.id))?.status).toBe("ACTIVE");
   });
 
-  it("assinatura desconhecida não quebra e não cria nada", async () => {
+  it("eventId não numérico é rejeitado sem lançar e sem tocar na assinatura", async () => {
+    const user = await subscriber("u-invalid");
+
+    const outcome = await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "evt_7a3f",
+      data: { subscriptionId: "ipx-u-invalid", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    expect(outcome).toBe("invalid");
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.lastAppliedEventId).toBeNull();
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
+  });
+
+  it("eventId vazio é rejeitado em vez de virar zero", async () => {
+    const user = await subscriber("u-empty");
+
+    const outcome = await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "",
+      data: { subscriptionId: "ipx-u-empty", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    expect(outcome).toBe("invalid");
+    expect((await subOf(user.id))?.lastAppliedEventId).toBeNull();
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
+  });
+
+  it("assinatura desconhecida não quebra, não cria nada e não marca o evento como processado", async () => {
     const outcome = await applyInterPixEvent({
       type: "cycle.paid",
       eventId: "40",
@@ -159,5 +248,6 @@ describe("eventos da InterPix", () => {
 
     expect(outcome).toBe("unknown");
     expect(await testDb.subscription.count()).toBe(0);
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
   });
 });
