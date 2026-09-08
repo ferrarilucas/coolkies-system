@@ -108,6 +108,52 @@ describe("POST /api/webhooks/interpix", () => {
     expect(body.outcome).toBe("unknown");
   });
 
+  it("corpo que não é JSON válido devolve 200, registra no log e não toca no banco", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const timestamp = String(Date.now());
+    const raw = "{isso não é json";
+    const signature = createHmac("sha256", SECRET).update(`${timestamp}.${raw}`).digest("hex");
+
+    const request = new NextRequest("http://localhost/api/webhooks/interpix", {
+      method: "POST",
+      body: raw,
+      headers: {
+        "content-type": "application/json",
+        "x-signature": signature,
+        "x-timestamp": timestamp,
+      },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.outcome).toBe("invalid");
+    expect(errorSpy).toHaveBeenCalled();
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
+
+    errorSpy.mockRestore();
+  });
+
+  it("payload sem os campos obrigatórios devolve 200, registra no log e não toca no banco", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await POST(
+      entrega({
+        type: "cycle.paid",
+        data: { cycleSeq: 1, amount: "1.00", paidAt: "" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.outcome).toBe("invalid");
+    expect(errorSpy).toHaveBeenCalled();
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
+
+    errorSpy.mockRestore();
+  });
+
   it("eventId fora do formato numérico devolve 200 e registra no log do servidor", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
