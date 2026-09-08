@@ -5,6 +5,7 @@ import {
   canWriteInWorkspace,
   ensureTrialSubscription,
   isSubscriptionUsable,
+  recordInterPixSubscription,
   resolveInvoiceUrl,
 } from "./subscription";
 
@@ -314,6 +315,100 @@ describe("permissao de escrita", () => {
     });
 
     expect(await canWriteInWorkspace(ws.id)).toBe(false);
+  });
+});
+
+describe("recordInterPixSubscription", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("cria assinatura nova em PENDING_AUTH com os dados do gateway", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-new", name: "Cris", email: "cris@example.com" },
+    });
+    const vencimento = new Date("2026-10-01T00:00:00Z");
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_1",
+      pixCopyPaste: "00020101...copiaecola",
+      nextDueDate: vencimento,
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.plan).toBe("cresce");
+    expect(sub?.cycle).toBe("MONTHLY");
+    expect(sub?.interpixSubscriptionId).toBe("ip_sub_1");
+    expect(sub?.interpixPixCopyPaste).toBe("00020101...copiaecola");
+    expect(sub?.currentPeriodEnd?.toISOString()).toBe(vencimento.toISOString());
+  });
+
+  it("atualiza quem nao esta ativo para PENDING_AUTH e zera a carencia anterior", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-suspended", name: "Davi", email: "davi@example.com" },
+    });
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        source: "MANUAL",
+        status: "SUSPENDED",
+        graceUntil: new Date("2026-09-01T00:00:00Z"),
+      },
+    });
+    const vencimento = new Date("2026-10-01T00:00:00Z");
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "YEARLY",
+      interpixSubscriptionId: "ip_sub_2",
+      pixCopyPaste: null,
+      nextDueDate: vencimento,
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.graceUntil).toBeNull();
+    expect(sub?.plan).toBe("cresce");
+    expect(sub?.cycle).toBe("YEARLY");
+    expect(sub?.interpixSubscriptionId).toBe("ip_sub_2");
+  });
+
+  it("atualiza quem esta ativo mantendo ACTIVE e o acesso", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-active", name: "Elis", email: "elis@example.com" },
+    });
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        source: "MANUAL",
+        status: "ACTIVE",
+        interpixSubscriptionId: "ip_sub_antiga",
+      },
+    });
+    const vencimento = new Date("2026-10-01T00:00:00Z");
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_nova",
+      pixCopyPaste: "00020101...novo",
+      nextDueDate: vencimento,
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.status).toBe("ACTIVE");
+    expect(sub?.plan).toBe("cresce");
+    expect(sub?.cycle).toBe("MONTHLY");
+    expect(sub?.interpixSubscriptionId).toBe("ip_sub_nova");
+    expect(isSubscriptionUsable(sub, new Date())).toBe(true);
   });
 });
 

@@ -56,6 +56,8 @@ export async function recordInterPixSubscription(input: {
   pixCopyPaste: string | null;
   nextDueDate: Date;
 }): Promise<void> {
+  const existing = await db.subscription.findUnique({ where: { userId: input.userId } });
+
   await db.subscription.upsert({
     where: { userId: input.userId },
     create: {
@@ -72,7 +74,8 @@ export async function recordInterPixSubscription(input: {
       plan: input.plan,
       cycle: input.cycle,
       provider: "INTERPIX",
-      status: "PENDING_AUTH",
+      status: existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING_AUTH",
+      graceUntil: existing?.status === "ACTIVE" ? existing.graceUntil : null,
       interpixSubscriptionId: input.interpixSubscriptionId,
       interpixPixCopyPaste: input.pixCopyPaste,
       currentPeriodEnd: input.nextDueDate,
