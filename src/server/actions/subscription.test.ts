@@ -337,6 +337,38 @@ describe("subscribe", () => {
     expect(sub?.plan).toBe("corre");
   });
 
+  it("carência vencida não trava a contratação: cancela o mandato antigo e cria um novo", async () => {
+    const { user } = await userWithWorkspace("u-carencia", "carencia@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-carencia-vencida",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/subscriptions/ipx-carencia-vencida/cancel",
+    );
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+    expect(sub?.plan).toBe("cresce");
+  });
+
   it("cancela o mandato pendente antigo antes de criar um novo ao trocar de plano", async () => {
     const { user } = await userWithWorkspace("u-troca", "troca@example.com");
     await testDb.subscription.create({

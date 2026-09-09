@@ -39,9 +39,11 @@ const PLAN_CHANGE_ERROR =
 
 const LIVE_STATUSES = new Set(["ACTIVE", "PAST_DUE"]);
 
-function isLiveMandate(sub: Subscription): boolean {
+function isLiveMandate(sub: Subscription, now: Date = new Date()): boolean {
   if (LIVE_STATUSES.has(sub.status)) return true;
-  return sub.status === "PENDING_AUTH" && sub.graceUntil !== null;
+  return (
+    sub.status === "PENDING_AUTH" && sub.graceUntil !== null && sub.graceUntil > now
+  );
 }
 
 function firstDueDate(trialEndsAt: Date | null, now: Date = new Date()): string {
