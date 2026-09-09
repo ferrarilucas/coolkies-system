@@ -154,6 +154,9 @@ model Subscription {
   authorizedAt     DateTime?
   currentPeriodEnd DateTime?
 
+  pendingCycleSeq   Int?
+  lastFailureReason String?
+
   notes String?
 
   createdAt DateTime @default(now())

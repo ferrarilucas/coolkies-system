@@ -52,6 +52,8 @@ export async function recordInterPixSubscription(input: {
       interpixSubscriptionId: input.interpixSubscriptionId,
       interpixPixCopyPaste: input.pixCopyPaste,
       currentPeriodEnd: input.nextDueDate,
+      pendingCycleSeq: null,
+      lastFailureReason: null,
     },
   });
 }
@@ -132,6 +134,8 @@ export type WorkspacePlanState = {
   status: SubscriptionStatus | "NONE";
   isOverLimit: boolean;
   trialEndsAt: Date | null;
+  hasAuthorized: boolean;
+  lastFailureReason: string | null;
 };
 
 export async function getWorkspacePlanState(workspaceId: string): Promise<WorkspacePlanState> {
@@ -139,7 +143,15 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
     where: { workspaceId, role: "OWNER" },
     select: { userId: true },
   });
-  if (!owner) return { status: "NONE", isOverLimit: false, trialEndsAt: null };
+  if (!owner) {
+    return {
+      status: "NONE",
+      isOverLimit: false,
+      trialEndsAt: null,
+      hasAuthorized: false,
+      lastFailureReason: null,
+    };
+  }
 
   const sub = await getSubscription(owner.userId);
   const usable = isSubscriptionUsable(sub);
@@ -149,5 +161,7 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
     status: sub?.status ?? "NONE",
     isOverLimit: usable && !active.has(workspaceId),
     trialEndsAt: sub?.trialEndsAt ?? null,
+    hasAuthorized: sub?.authorizedAt !== null && sub?.authorizedAt !== undefined,
+    lastFailureReason: sub?.lastFailureReason ?? null,
   };
 }

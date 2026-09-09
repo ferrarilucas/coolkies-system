@@ -275,6 +275,52 @@ describe("eventos da InterPix", () => {
     expect(sub?.status).toBe("ACTIVE");
   });
 
+  it("cycle.failed grava o motivo, em vez de descartá-lo", async () => {
+    const user = await subscriber("u-failed-reason", { status: "ACTIVE" });
+
+    await applyInterPixEvent({
+      type: "cycle.failed",
+      eventId: "17",
+      data: { subscriptionId: "ipx-u-failed-reason", cycleSeq: 2, reason: "saldo insuficiente" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.lastFailureReason).toBe("saldo insuficiente");
+  });
+
+  it("cycle.failed com motivo nulo (falha real de débito, sem texto do Inter) grava null explicitamente", async () => {
+    const user = await subscriber("u-failed-null-reason", {
+      status: "ACTIVE",
+      lastFailureReason: "motivo anterior",
+    });
+
+    await applyInterPixEvent({
+      type: "cycle.failed",
+      eventId: "18",
+      data: { subscriptionId: "ipx-u-failed-null-reason", cycleSeq: 3, reason: null },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.lastFailureReason).toBeNull();
+  });
+
+  it("cycle.failed distingue falha de infraestrutura, para diferenciar de inadimplência na mensagem ao usuário", async () => {
+    const user = await subscriber("u-failed-infra", { status: "ACTIVE" });
+
+    await applyInterPixEvent({
+      type: "cycle.failed",
+      eventId: "19",
+      data: {
+        subscriptionId: "ipx-u-failed-infra",
+        cycleSeq: 2,
+        reason: "JANELA_DE_ENVIO_EXPIRADA",
+      },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.lastFailureReason).toBe("JANELA_DE_ENVIO_EXPIRADA");
+  });
+
   it("subscription.past_due vindo de ACTIVE é aplicado — quem pagava deixou de pagar", async () => {
     const user = await subscriber("u-past-due-from-active", { status: "ACTIVE" });
 
@@ -407,6 +453,34 @@ describe("eventos da InterPix", () => {
     const finalSub = await subOf(user.id);
     expect(finalSub?.status).toBe("SUSPENDED");
     expect(finalSub?.lastAppliedEventId).toBe(60n);
+  });
+
+  it("subscription.canceled grava o pendingCycleSeq, em vez de descartá-lo, para avisar de cobrança já a caminho", async () => {
+    const user = await subscriber("u-canceled-pending");
+
+    await applyInterPixEvent({
+      type: "subscription.canceled",
+      eventId: "31",
+      data: { subscriptionId: "ipx-u-canceled-pending", externalUserId: user.id, pendingCycleSeq: 5 },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("CANCELED");
+    expect(sub?.pendingCycleSeq).toBe(5);
+  });
+
+  it("subscription.canceled sem pendingCycleSeq grava null, sem inventar cobrança pendente", async () => {
+    const user = await subscriber("u-canceled-sem-pending");
+
+    await applyInterPixEvent({
+      type: "subscription.canceled",
+      eventId: "32",
+      data: { subscriptionId: "ipx-u-canceled-sem-pending", externalUserId: user.id, pendingCycleSeq: null },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("CANCELED");
+    expect(sub?.pendingCycleSeq).toBeNull();
   });
 
   it("evento atrasado não reativa quem já cancelou", async () => {

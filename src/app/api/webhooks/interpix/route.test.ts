@@ -86,13 +86,36 @@ describe("POST /api/webhooks/interpix", () => {
     expect(response.status).toBe(401);
   });
 
-  it("segredo ausente na configuração devolve 401, sem processar", async () => {
+  it("segredo ausente na configuração devolve 401, sem processar, e registra erro explícito de configuração", async () => {
     vi.stubEnv("INTERPIX_WEBHOOK_SECRET", "");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const response = await POST(
       entrega({ type: "cycle.paid", eventId: "53", data: { subscriptionId: "x", cycleSeq: 1, amount: "1.00", paidAt: "" } }),
     );
 
     expect(response.status).toBe(401);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("INTERPIX_WEBHOOK_SECRET"));
+    const loggedMessage = errorSpy.mock.calls[0]?.[0] as string;
+    expect(loggedMessage).not.toContain(SECRET);
+
+    errorSpy.mockRestore();
+  });
+
+  it("assinatura errada com o segredo configurado devolve 401 sem o log de configuração ausente", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await POST(
+      entrega(
+        { type: "cycle.paid", eventId: "56", data: { subscriptionId: "x", cycleSeq: 1, amount: "1.00", paidAt: "" } },
+        { secret: "errado" },
+      ),
+    );
+
+    expect(response.status).toBe(401);
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 
   it("assinatura de subscription desconhecida devolve não-2xx para habilitar reentrega", async () => {

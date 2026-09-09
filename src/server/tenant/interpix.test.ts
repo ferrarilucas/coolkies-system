@@ -205,7 +205,7 @@ describe("cancelInterPixSubscription", () => {
       ),
     );
 
-    await expect(cancelInterPixSubscription("sub-1")).resolves.toBeUndefined();
+    await expect(cancelInterPixSubscription("sub-1")).resolves.toEqual({ pendingCycle: null });
   });
 
   it("outros erros continuam sendo erro", async () => {
@@ -217,5 +217,31 @@ describe("cancelInterPixSubscription", () => {
     );
 
     await expect(cancelInterPixSubscription("sub-1")).rejects.toBeInstanceOf(InterPixApiError);
+  });
+
+  it("devolve o pendingCycle quando o cancelamento reporta uma cobrança já a caminho", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({ pendingCycle: { cycleSeq: 3, dueDate: "2026-09-15" } }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(cancelInterPixSubscription("sub-1")).resolves.toEqual({
+      pendingCycle: { cycleSeq: 3, dueDate: "2026-09-15" },
+    });
+  });
+
+  it("sem pendingCycle na resposta, devolve null em vez de undefined", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => new Response(JSON.stringify({}), { status: 200 })),
+    );
+
+    await expect(cancelInterPixSubscription("sub-1")).resolves.toEqual({ pendingCycle: null });
   });
 });

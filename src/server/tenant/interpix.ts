@@ -127,6 +127,24 @@ export async function getInterPixSubscription(id: string): Promise<InterPixSubsc
   return body;
 }
 
-export async function cancelInterPixSubscription(id: string): Promise<void> {
-  await request(`/subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST" }, [200, 409]);
+export type InterPixPendingCycle = {
+  cycleSeq: number;
+  dueDate: string;
+};
+
+export type CancelSubscriptionResult = {
+  pendingCycle: InterPixPendingCycle | null;
+};
+
+export async function cancelInterPixSubscription(
+  id: string,
+): Promise<CancelSubscriptionResult> {
+  const { body, status } = await request<{ pendingCycle?: InterPixPendingCycle | null }>(
+    `/subscriptions/${encodeURIComponent(id)}/cancel`,
+    { method: "POST" },
+    [200, 409],
+  );
+
+  if (status === 409) return { pendingCycle: null };
+  return { pendingCycle: body?.pendingCycle ?? null };
 }

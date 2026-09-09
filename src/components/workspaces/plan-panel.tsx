@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { checkoutViewState } from "@/lib/checkout-state";
+import { isCurrentPlanCard } from "@/lib/plan-card-state";
 import {
   PLANS,
   monthlyPriceCents,
@@ -120,9 +121,11 @@ function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
 function PixCheckoutContent({
   pixCopyPaste,
   nextDueDate,
+  previousPendingCharge,
 }: {
   pixCopyPaste: string;
   nextDueDate: string | null;
+  previousPendingCharge?: { cycleSeq: number; dueDate: string } | null;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -142,6 +145,17 @@ function PixCheckoutContent({
 
   return (
     <div className="space-y-4">
+      {previousPendingCharge && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <p className="text-warning">
+            Uma cobrança da sua assinatura anterior já foi enviada ao banco e
+            será debitada em {formatDueDate(previousPendingCharge.dueDate)}
+            mesmo com o cancelamento — regra do Banco Central, cancelamento não
+            impede a cobrança já em andamento.
+          </p>
+        </div>
+      )}
       <p className="text-sm text-muted-foreground">
         Abra o app do seu banco, escolha pagar com Pix e escaneie o QR ou cole o
         código abaixo. Isso autoriza um débito recorrente — você não está
@@ -352,8 +366,8 @@ export function PlanPanel({
                 {checkoutState.kind === "expired" && (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      A primeira cobrança deste plano não foi debitada dentro do prazo
-                      e o acesso foi encerrado. Gere uma nova autorização para
+                      O prazo desta autorização passou sem confirmação de pagamento e
+                      o acesso foi encerrado. Gere uma nova autorização para
                       recomeçar.
                     </p>
                     <Button
@@ -403,11 +417,15 @@ export function PlanPanel({
                 checkoutState.kind === "expired" &&
                 currentPlan === plan.id &&
                 currentCycle === cycle;
-              const isCurrent =
-                hasSubscriptionId &&
-                currentPlan === plan.id &&
-                currentCycle === cycle &&
-                !isExpiredThisPlan;
+              const isCurrent = isCurrentPlanCard({
+                hasSubscriptionId,
+                currentPlan,
+                currentCycle,
+                planId: plan.id,
+                cycle,
+                status,
+                isExpiredThisPlan,
+              });
               const isPendingThisPlan =
                 checkoutState.kind !== "none" &&
                 checkoutState.kind !== "expired" &&
@@ -483,6 +501,7 @@ export function PlanPanel({
             <PixCheckoutContent
               pixCopyPaste={pixResult.pixCopyPaste}
               nextDueDate={pixResult.nextDueDate}
+              previousPendingCharge={pixResult.previousPendingCharge}
             />
           ) : (
             <form action={onSubscribe} className="space-y-4">

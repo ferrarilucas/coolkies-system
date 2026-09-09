@@ -15,6 +15,8 @@ export function AppShell({
   planStatus,
   isOverLimit,
   isReadOnly,
+  hasAuthorized,
+  lastFailureReason,
   trial,
   children,
 }: {
@@ -24,6 +26,8 @@ export function AppShell({
   planStatus: string;
   isOverLimit: boolean;
   isReadOnly: boolean;
+  hasAuthorized: boolean;
+  lastFailureReason: string | null;
   trial: TrialState | null;
   children: ReactNode;
 }) {
@@ -53,6 +57,8 @@ export function AppShell({
           isReadOnly={isReadOnly}
           workspaceName={active?.name ?? "este workspace"}
           canManageBilling={canManageBilling}
+          hasAuthorized={hasAuthorized}
+          lastFailureReason={lastFailureReason}
         />
         <MainArea>{children}</MainArea>
       </div>

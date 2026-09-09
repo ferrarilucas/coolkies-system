@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { activeBannerText, readOnlyBannerText } from "@/lib/plan-banner-copy";
 
 export function PlanBanner({
   status,
@@ -7,12 +8,16 @@ export function PlanBanner({
   isReadOnly,
   workspaceName,
   canManageBilling,
+  hasAuthorized,
+  lastFailureReason,
 }: {
   status: string;
   isOverLimit: boolean;
   isReadOnly: boolean;
   workspaceName: string;
   canManageBilling: boolean;
+  hasAuthorized: boolean;
+  lastFailureReason: string | null;
 }) {
   if (isOverLimit) {
     return (
@@ -40,16 +45,7 @@ export function PlanBanner({
   }
 
   if (isReadOnly) {
-    const headline =
-      status === "PAST_DUE"
-        ? "Pagamento pendente — o cadastro está em modo somente leitura."
-        : status === "TRIALING"
-          ? "O teste terminou — o cadastro está em modo somente leitura."
-          : status === "NONE"
-            ? "Nenhum plano ativo — o cadastro está em modo somente leitura."
-            : "Assinatura cancelada — o cadastro está em modo somente leitura.";
-    const cta =
-      status === "PAST_DUE" ? "Regularizar assinatura" : "Assinar um plano";
+    const { headline, cta } = readOnlyBannerText(status, hasAuthorized);
 
     return (
       <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
@@ -62,7 +58,7 @@ export function PlanBanner({
               registrar vendas ou alterar dados até que{" "}
               {canManageBilling ? "você regularize" : "o dono da conta regularize"}.
             </p>
-            {canManageBilling && (
+            {canManageBilling && cta && (
               <Link
                 href="/workspaces/plan"
                 className="mt-1 inline-block font-medium text-primary underline underline-offset-4"
@@ -76,31 +72,26 @@ export function PlanBanner({
     );
   }
 
-  if (status === "PAST_DUE") {
-    return (
-      <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
-        <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-warning">Pagamento pendente.</p>
-            <p className="text-muted-foreground">
-              {workspaceName} continua com o cadastro liberado durante a
-              carência, mas o pagamento precisa ser regularizado antes que ela
-              termine para não perder o acesso de escrita.
-            </p>
-            {canManageBilling && (
-              <Link
-                href="/workspaces/plan"
-                className="mt-1 inline-block font-medium text-primary underline underline-offset-4"
-              >
-                Regularizar assinatura
-              </Link>
-            )}
-          </div>
+  const active = activeBannerText(status, hasAuthorized, lastFailureReason);
+  if (!active) return null;
+
+  return (
+    <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
+      <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+        <div className="min-w-0 flex-1 text-sm">
+          <p className="font-medium text-warning">{active.headline}</p>
+          {active.body && <p className="text-muted-foreground">{active.body}</p>}
+          {canManageBilling && active.cta && (
+            <Link
+              href="/workspaces/plan"
+              className="mt-1 inline-block font-medium text-primary underline underline-offset-4"
+            >
+              {active.cta}
+            </Link>
+          )}
         </div>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }

@@ -68,6 +68,31 @@ function stubInterPixFetchWithCancel() {
   return fetchMock;
 }
 
+function stubInterPixFetchWithCancelPendingCycle() {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes("/cancel")) {
+      return new Response(
+        JSON.stringify({ pendingCycle: { cycleSeq: 4, dueDate: "2026-09-18" } }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: "ipx-novo",
+        status: "PENDING_AUTH",
+        externalUserId: "usr",
+        planCode: "corre",
+        amount: "34.50",
+        nextDueDate: "2026-09-20",
+        authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
+      }),
+      { status: 201 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function stubInterPixFetchWithoutCopyPaste() {
   const fetchMock = vi.fn().mockImplementation(
     async () =>
@@ -369,6 +394,58 @@ describe("subscribe", () => {
     expect(sub?.plan).toBe("cresce");
   });
 
+  it("avisa sobre a cobrança do mandato antigo já a caminho quando o cancelamento a reporta", async () => {
+    const { user } = await userWithWorkspace("u-pending-cycle", "pendingcycle@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo-com-cobranca",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    stubInterPixFetchWithCancelPendingCycle();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(result.data?.previousPendingCharge).toEqual({ cycleSeq: 4, dueDate: "2026-09-18" });
+  });
+
+  it("sem cobrança pendente reportada no cancelamento, não inventa aviso", async () => {
+    const { user } = await userWithWorkspace("u-sem-pending-cycle", "sempendingcycle@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo-sem-cobranca",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(result.data?.previousPendingCharge).toBeNull();
+  });
+
   it("cancela o mandato pendente antigo antes de criar um novo ao trocar de plano", async () => {
     const { user } = await userWithWorkspace("u-troca", "troca@example.com");
     await testDb.subscription.create({
@@ -625,7 +702,7 @@ describe("subscribe", () => {
     errorSpy.mockRestore();
   });
 
-  it("repassa a mensagem de validação da InterPix ao usuário", async () => {
+  it("não repassa a mensagem crua do gateway ao usuário, para não vazar o CPF que ela pode ecoar", async () => {
     await userWithWorkspace("u-validacao-gateway", "validacaogateway@example.com");
     stubInterPixFetchWithValidationError();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -637,7 +714,8 @@ describe("subscribe", () => {
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
-    expect(result.error).toBe("CPF inválido para a InterPix");
+    expect(result.error).not.toBe("CPF inválido para a InterPix");
+    expect(result.error).not.toContain("12345678909");
     expect(errorSpy).toHaveBeenCalled();
 
     errorSpy.mockRestore();

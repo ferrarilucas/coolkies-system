@@ -8,7 +8,16 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-signature") ?? "";
   const timestamp = request.headers.get("x-timestamp") ?? "";
 
-  if (!secret || !isValidInterPixSignature({ raw, timestamp, signature, secret })) {
+  if (!secret) {
+    console.error(
+      "webhook InterPix: INTERPIX_WEBHOOK_SECRET não está configurada — isto é um " +
+        "problema de configuração do servidor, não uma requisição inválida. " +
+        "Nenhuma entrega da InterPix será aceita até que o segredo seja definido.",
+    );
+    return NextResponse.json({ error: "assinatura inválida" }, { status: 401 });
+  }
+
+  if (!isValidInterPixSignature({ raw, timestamp, signature, secret })) {
     return NextResponse.json({ error: "assinatura inválida" }, { status: 401 });
   }
 

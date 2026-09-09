@@ -24,12 +24,21 @@ import {
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
-export type CheckoutResult = { pixCopyPaste: string; nextDueDate: string };
+export type PendingChargeWarning = { cycleSeq: number; dueDate: string };
+
+export type CheckoutResult = {
+  pixCopyPaste: string;
+  nextDueDate: string;
+  previousPendingCharge: PendingChargeWarning | null;
+};
 
 const CHARGE_LEAD_DAYS = 3;
 
 const GENERIC_ERROR =
   "Não foi possível concluir a contratação agora. Tente novamente em instantes.";
+
+const VALIDATION_ERROR =
+  "Não foi possível confirmar os dados enviados. Confira o CPF/CNPJ e tente novamente.";
 
 const MANUAL_ERROR =
   "Sua assinatura foi combinada manualmente com a nossa equipe e não pode ser alterada por aqui. Fale com a gente para mudar de plano.";
@@ -75,6 +84,7 @@ export async function subscribe(
   }
 
   let remote: InterPixSubscription | undefined;
+  let previousPendingCharge: PendingChargeWarning | null = null;
 
   try {
     const { userId } = await getWorkspaceContext();
@@ -106,7 +116,13 @@ export async function subscribe(
 
     if (existing?.interpixSubscriptionId) {
       try {
-        await cancelInterPixSubscription(existing.interpixSubscriptionId);
+        const cancelResult = await cancelInterPixSubscription(existing.interpixSubscriptionId);
+        if (cancelResult.pendingCycle) {
+          previousPendingCharge = {
+            cycleSeq: cancelResult.pendingCycle.cycleSeq,
+            dueDate: cancelResult.pendingCycle.dueDate,
+          };
+        }
       } catch (e) {
         console.error(
           "subscribe: falha ao cancelar mandato antigo",
@@ -152,11 +168,14 @@ export async function subscribe(
       return { ok: false, error: GENERIC_ERROR };
     }
 
-    return { ok: true, data: { pixCopyPaste, nextDueDate: remote.nextDueDate } };
+    return {
+      ok: true,
+      data: { pixCopyPaste, nextDueDate: remote.nextDueDate, previousPendingCharge },
+    };
   } catch (e) {
     if (e instanceof InterPixApiError && e.code === "BAD_REQUEST") {
       console.error("subscribe: InterPix rejeitou os dados enviados", e.code, e.requestId);
-      return { ok: false, error: e.message };
+      return { ok: false, error: VALIDATION_ERROR };
     }
     console.error("subscribe: falha ao contratar", remote?.id ?? null, e);
     return { ok: false, error: GENERIC_ERROR };

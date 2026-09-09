@@ -67,7 +67,7 @@ function changesFor(
           : {}),
       };
     case "cycle.failed":
-      return {};
+      return { lastFailureReason: event.data.reason };
     case "subscription.authorized": {
       const statusChange: Prisma.SubscriptionUpdateManyMutationInput =
         current.status === "ACTIVE" ? {} : { status: "PENDING_AUTH" };
@@ -93,7 +93,7 @@ function changesFor(
     case "subscription.suspended":
       return { status: "SUSPENDED" };
     case "subscription.canceled":
-      return { status: "CANCELED" };
+      return { status: "CANCELED", pendingCycleSeq: event.data.pendingCycleSeq };
   }
 }
 
