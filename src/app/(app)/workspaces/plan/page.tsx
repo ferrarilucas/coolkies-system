@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PlanPanel } from "@/components/workspaces/plan-panel";
+import { isPendingChargeWarningActive } from "@/lib/pending-charge";
 import { isTrialExpired } from "@/lib/trial";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import {
@@ -36,6 +37,11 @@ export default async function PlanPage() {
         authorizedAt={sub?.authorizedAt ? sub.authorizedAt.toISOString() : null}
         graceUntil={sub?.graceUntil ? sub.graceUntil.toISOString() : null}
         pendingCycleSeq={sub?.pendingCycleSeq ?? null}
+        pendingChargeDueAt={
+          sub?.pendingChargeDueAt && isPendingChargeWarningActive(sub.pendingChargeDueAt)
+            ? sub.pendingChargeDueAt.toISOString().slice(0, 10)
+            : null
+        }
       />
     </div>
   );

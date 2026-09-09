@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { isPeriodPaid } from "@/lib/period";
 import { resetDb, testDb } from "@/test/db";
 import { applyInterPixEvent } from "./interpix-events";
+import { isSubscriptionUsable } from "./subscription";
 
 async function subscriber(id: string, overrides: Record<string, unknown> = {}) {
   const user = await testDb.user.create({
@@ -115,6 +117,50 @@ describe("eventos da InterPix", () => {
 
     const sub = await subOf(user.id);
     expect(sub?.currentPeriodEnd?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
+  });
+
+  it("cycle.paid grava paidThroughAt com o mesmo valor do novo currentPeriodEnd — a cobertura é exata, sem aritmética de fuso", async () => {
+    const user = await subscriber("u-paid-through", { cycle: "MONTHLY" });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "60",
+      data: { subscriptionId: "ipx-u-paid-through", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.paidThroughAt?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
+    expect(sub?.paidThroughAt?.toISOString()).toBe(sub?.currentPeriodEnd?.toISOString());
+  });
+
+  it("pagamento liquidado horas antes do vencimento cobre o período — este é o caso que falhava com a comparação por aritmética de fuso", async () => {
+    const user = await subscriber("u-paid-hours-before", { cycle: "MONTHLY" });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "61",
+      data: {
+        subscriptionId: "ipx-u-paid-hours-before",
+        cycleSeq: 1,
+        amount: "34.50",
+        paidAt: "2026-09-19T09:00:00.000Z",
+      },
+    });
+
+    await applyInterPixEvent({
+      type: "subscription.canceled",
+      eventId: "62",
+      data: {
+        subscriptionId: "ipx-u-paid-hours-before",
+        externalUserId: user.id,
+        pendingCycleSeq: null,
+      },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("CANCELED");
+    expect(sub && isPeriodPaid(sub)).toBe(true);
+    expect(isSubscriptionUsable(sub, new Date("2026-10-01T00:00:00Z"))).toBe(true);
   });
 
   it("cycle.paid limpa o pendingCycleSeq quando o ciclo pago é o ciclo que estava pendente", async () => {

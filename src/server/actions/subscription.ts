@@ -14,7 +14,7 @@ import {
   getBillingUser,
   getSubscription,
   recordInterPixSubscription,
-  recordPendingCycleWarning,
+  recordPendingChargeWarning,
 } from "@/server/tenant/subscription";
 import {
   cancelInterPixSubscription,
@@ -123,7 +123,10 @@ export async function subscribe(
             cycleSeq: cancelResult.pendingCycle.cycleSeq,
             dueDate: cancelResult.pendingCycle.dueDate,
           };
-          await recordPendingCycleWarning(userId, cancelResult.pendingCycle.cycleSeq);
+          await recordPendingChargeWarning(
+            userId,
+            new Date(`${cancelResult.pendingCycle.dueDate}T00:00:00.000Z`),
+          );
         }
       } catch (e) {
         if (e instanceof InterPixApiError) {

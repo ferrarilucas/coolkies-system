@@ -465,7 +465,7 @@ describe("subscribe", () => {
     expect(result.ok).toBe(true);
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.pendingCycleSeq).toBe(4);
+    expect(sub?.pendingChargeDueAt?.toISOString()).toBe("2026-09-18T00:00:00.000Z");
   });
 
   it("sem cobrança pendente reportada no cancelamento, não inventa aviso", async () => {
@@ -619,7 +619,7 @@ describe("subscribe", () => {
     expect(fetchMock.mock.calls.length).toBe(2);
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.pendingCycleSeq).toBe(7);
+    expect(sub?.pendingChargeDueAt?.toISOString()).toBe("2026-09-22T00:00:00.000Z");
 
     errorSpy.mockRestore();
   });

@@ -24,11 +24,20 @@ export function advancePeriod(periodEnd: Date, cycle: Cycle): Date {
 }
 
 export function isPeriodPaid(sub: {
-  lastPaidAt: Date | null;
+  paidThroughAt: Date | null;
   currentPeriodEnd: Date | null;
-  cycle: Cycle;
 }): boolean {
-  if (sub.lastPaidAt === null || sub.currentPeriodEnd === null) return false;
-  const coveredUntil = advancePeriod(sub.lastPaidAt, sub.cycle);
-  return sub.currentPeriodEnd <= coveredUntil;
+  if (sub.paidThroughAt === null || sub.currentPeriodEnd === null) return false;
+  return sub.currentPeriodEnd <= sub.paidThroughAt;
+}
+
+export function hasPaidAccess(sub: {
+  status: string;
+  lastPaidAt: Date | null;
+  paidThroughAt: Date | null;
+  currentPeriodEnd: Date | null;
+}): boolean {
+  if (sub.status === "PAST_DUE") return sub.lastPaidAt !== null;
+  if (sub.status === "CANCELED") return isPeriodPaid(sub);
+  return false;
 }

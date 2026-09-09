@@ -40,7 +40,12 @@ async function main() {
         remoteNextDueDate: remote.nextDueDate,
       });
 
-      const data: { status?: SubscriptionStatus; currentPeriodEnd?: Date; lastPaidAt?: Date } = {};
+      const data: {
+        status?: SubscriptionStatus;
+        currentPeriodEnd?: Date;
+        lastPaidAt?: Date;
+        paidThroughAt?: Date;
+      } = {};
 
       if (statusDecision.action === "apply") {
         data.status = statusDecision.status;
@@ -51,6 +56,10 @@ async function main() {
 
       if (periodDecision.action === "apply") {
         data.currentPeriodEnd = periodDecision.currentPeriodEnd;
+        const effectiveStatus = data.status ?? sub.status;
+        if (effectiveStatus === "ACTIVE") {
+          data.paidThroughAt = periodDecision.currentPeriodEnd;
+        }
       }
 
       if (Object.keys(data).length > 0) {

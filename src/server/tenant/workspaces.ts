@@ -3,7 +3,7 @@ import type { MemberRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
-import { isPeriodPaid } from "@/lib/period";
+import { hasPaidAccess } from "@/lib/period";
 import { normalizeName } from "@/lib/text";
 import { ensureTrialSubscription, getSubscription } from "./subscription";
 
@@ -123,7 +123,7 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
   const limit = effectiveLimit(
     sub?.plan ?? "corre",
     sub?.status ?? "TRIALING",
-    sub !== null && isPeriodPaid(sub),
+    sub !== null && hasPaidAccess(sub),
   );
   if (owned + 1 > limit) {
     throw new Error(

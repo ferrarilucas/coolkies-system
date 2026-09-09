@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
-import { isPeriodPaid } from "@/lib/period";
+import { hasPaidAccess } from "@/lib/period";
 
 const TRIAL_DAYS = 14;
 
@@ -20,13 +20,13 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
   return db.member.count({ where: { userId, role: "OWNER" } });
 }
 
-export async function recordPendingCycleWarning(
+export async function recordPendingChargeWarning(
   userId: string,
-  pendingCycleSeq: number,
+  dueAt: Date,
 ): Promise<void> {
   await db.subscription.updateMany({
     where: { userId },
-    data: { pendingCycleSeq },
+    data: { pendingChargeDueAt: dueAt },
   });
 }
 
@@ -96,7 +96,7 @@ export function isSubscriptionUsable(
 ): boolean {
   if (!sub) return false;
   if (sub.status === "ACTIVE") return true;
-  if (sub.status === "PAST_DUE") return sub.lastPaidAt !== null;
+  if (sub.status === "PAST_DUE") return hasPaidAccess(sub);
   if (sub.status === "TRIALING") {
     return sub.trialEndsAt === null || sub.trialEndsAt > now;
   }
@@ -106,7 +106,7 @@ export function isSubscriptionUsable(
     return graceValid || trialActive;
   }
   if (sub.status === "CANCELED") {
-    if (!isPeriodPaid(sub)) return false;
+    if (!hasPaidAccess(sub)) return false;
     return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }
   return false;
@@ -125,7 +125,7 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
   const limit = effectiveLimit(
     sub?.plan ?? "corre",
     sub?.status ?? "TRIALING",
-    sub !== null && isPeriodPaid(sub),
+    sub !== null && hasPaidAccess(sub),
   );
   const allowed = owned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
   return new Set(allowed.map((m) => m.workspaceId));

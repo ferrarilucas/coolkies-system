@@ -52,15 +52,22 @@ describe("conciliação InterPix — decisão de status", () => {
     expect(decision).toMatchObject({ action: "apply", status: "ACTIVE" });
   });
 
-  it("promoção para ACTIVE a partir de SUSPENDED é aplicada — recuperação legítima", () => {
+  it("promoção para ACTIVE a partir de SUSPENDED é aplicada — recuperação legítima, mas sem gravar evidência de pagamento", () => {
     const decision = decideReconcile({ local: "SUSPENDED", remote: "ACTIVE" });
     expect(decision).toMatchObject({ action: "apply", status: "ACTIVE" });
+    expect((decision as { lastPaidAt?: Date }).lastPaidAt).toBeUndefined();
   });
 
-  it("promoção para ACTIVE grava a evidência de pagamento, coerente com o período reconhecido", () => {
+  it("promoção para ACTIVE grava a evidência de pagamento apenas quando vem de PAST_DUE — suspenso é alcançável de quem nunca pagou", () => {
     const now = new Date("2026-09-20T12:00:00Z");
     const decision = decideReconcile({ local: "PAST_DUE", remote: "ACTIVE", now });
     expect(decision).toMatchObject({ action: "apply", status: "ACTIVE", lastPaidAt: now });
+  });
+
+  it("promoção para ACTIVE a partir de SUSPENDED não grava evidência de pagamento, mesmo com now informado", () => {
+    const now = new Date("2026-09-20T12:00:00Z");
+    const decision = decideReconcile({ local: "SUSPENDED", remote: "ACTIVE", now });
+    expect((decision as { lastPaidAt?: Date }).lastPaidAt).toBeUndefined();
   });
 
   it("PENDING_AUTH local com ACTIVE remoto apenas relata — ambiguidade não resolvida", () => {

@@ -154,9 +154,11 @@ model Subscription {
   authorizedAt     DateTime?
   currentPeriodEnd DateTime?
 
-  pendingCycleSeq   Int?
-  lastFailureReason String?
-  lastPaidAt        DateTime?
+  pendingCycleSeq     Int?
+  pendingChargeDueAt  DateTime?
+  lastFailureReason   String?
+  lastPaidAt          DateTime?
+  paidThroughAt       DateTime?
 
   notes String?
 

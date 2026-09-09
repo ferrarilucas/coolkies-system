@@ -1,4 +1,7 @@
+import type { Subscription } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
+import { hasPaidAccess, isPeriodPaid } from "@/lib/period";
+import { effectiveLimit } from "@/lib/plans";
 import { resetDb, testDb } from "@/test/db";
 import { applyInterPixEvent } from "./interpix-events";
 import {
@@ -8,6 +11,34 @@ import {
   isSubscriptionUsable,
   recordInterPixSubscription,
 } from "./subscription";
+
+function buildSubscription(overrides: Partial<Subscription>): Subscription {
+  return {
+    id: "sub-test",
+    userId: "user-test",
+    plan: "corre",
+    status: "TRIALING",
+    provider: "INTERPIX",
+    cycle: "MONTHLY",
+    interpixSubscriptionId: null,
+    interpixPixCopyPaste: null,
+    lastAppliedEventId: null,
+    trialEndsAt: null,
+    graceUntil: null,
+    graceGrantedAt: null,
+    authorizedAt: null,
+    currentPeriodEnd: null,
+    pendingCycleSeq: null,
+    pendingChargeDueAt: null,
+    lastFailureReason: null,
+    lastPaidAt: null,
+    paidThroughAt: null,
+    notes: null,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  };
+}
 
 describe("model de assinatura", () => {
   beforeEach(async () => {
@@ -157,125 +188,184 @@ describe("assinatura utilizavel", () => {
   const now = new Date("2026-09-20T12:00:00Z");
 
   it("ACTIVE vale", () => {
-    expect(isSubscriptionUsable({ status: "ACTIVE" } as never, now)).toBe(true);
+    expect(isSubscriptionUsable(buildSubscription({ status: "ACTIVE" }), now)).toBe(true);
   });
 
-  it("PAST_DUE com pagamento comprovado vale — está em dunning e ainda pode pagar", () => {
-    const sub = { status: "PAST_DUE", lastPaidAt: new Date("2026-08-20") } as never;
+  it("PAST_DUE com pagamento alguma vez vale — está em dunning e ainda pode pagar", () => {
+    const sub = buildSubscription({ status: "PAST_DUE", lastPaidAt: new Date("2026-08-20") });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
   it("PAST_DUE sem pagamento comprovado não vale", () => {
-    const sub = { status: "PAST_DUE", lastPaidAt: null } as never;
+    const sub = buildSubscription({ status: "PAST_DUE", lastPaidAt: null });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
+  it("PAST_DUE não exige o período em aberto coberto — o status já significa período não pago", () => {
+    const sub = buildSubscription({
+      status: "PAST_DUE",
+      lastPaidAt: new Date("2026-01-10"),
+      paidThroughAt: new Date("2026-02-10"),
+      currentPeriodEnd: new Date("2026-09-30"),
+    });
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
   it("PENDING_AUTH vale enquanto a carência da autorização durar", () => {
-    const sub = { status: "PENDING_AUTH", graceUntil: new Date("2026-09-27") } as never;
+    const sub = buildSubscription({ status: "PENDING_AUTH", graceUntil: new Date("2026-09-27") });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
   it("PENDING_AUTH sem carência não vale — autorizar não é pagar", () => {
-    const sub = { status: "PENDING_AUTH", graceUntil: null } as never;
+    const sub = buildSubscription({ status: "PENDING_AUTH", graceUntil: null });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("PENDING_AUTH com carência vencida não vale", () => {
-    const sub = { status: "PENDING_AUTH", graceUntil: new Date("2026-09-10") } as never;
+    const sub = buildSubscription({ status: "PENDING_AUTH", graceUntil: new Date("2026-09-10") });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("PENDING_AUTH sem carência mas com trial ainda vigente vale — contratar durante o teste não pode derrubar o acesso", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "PENDING_AUTH",
       graceUntil: null,
       trialEndsAt: new Date("2026-09-30"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
   it("PENDING_AUTH com trial já vencido e sem carência não vale", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "PENDING_AUTH",
       graceUntil: null,
       trialEndsAt: new Date("2026-09-01"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("SUSPENDED e AUTH_DENIED não valem", () => {
-    expect(isSubscriptionUsable({ status: "SUSPENDED" } as never, now)).toBe(false);
-    expect(isSubscriptionUsable({ status: "AUTH_DENIED" } as never, now)).toBe(false);
+    expect(isSubscriptionUsable(buildSubscription({ status: "SUSPENDED" }), now)).toBe(false);
+    expect(isSubscriptionUsable(buildSubscription({ status: "AUTH_DENIED" }), now)).toBe(false);
   });
 
-  it("CANCELED com pagamento comprovado continua utilizável até o fim do período pago", () => {
-    const sub = {
+  it("CANCELED com período coberto pelo pagamento continua utilizável até o fim do período pago", () => {
+    const sub = buildSubscription({
       status: "CANCELED",
-      lastPaidAt: new Date("2026-09-15"),
+      paidThroughAt: new Date("2026-09-30"),
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
-  it("CANCELED com pagamento comprovado deixa de valer depois do fim do período pago", () => {
-    const sub = {
+  it("CANCELED com período coberto pelo pagamento deixa de valer depois do fim do período pago", () => {
+    const sub = buildSubscription({
       status: "CANCELED",
-      lastPaidAt: new Date("2026-09-01"),
+      paidThroughAt: new Date("2026-09-10"),
       currentPeriodEnd: new Date("2026-09-10"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("CANCELED sem período pago registrado não vale", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "CANCELED",
-      lastPaidAt: new Date("2026-09-01"),
+      paidThroughAt: new Date("2026-09-01"),
       currentPeriodEnd: null,
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("CANCELED sem pagamento comprovado não dá acesso, mesmo com período em aberto", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "CANCELED",
-      lastPaidAt: null,
+      paidThroughAt: null,
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("CANCELED cujo período em aberto não é coberto pelo último pagamento não dá acesso — recontratação avançou o vencimento sem novo pagamento", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "CANCELED",
       cycle: "MONTHLY",
-      lastPaidAt: new Date("2026-07-15"),
+      paidThroughAt: new Date("2026-08-15"),
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("CANCELED cujo período em aberto é coberto pelo último pagamento dá acesso até o fim dele", () => {
-    const sub = {
+    const sub = buildSubscription({
       status: "CANCELED",
       cycle: "YEARLY",
-      lastPaidAt: new Date("2026-01-10"),
+      paidThroughAt: new Date("2026-09-30"),
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
   it("TRIALING vale dentro do prazo", () => {
-    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-30") } as never;
+    const sub = buildSubscription({ status: "TRIALING", trialEndsAt: new Date("2026-09-30") });
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
   it("TRIALING vencido não vale", () => {
-    const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-01") } as never;
+    const sub = buildSubscription({ status: "TRIALING", trialEndsAt: new Date("2026-09-01") });
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("sem assinatura não vale", () => {
     expect(isSubscriptionUsable(null, now)).toBe(false);
+  });
+});
+
+describe("acesso e limite concordam sobre quem pagou, por status", () => {
+  const now = new Date("2026-09-20T12:00:00Z");
+
+  it("PAST_DUE: pagamento alguma vez basta tanto para o acesso quanto para o limite cheio", () => {
+    const sub = buildSubscription({
+      status: "PAST_DUE",
+      lastPaidAt: new Date("2026-01-10"),
+      paidThroughAt: null,
+      currentPeriodEnd: new Date("2026-09-01"),
+    });
+
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+    expect(hasPaidAccess(sub)).toBe(true);
+    expect(effectiveLimit("cresce", sub.status, hasPaidAccess(sub))).toBe(4);
+  });
+
+  it("PAST_DUE: nunca ter pago corta tanto o acesso quanto o limite", () => {
+    const sub = buildSubscription({ status: "PAST_DUE", lastPaidAt: null });
+
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+    expect(hasPaidAccess(sub)).toBe(false);
+    expect(effectiveLimit("cresce", sub.status, hasPaidAccess(sub))).toBe(1);
+  });
+
+  it("CANCELED: período coberto pelo pagamento dá acesso e limite cheio", () => {
+    const sub = buildSubscription({
+      status: "CANCELED",
+      paidThroughAt: new Date("2026-09-30"),
+      currentPeriodEnd: new Date("2026-09-30"),
+    });
+
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+    expect(hasPaidAccess(sub)).toBe(true);
+    expect(effectiveLimit("cresce", sub.status, hasPaidAccess(sub))).toBe(4);
+  });
+
+  it("CANCELED: período não coberto corta tanto o acesso quanto o limite, mesmo tendo pago antes", () => {
+    const sub = buildSubscription({
+      status: "CANCELED",
+      paidThroughAt: new Date("2026-08-01"),
+      currentPeriodEnd: new Date("2026-09-30"),
+    });
+
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+    expect(hasPaidAccess(sub)).toBe(false);
+    expect(effectiveLimit("cresce", sub.status, hasPaidAccess(sub))).toBe(1);
   });
 });
 
@@ -465,6 +555,38 @@ describe("recordInterPixSubscription", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.lastPaidAt?.toISOString()).toBe(pagoEm.toISOString());
+  });
+
+  it("recontratar escreve um fim de período novo sem tocar paidThroughAt — o novo período não fica coberto", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-recontrata-sem-cobertura", name: "Sara", email: "sara@example.com" },
+    });
+    const cobertoAte = new Date("2026-08-20T00:00:00Z");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        status: "CANCELED",
+        interpixSubscriptionId: "ip_sub_cancelada_2",
+        lastPaidAt: new Date("2026-08-15T00:00:00Z"),
+        paidThroughAt: cobertoAte,
+        currentPeriodEnd: cobertoAte,
+      },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_recontratada_2",
+      pixCopyPaste: "00020101...recontratada2",
+      nextDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.paidThroughAt?.toISOString()).toBe(cobertoAte.toISOString());
+    expect(sub?.currentPeriodEnd?.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect(sub && isPeriodPaid(sub)).toBe(false);
   });
 
   it("nunca limpa graceGrantedAt — é a invariante que impede reabrir o laço de carência reciclável", async () => {

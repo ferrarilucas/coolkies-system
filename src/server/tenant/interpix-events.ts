@@ -37,18 +37,20 @@ function changesFor(
   now: Date,
 ): Prisma.SubscriptionUpdateManyMutationInput {
   switch (event.type) {
-    case "cycle.paid":
+    case "cycle.paid": {
+      const newPeriodEnd = current.currentPeriodEnd
+        ? advancePeriod(current.currentPeriodEnd, current.cycle)
+        : null;
       return {
         status: "ACTIVE",
         graceUntil: null,
         graceGrantedAt: null,
         lastPaidAt: new Date(event.data.paidAt),
         lastFailureReason: null,
-        ...(current.currentPeriodEnd
-          ? { currentPeriodEnd: advancePeriod(current.currentPeriodEnd, current.cycle) }
-          : {}),
+        ...(newPeriodEnd ? { currentPeriodEnd: newPeriodEnd, paidThroughAt: newPeriodEnd } : {}),
         ...(current.pendingCycleSeq === event.data.cycleSeq ? { pendingCycleSeq: null } : {}),
       };
+    }
     case "cycle.failed":
       return { lastFailureReason: event.data.reason };
     case "subscription.authorized": {

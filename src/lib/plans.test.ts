@@ -92,22 +92,20 @@ describe("catálogo", () => {
 
 describe("limite do plano concorda com a regra de acesso", () => {
   it("período em aberto não coberto pelo último pagamento: sem limite cheio, igual à regra de acesso", () => {
-    const sub = {
-      cycle: "MONTHLY",
-      lastPaidAt: new Date("2026-07-15"),
+    const sub: Parameters<typeof isPeriodPaid>[0] = {
+      paidThroughAt: new Date("2026-08-15"),
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    };
     const paid = isPeriodPaid(sub);
     expect(paid).toBe(false);
     expect(effectiveLimit("cresce", "CANCELED", paid)).toBe(1);
   });
 
   it("período em aberto coberto pelo último pagamento: limite cheio, igual à regra de acesso", () => {
-    const sub = {
-      cycle: "YEARLY",
-      lastPaidAt: new Date("2026-01-10"),
+    const sub: Parameters<typeof isPeriodPaid>[0] = {
+      paidThroughAt: new Date("2026-09-30"),
       currentPeriodEnd: new Date("2026-09-30"),
-    } as never;
+    };
     const paid = isPeriodPaid(sub);
     expect(paid).toBe(true);
     expect(effectiveLimit("cresce", "CANCELED", paid)).toBe(4);

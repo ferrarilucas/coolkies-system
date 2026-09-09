@@ -76,7 +76,7 @@ export function decideReconcile(input: {
       action: "apply",
       status: input.remote,
       reason: `remoto voltou a cobrar normalmente (local ${input.local})`,
-      lastPaidAt: now,
+      ...(input.local === "PAST_DUE" ? { lastPaidAt: now } : {}),
     };
   }
 
