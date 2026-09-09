@@ -307,6 +307,36 @@ describe("subscribe", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("recusa troca de plano de assinante autorizado (PENDING_AUTH com graceUntil), sem chamar a InterPix nem cancelar o mandato", async () => {
+    const { user } = await userWithWorkspace("u-autorizado", "autorizado@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-autorizado",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-autorizado");
+    expect(sub?.plan).toBe("corre");
+  });
+
   it("cancela o mandato pendente antigo antes de criar um novo ao trocar de plano", async () => {
     const { user } = await userWithWorkspace("u-troca", "troca@example.com");
     await testDb.subscription.create({

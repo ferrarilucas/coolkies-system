@@ -7,7 +7,13 @@ import QRCode from "qrcode";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { checkoutViewState } from "@/lib/checkout-state";
-import { PLANS, monthlyPriceCents, planLabel, type PlanCycle } from "@/lib/plans";
+import {
+  PLANS,
+  monthlyPriceCents,
+  planLabel,
+  planWorkspacesLabel,
+  type PlanCycle,
+} from "@/lib/plans";
 import { formatBRL } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,8 +41,12 @@ const STATUS_LABEL: Record<string, string> = {
   ACTIVE: "Ativo",
   PAST_DUE: "Pagamento pendente",
   CANCELED: "Cancelado",
-  PENDING_AUTH: "Aguardando pagamento",
+  PENDING_AUTH: "Autorização pendente",
+  AUTH_DENIED: "Autorização recusada",
+  SUSPENDED: "Suspenso",
 };
+
+const WARNING_STATUSES = new Set(["PAST_DUE", "CANCELED", "AUTH_DENIED", "SUSPENDED"]);
 
 const CONTACT_EMAIL = "contato@coolkies.com.br";
 
@@ -66,8 +76,12 @@ function formatDueDate(isoDate: string): string {
 }
 
 function cycleLabel(cycle: PlanCycle | null): string {
-  return cycle === "YEARLY" ? "ciclo anual" : "ciclo mensal";
+  if (cycle === "YEARLY") return "ciclo anual";
+  if (cycle === "MONTHLY") return "ciclo mensal";
+  return "ciclo não identificado";
 }
+
+const QR_IMAGE_SIZE = 320;
 
 function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -75,7 +89,7 @@ function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
   useEffect(() => {
     let cancelled = false;
     setDataUrl(null);
-    QRCode.toDataURL(pixCopyPaste)
+    QRCode.toDataURL(pixCopyPaste, { width: QR_IMAGE_SIZE, margin: 2 })
       .then((url) => {
         if (!cancelled) setDataUrl(url);
       })
@@ -94,11 +108,66 @@ function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
       <Image
         src={dataUrl}
         alt="QR code do Pix para autorizar o débito recorrente"
-        width={192}
-        height={192}
+        width={QR_IMAGE_SIZE}
+        height={QR_IMAGE_SIZE}
         unoptimized
-        className="size-48 rounded-lg border bg-white p-2"
+        className="size-64 rounded-lg border bg-white p-2"
       />
+    </div>
+  );
+}
+
+function PixCheckoutContent({
+  pixCopyPaste,
+  nextDueDate,
+}: {
+  pixCopyPaste: string;
+  nextDueDate: string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function onCopy() {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard API indisponível");
+      await navigator.clipboard.writeText(pixCopyPaste);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("PixCheckoutContent: falha ao copiar o código Pix", e);
+      toast.error(
+        "Não foi possível copiar automaticamente. Selecione o código acima e copie manualmente.",
+      );
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Abra o app do seu banco, escolha pagar com Pix e escaneie o QR ou cole o
+        código abaixo. Isso autoriza um débito recorrente — você não está
+        pagando nada agora.
+      </p>
+      <PixQrImage pixCopyPaste={pixCopyPaste} />
+      <div className="rounded-lg border bg-muted/40 p-3">
+        <p className="select-all break-all font-mono text-xs">{pixCopyPaste}</p>
+      </div>
+      <Button className="w-full" onClick={onCopy} variant="outline">
+        {copied ? (
+          <>
+            <Check className="size-4" /> Copiado
+          </>
+        ) : (
+          <>
+            <Copy className="size-4" /> Copiar código Pix
+          </>
+        )}
+      </Button>
+      {nextDueDate && (
+        <p className="text-xs text-muted-foreground">
+          Depois de autorizado, a primeira cobrança é debitada em{" "}
+          {formatDueDate(nextDueDate)}.
+        </p>
+      )}
     </div>
   );
 }
@@ -114,6 +183,7 @@ export function PlanPanel({
   activeCount,
   pixCopyPaste,
   nextDueDate,
+  graceUntil,
 }: {
   currentPlan: string | null;
   currentCycle: PlanCycle | null;
@@ -125,29 +195,26 @@ export function PlanPanel({
   activeCount: number;
   pixCopyPaste: string | null;
   nextDueDate: string | null;
+  graceUntil: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
   const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [bannerCopied, setBannerCopied] = useState(false);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
-  const checkoutState = checkoutViewState(status, pixCopyPaste, nextDueDate);
+  const checkoutState = checkoutViewState(status, pixCopyPaste, nextDueDate, graceUntil);
 
   function openCheckout(planId: string) {
     setPixResult(null);
-    setCopied(false);
     setCheckoutPlan(planId);
   }
 
   function closeCheckout() {
     setCheckoutPlan(null);
     setPixResult(null);
-    setCopied(false);
   }
 
   function onSubscribe(formData: FormData) {
@@ -162,20 +229,6 @@ export function PlanPanel({
     });
   }
 
-  async function onCopyPix() {
-    if (!pixResult) return;
-    await navigator.clipboard.writeText(pixResult.pixCopyPaste);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function onCopyBannerPix() {
-    if (checkoutState.kind !== "authorize") return;
-    await navigator.clipboard.writeText(checkoutState.pixCopyPaste);
-    setBannerCopied(true);
-    setTimeout(() => setBannerCopied(false), 2000);
-  }
-
   return (
     <div className="space-y-6">
       <Card>
@@ -187,7 +240,7 @@ export function PlanPanel({
                 variant={
                   status === "ACTIVE"
                     ? "success"
-                    : status === "PAST_DUE" || status === "CANCELED" || trialExpired
+                    : WARNING_STATUSES.has(status) || trialExpired
                       ? "warning"
                       : "secondary"
                 }
@@ -225,6 +278,17 @@ export function PlanPanel({
         </div>
       )}
 
+      {(status === "AUTH_DENIED" || status === "SUSPENDED") && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <p className="text-destructive">
+            {status === "AUTH_DENIED"
+              ? "Seu banco recusou a autorização do débito recorrente. Escolha um plano abaixo para gerar uma nova autorização."
+              : "Sua assinatura foi suspensa. Escolha um plano abaixo para gerar uma nova autorização ou fale com a gente."}
+          </p>
+        </div>
+      )}
+
       {provider === "MANUAL" ? (
         <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -243,47 +307,25 @@ export function PlanPanel({
             <Card className="border-primary">
               <CardHeader>
                 <CardTitle className="text-base">
-                  Autorização pendente — {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
+                  {checkoutState.kind === "failed" ? "Cobrança não gerada" : "Autorização pendente"}{" "}
+                  — {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
                 </CardTitle>
                 <CardDescription>
-                  {checkoutState.kind === "authorize"
-                    ? "Você ainda não autorizou o débito recorrente deste plano."
-                    : "Sua autorização foi recebida."}
+                  {checkoutState.kind === "authorize" &&
+                    "Você ainda não autorizou o débito recorrente deste plano."}
+                  {checkoutState.kind === "waiting" && "Sua autorização foi recebida."}
+                  {checkoutState.kind === "failed" &&
+                    "Não foi possível gerar a cobrança Pix para este plano."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {checkoutState.kind === "authorize" ? (
-                  <>
-                    <p className="text-sm text-muted-foreground">
-                      Abra o app do seu banco, escolha pagar com Pix e escaneie o QR
-                      ou cole o código abaixo. Isso autoriza um débito recorrente —
-                      você não está pagando nada agora.
-                    </p>
-                    <PixQrImage pixCopyPaste={checkoutState.pixCopyPaste} />
-                    <div className="rounded-lg border bg-muted/40 p-3">
-                      <p className="break-all font-mono text-xs">
-                        {checkoutState.pixCopyPaste}
-                      </p>
-                    </div>
-                    <Button className="w-full" onClick={onCopyBannerPix} variant="outline">
-                      {bannerCopied ? (
-                        <>
-                          <Check className="size-4" /> Copiado
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-4" /> Copiar código Pix
-                        </>
-                      )}
-                    </Button>
-                    {checkoutState.nextDueDate && (
-                      <p className="text-xs text-muted-foreground">
-                        Depois de autorizado, a primeira cobrança é debitada em{" "}
-                        {formatDueDate(checkoutState.nextDueDate)}.
-                      </p>
-                    )}
-                  </>
-                ) : (
+                {checkoutState.kind === "authorize" && (
+                  <PixCheckoutContent
+                    pixCopyPaste={checkoutState.pixCopyPaste}
+                    nextDueDate={checkoutState.nextDueDate}
+                  />
+                )}
+                {checkoutState.kind === "waiting" && (
                   <p className="text-sm text-muted-foreground">
                     O plano ativa quando a primeira cobrança for debitada
                     {checkoutState.nextDueDate
@@ -292,6 +334,24 @@ export function PlanPanel({
                     . Isso pode levar alguns dias — nenhuma ação é necessária da sua
                     parte até lá.
                   </p>
+                )}
+                {checkoutState.kind === "failed" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      A cobrança Pix deste plano não chegou a ser gerada. Nenhuma
+                      autorização foi recebida — tente novamente para gerar um novo
+                      código Pix.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        setCycle(currentCycle ?? "MONTHLY");
+                        openCheckout(currentPlan);
+                      }}
+                    >
+                      Tentar novamente
+                    </Button>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -329,19 +389,22 @@ export function PlanPanel({
                           }`}
                     </CardDescription>
                   </CardHeader>
-                  {priceCents !== null && (
-                    <CardContent>
+                  <CardContent className="space-y-1">
+                    <p className="text-xs font-medium">{planWorkspacesLabel(plan.id)}</p>
+                    {priceCents !== null && (
                       <p className="text-xs text-muted-foreground">
                         {cycle === "YEARLY"
                           ? `Total de ${formatBRL(priceCents * 12)} por ano, cobrado à vista.`
                           : "Cobrado todo mês."}
                       </p>
-                    </CardContent>
-                  )}
+                    )}
+                  </CardContent>
                   <CardFooter>
                     {isPendingThisPlan ? (
                       <Button className="w-full" variant="outline" disabled>
-                        Autorização pendente acima
+                        {checkoutState.kind === "failed"
+                          ? "Tentar novamente acima"
+                          : "Autorização pendente acima"}
                       </Button>
                     ) : isCurrent ? (
                       <Button className="w-full" variant="outline" disabled>
@@ -375,31 +438,10 @@ export function PlanPanel({
           </DialogHeader>
 
           {pixResult ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Abra o app do seu banco, escolha pagar com Pix e escaneie o QR ou
-                cole o código abaixo. Isso autoriza um débito recorrente — você
-                não está pagando nada agora.
-                {pixResult.nextDueDate
-                  ? ` A primeira cobrança é debitada em ${formatDueDate(pixResult.nextDueDate)}.`
-                  : ""}
-              </p>
-              <PixQrImage pixCopyPaste={pixResult.pixCopyPaste} />
-              <div className="rounded-lg border bg-muted/40 p-3">
-                <p className="break-all font-mono text-xs">{pixResult.pixCopyPaste}</p>
-              </div>
-              <Button className="w-full" onClick={onCopyPix} variant="outline">
-                {copied ? (
-                  <>
-                    <Check className="size-4" /> Copiado
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-4" /> Copiar código Pix
-                  </>
-                )}
-              </Button>
-            </div>
+            <PixCheckoutContent
+              pixCopyPaste={pixResult.pixCopyPaste}
+              nextDueDate={pixResult.nextDueDate}
+            />
           ) : (
             <form action={onSubscribe} className="space-y-4">
               <input type="hidden" name="plan" value={checkoutPlan ?? ""} />

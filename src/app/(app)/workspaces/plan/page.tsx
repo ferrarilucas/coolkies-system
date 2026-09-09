@@ -33,6 +33,7 @@ export default async function PlanPage() {
         activeCount={active.size}
         pixCopyPaste={sub?.interpixPixCopyPaste ?? null}
         nextDueDate={sub?.currentPeriodEnd ? sub.currentPeriodEnd.toISOString().slice(0, 10) : null}
+        graceUntil={sub?.graceUntil ? sub.graceUntil.toISOString() : null}
       />
     </div>
   );

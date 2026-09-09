@@ -9,6 +9,7 @@ import {
   type PlanCycle,
 } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
+import type { Subscription } from "@prisma/client";
 import {
   getBillingUser,
   getSubscription,
@@ -37,6 +38,11 @@ const PLAN_CHANGE_ERROR =
   "Você já tem uma assinatura ativa. Para mudar de plano, fale com a nossa equipe.";
 
 const LIVE_STATUSES = new Set(["ACTIVE", "PAST_DUE"]);
+
+function isLiveMandate(sub: Subscription): boolean {
+  if (LIVE_STATUSES.has(sub.status)) return true;
+  return sub.status === "PENDING_AUTH" && sub.graceUntil !== null;
+}
 
 function firstDueDate(trialEndsAt: Date | null, now: Date = new Date()): string {
   const minimumDueDate = new Date(
@@ -76,7 +82,7 @@ export async function subscribe(
       return { ok: false, error: MANUAL_ERROR };
     }
 
-    if (existing?.interpixSubscriptionId && LIVE_STATUSES.has(existing.status)) {
+    if (existing?.interpixSubscriptionId && isLiveMandate(existing)) {
       return { ok: false, error: PLAN_CHANGE_ERROR };
     }
 
