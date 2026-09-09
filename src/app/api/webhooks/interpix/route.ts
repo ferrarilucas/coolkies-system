@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
     case "duplicate":
     case "stale":
       return NextResponse.json({ outcome }, { status: 200 });
+    case "conflict":
+      return NextResponse.json({ outcome }, { status: 409 });
     default: {
       const exhaustive: never = outcome;
       throw new Error(`outcome de InterPix não tratado: ${exhaustive}`);

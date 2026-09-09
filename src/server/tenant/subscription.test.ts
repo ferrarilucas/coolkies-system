@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDb, testDb } from "@/test/db";
+import { applyInterPixEvent } from "./interpix-events";
 import {
   activeWorkspaceIds,
   canWriteInWorkspace,
@@ -409,6 +410,90 @@ describe("recordInterPixSubscription", () => {
     expect(sub?.cycle).toBe("MONTHLY");
     expect(sub?.interpixSubscriptionId).toBe("ip_sub_nova");
     expect(isSubscriptionUsable(sub, new Date())).toBe(true);
+  });
+
+  it("nunca limpa graceGrantedAt — é a invariante que impede reabrir o laço de carência reciclável", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-grant-kept", name: "Fabi", email: "fabi@example.com" },
+    });
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        source: "MANUAL",
+        status: "SUSPENDED",
+        graceUntil: new Date("2026-09-01T00:00:00Z"),
+        graceGrantedAt: new Date("2025-06-01T00:00:00Z"),
+      },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "YEARLY",
+      interpixSubscriptionId: "ip_sub_grant_kept",
+      pixCopyPaste: null,
+      nextDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.graceUntil).toBeNull();
+    expect(sub?.graceGrantedAt?.toISOString()).toBe("2025-06-01T00:00:00.000Z");
+  });
+
+  it("ciclo completo: autorizar, carência vencer, recontratar, autorizar de novo — carência continua nula", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-full-cycle", name: "Guga", email: "guga@example.com" },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "corre",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_full_cycle",
+      pixCopyPaste: "00020101...primeira",
+      nextDueDate: new Date("2026-09-20T00:00:00Z"),
+    });
+
+    const firstAuth = await applyInterPixEvent({
+      type: "subscription.authorized",
+      eventId: "1",
+      data: { subscriptionId: "ip_full_cycle", externalUserId: user.id },
+    });
+    expect(firstAuth).toBe("applied");
+
+    const afterFirstAuth = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(afterFirstAuth?.graceGrantedAt).not.toBeNull();
+    expect(afterFirstAuth?.graceUntil).not.toBeNull();
+
+    await applyInterPixEvent({
+      type: "subscription.suspended",
+      eventId: "2",
+      data: { subscriptionId: "ip_full_cycle", externalUserId: user.id },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "corre",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_full_cycle_2",
+      pixCopyPaste: "00020101...segunda",
+      nextDueDate: new Date("2026-11-20T00:00:00Z"),
+    });
+
+    const afterRecontratacao = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(afterRecontratacao?.status).toBe("PENDING_AUTH");
+    expect(afterRecontratacao?.graceGrantedAt).not.toBeNull();
+
+    const secondAuth = await applyInterPixEvent({
+      type: "subscription.authorized",
+      eventId: "3",
+      data: { subscriptionId: "ip_full_cycle_2", externalUserId: user.id },
+    });
+    expect(secondAuth).toBe("applied");
+
+    const finalSub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(finalSub?.graceUntil).toBeNull();
   });
 });
 

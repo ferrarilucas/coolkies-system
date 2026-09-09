@@ -52,6 +52,12 @@ describe("estado de checkout derivado do servidor", () => {
     });
   });
 
+  it("graceUntil não interpretável cai no estado de falha, não no de espera", () => {
+    expect(
+      checkoutViewState("PENDING_AUTH", "00020126...", "2026-09-12", "data-invalida"),
+    ).toEqual({ kind: "failed" });
+  });
+
   it("carência ainda válida continua no estado de espera", () => {
     const now = new Date("2026-09-20T00:00:00.000Z");
     expect(

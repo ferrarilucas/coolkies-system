@@ -14,7 +14,7 @@ export type InterPixEvent =
   | { type: "subscription.suspended"; eventId: string; data: { subscriptionId: string; externalUserId: string } }
   | { type: "subscription.canceled"; eventId: string; data: { subscriptionId: string; externalUserId: string; pendingCycleSeq: number | null } };
 
-export type EventOutcome = "applied" | "duplicate" | "stale" | "unknown" | "invalid";
+export type EventOutcome = "applied" | "duplicate" | "stale" | "conflict" | "unknown" | "invalid";
 
 type SubscriptionState = {
   currentPeriodEnd: Date | null;
@@ -67,6 +67,7 @@ function changesFor(
       return {
         status: "ACTIVE",
         graceUntil: null,
+        graceGrantedAt: null,
         ...(current.currentPeriodEnd
           ? { currentPeriodEnd: advancePeriod(current.currentPeriodEnd, current.cycle) }
           : {}),
@@ -145,7 +146,13 @@ export async function applyInterPixEvent(event: InterPixEvent): Promise<EventOut
         data: { ...changesFor(event, current, new Date()), lastAppliedEventId: incoming },
       });
 
-      if (updated.count === 0) return "stale";
+      if (updated.count === 0) {
+        const after = await tx.subscription.findUnique({ where: { id: current.id } });
+        if (after && after.lastAppliedEventId !== null && incoming <= after.lastAppliedEventId) {
+          return "stale";
+        }
+        return "conflict";
+      }
 
       await tx.processedWebhookEvent.create({ data: { id: event.eventId, event: event.type } });
       return "applied";

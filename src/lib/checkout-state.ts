@@ -15,7 +15,10 @@ export function checkoutViewState(
   if (status !== "PENDING_AUTH") return { kind: "none" };
   if (graceUntil) {
     const graceDate = new Date(graceUntil);
-    if (!Number.isNaN(graceDate.getTime()) && graceDate <= now) {
+    if (Number.isNaN(graceDate.getTime())) {
+      return { kind: "failed" };
+    }
+    if (graceDate <= now) {
       return { kind: "expired", nextDueDate };
     }
     return { kind: "waiting", nextDueDate };

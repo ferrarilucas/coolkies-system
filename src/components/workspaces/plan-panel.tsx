@@ -392,7 +392,9 @@ export function PlanPanel({
             {PLANS.map((plan) => {
               const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
               const isExpiredThisPlan =
-                checkoutState.kind === "expired" && currentPlan === plan.id;
+                checkoutState.kind === "expired" &&
+                currentPlan === plan.id &&
+                currentCycle === cycle;
               const isCurrent =
                 hasSubscriptionId &&
                 currentPlan === plan.id &&

@@ -44,6 +44,38 @@ describe("eventos da InterPix", () => {
     expect(sub?.graceUntil).toBeNull();
   });
 
+  it("cycle.paid limpa graceGrantedAt — quem paga de verdade recupera o direito à ponte no futuro", async () => {
+    const user = await subscriber("u-paid-grants", {
+      graceUntil: new Date("2026-09-27T00:00:00Z"),
+      graceGrantedAt: new Date("2025-01-01T00:00:00Z"),
+    });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "15",
+      data: { subscriptionId: "ipx-u-paid-grants", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.graceGrantedAt).toBeNull();
+  });
+
+  it("sem pagamento, graceGrantedAt continua consumido — a carência não se recicla de graça", async () => {
+    const user = await subscriber("u-no-paid-grants", {
+      status: "SUSPENDED",
+      graceGrantedAt: new Date("2025-01-01T00:00:00Z"),
+    });
+
+    await applyInterPixEvent({
+      type: "subscription.past_due",
+      eventId: "16",
+      data: { subscriptionId: "ipx-u-no-paid-grants", externalUserId: user.id, retryDate: "2026-09-25" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.graceGrantedAt?.toISOString()).toBe("2025-01-01T00:00:00.000Z");
+  });
+
   it("cycle.paid avança o vencimento em um mês no ciclo mensal", async () => {
     const user = await subscriber("u-period-monthly", { cycle: "MONTHLY" });
 
@@ -149,30 +181,22 @@ describe("eventos da InterPix", () => {
   });
 
   it("segunda autorização da mesma assinatura não concede carência de novo, mas o evento é aplicado", async () => {
-    const user = await subscriber("u-auth-twice");
-
-    const first = await applyInterPixEvent({
-      type: "subscription.authorized",
-      eventId: "90",
-      data: { subscriptionId: "ipx-u-auth-twice", externalUserId: user.id },
+    const user = await subscriber("u-auth-twice", {
+      graceGrantedAt: new Date("2026-01-01T00:00:00Z"),
+      currentPeriodEnd: new Date("2026-09-20T00:00:00Z"),
     });
-    expect(first).toBe("applied");
 
-    const firstSub = await subOf(user.id);
-    const grantedAt = firstSub?.graceGrantedAt;
-    expect(grantedAt).not.toBeNull();
-    expect(firstSub?.graceUntil?.toISOString()).toBe("2026-09-27T00:00:00.000Z");
-
-    const second = await applyInterPixEvent({
+    const outcome = await applyInterPixEvent({
       type: "subscription.authorized",
       eventId: "91",
       data: { subscriptionId: "ipx-u-auth-twice", externalUserId: user.id },
     });
-    expect(second).toBe("applied");
+    expect(outcome).toBe("applied");
 
-    const secondSub = await subOf(user.id);
-    expect(secondSub?.graceGrantedAt?.toISOString()).toBe(grantedAt?.toISOString());
-    expect(secondSub?.lastAppliedEventId).toBe(91n);
+    const sub = await subOf(user.id);
+    expect(sub?.lastAppliedEventId).toBe(91n);
+    expect(sub?.graceGrantedAt?.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(sub?.graceUntil).toBeNull();
   });
 
   it("primeira autorização de uma assinatura nova concede carência e grava o instante", async () => {
@@ -295,6 +319,59 @@ describe("eventos da InterPix", () => {
     expect(await applyInterPixEvent(event)).toBe("applied");
     expect(await applyInterPixEvent(event)).toBe("duplicate");
     expect((await subOf(user.id))?.lastAppliedEventId).toBe(20n);
+  });
+
+  it("colisão de escrita concorrente não é confundida com evento obsoleto — devolve conflict para reentrega, e a reentrega aplica", async () => {
+    const user = await subscriber("u-conflict", { status: "PENDING_AUTH" });
+    const before = await subOf(user.id);
+    const subscriptionRowId = before?.id as string;
+
+    let releaseLock: (() => void) | undefined;
+    const lockAcquired = new Promise<void>((resolveAcquired) => {
+      void testDb.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          `SELECT id FROM "subscription" WHERE id = $1 FOR UPDATE`,
+          subscriptionRowId,
+        );
+        resolveAcquired();
+        await new Promise<void>((resolve) => {
+          releaseLock = resolve;
+        });
+        await tx.subscription.update({
+          where: { id: subscriptionRowId },
+          data: { status: "ACTIVE" },
+        });
+      });
+    });
+
+    await lockAcquired;
+
+    const outcomePromise = applyInterPixEvent({
+      type: "subscription.suspended",
+      eventId: "60",
+      data: { subscriptionId: "ipx-u-conflict", externalUserId: user.id },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    releaseLock?.();
+
+    const outcome = await outcomePromise;
+
+    expect(outcome).toBe("conflict");
+    const midSub = await subOf(user.id);
+    expect(midSub?.status).toBe("ACTIVE");
+    expect(midSub?.lastAppliedEventId).toBeNull();
+
+    const retry = await applyInterPixEvent({
+      type: "subscription.suspended",
+      eventId: "60",
+      data: { subscriptionId: "ipx-u-conflict", externalUserId: user.id },
+    });
+
+    expect(retry).toBe("applied");
+    const finalSub = await subOf(user.id);
+    expect(finalSub?.status).toBe("SUSPENDED");
+    expect(finalSub?.lastAppliedEventId).toBe(60n);
   });
 
   it("evento atrasado não reativa quem já cancelou", async () => {

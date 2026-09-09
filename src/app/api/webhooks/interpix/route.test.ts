@@ -2,6 +2,7 @@ import { createHmac } from "crypto";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDb, testDb } from "@/test/db";
+import * as interpixEvents from "@/server/tenant/interpix-events";
 import { POST } from "./route";
 
 const SECRET = "segredo-do-webhook";
@@ -106,6 +107,24 @@ describe("POST /api/webhooks/interpix", () => {
     expect(response.status).toBe(404);
     const body = await response.json();
     expect(body.outcome).toBe("unknown");
+  });
+
+  it("colisão de escrita concorrente devolve não-2xx para habilitar reentrega, sem descartar o evento", async () => {
+    const spy = vi.spyOn(interpixEvents, "applyInterPixEvent").mockResolvedValueOnce("conflict");
+
+    const response = await POST(
+      entrega({
+        type: "cycle.paid",
+        eventId: "55",
+        data: { subscriptionId: "ipx-conflito", cycleSeq: 1, amount: "1.00", paidAt: "" },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.outcome).toBe("conflict");
+
+    spy.mockRestore();
   });
 
   it("corpo que não é JSON válido devolve 200, registra no log e não toca no banco", async () => {
