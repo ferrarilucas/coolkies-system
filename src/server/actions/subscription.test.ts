@@ -87,6 +87,44 @@ function stubInterPixFetchWithoutCopyPaste() {
   return fetchMock;
 }
 
+function stubInterPixFetchWithoutId() {
+  const fetchMock = vi.fn().mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          status: "PENDING_AUTH",
+          externalUserId: "usr",
+          planCode: "corre",
+          amount: "34.50",
+          nextDueDate: "2026-09-20",
+          authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
+        }),
+        { status: 201 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function stubInterPixFetchWithoutDueDate() {
+  const fetchMock = vi.fn().mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          id: "ipx-sem-vencimento",
+          status: "PENDING_AUTH",
+          externalUserId: "usr",
+          planCode: "corre",
+          amount: "34.50",
+          authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
+        }),
+        { status: 201 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function stubInterPixFetchWithValidationError() {
   const fetchMock = vi.fn().mockImplementation(
     async () =>
@@ -555,6 +593,76 @@ describe("subscribe", () => {
     expect(result.ok).toBe(false);
     expect(result.error).not.toContain("INTERPIX_API_TOKEN");
     expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("mandato pendente sem copia-e-cola, mesmo plano e ciclo, não é recusado: cancela o antigo e cria um novo", async () => {
+    const { user } = await userWithWorkspace("u-pendente-sem-copia", "pendentesemcopia@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-sem-copia-antigo",
+        interpixPixCopyPaste: null,
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/subscriptions/ipx-sem-copia-antigo/cancel");
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+  });
+
+  it("quando a InterPix não devolve o id, recusa, loga o erro e não grava assinatura", async () => {
+    const { user } = await userWithWorkspace("u-sem-id", "semid@example.com");
+    const fetchMock = stubInterPixFetchWithoutId();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub).toBeNull();
+
+    errorSpy.mockRestore();
+  });
+
+  it("quando a InterPix não devolve a data de vencimento, recusa, loga o erro e não grava assinatura", async () => {
+    const { user } = await userWithWorkspace("u-sem-vencimento", "semvencimento@example.com");
+    const fetchMock = stubInterPixFetchWithoutDueDate();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub).toBeNull();
+
     errorSpy.mockRestore();
   });
 });
