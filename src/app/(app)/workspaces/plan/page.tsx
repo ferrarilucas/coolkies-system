@@ -27,8 +27,8 @@ export default async function PlanPage() {
         currentCycle={sub?.cycle ?? null}
         status={sub?.status ?? null}
         trialExpired={isTrialExpired(sub?.status ?? "NONE", sub?.trialEndsAt ?? null)}
-        source={sub?.source ?? null}
-        hasAsaasSubscriptionId={Boolean(sub?.asaasSubscriptionId)}
+        source={sub?.provider ?? null}
+        hasSubscriptionId={Boolean(sub?.interpixSubscriptionId)}
         ownedCount={owned}
         activeCount={active.size}
       />

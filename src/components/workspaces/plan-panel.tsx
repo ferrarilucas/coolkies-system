@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { PLANS, monthlyPriceCents, planLabel, type PlanCycle } from "@/lib/plans";
 import { formatBRL } from "@/lib/money";
@@ -25,18 +25,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { resumeCheckout, subscribe } from "@/server/actions/subscription";
+import { resumeCheckout, subscribe, type CheckoutResult } from "@/server/actions/subscription";
 
 const STATUS_LABEL: Record<string, string> = {
   TRIALING: "Em teste",
   ACTIVE: "Ativo",
   PAST_DUE: "Pagamento pendente",
   CANCELED: "Cancelado",
-};
-
-const CYCLE_LABEL: Record<PlanCycle, string> = {
-  MONTHLY: "mensal",
-  YEARLY: "anual",
+  PENDING_AUTH: "Aguardando pagamento",
 };
 
 const CONTACT_EMAIL = "contato@coolkies.com.br";
@@ -60,13 +56,19 @@ function planThatCovers(count: number) {
   return PLANS.find((p) => p.maxWorkspaces >= count) ?? PLANS[PLANS.length - 1];
 }
 
+function formatDueDate(isoDate: string): string {
+  if (!isoDate) return "";
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
 export function PlanPanel({
   currentPlan,
   currentCycle,
   status,
   trialExpired,
   source,
-  hasAsaasSubscriptionId,
+  hasSubscriptionId,
   ownedCount,
   activeCount,
 }: {
@@ -75,33 +77,30 @@ export function PlanPanel({
   status: string | null;
   trialExpired: boolean;
   source: string | null;
-  hasAsaasSubscriptionId: boolean;
+  hasSubscriptionId: boolean;
   ownedCount: number;
   activeCount: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
-  const [switchConfirmed, setSwitchConfirmed] = useState(false);
-  const [awaitingInvoice, setAwaitingInvoice] = useState(false);
+  const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
+  const [copied, setCopied] = useState(false);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
-  const isSwitchingPlan =
-    hasAsaasSubscriptionId &&
-    checkoutPlan !== null &&
-    (checkoutPlan !== currentPlan || cycle !== currentCycle);
 
   function openCheckout(planId: string) {
-    setSwitchConfirmed(false);
+    setPixResult(null);
+    setCopied(false);
     setCheckoutPlan(planId);
   }
 
   function closeCheckout() {
     setCheckoutPlan(null);
-    setSwitchConfirmed(false);
-    setAwaitingInvoice(false);
+    setPixResult(null);
+    setCopied(false);
   }
 
   function onSubscribe(formData: FormData) {
@@ -112,25 +111,30 @@ export function PlanPanel({
         return;
       }
       router.refresh();
-      if (result.data?.invoiceUrl) {
-        window.location.href = result.data.invoiceUrl;
-        return;
-      }
-      setAwaitingInvoice(true);
+      if (result.data) setPixResult(result.data);
     });
   }
 
-  function onResumeCheckout() {
+  function onResumeCheckout(planId: string) {
+    setPixResult(null);
+    setCopied(false);
+    setCheckoutPlan(planId);
     startTransition(async () => {
       const result = await resumeCheckout();
       if (!result.ok) {
         toast.error(result.error ?? "Não foi possível abrir o pagamento.");
+        setCheckoutPlan(null);
         return;
       }
-      if (result.data?.invoiceUrl) {
-        window.location.href = result.data.invoiceUrl;
-      }
+      if (result.data) setPixResult(result.data);
     });
+  }
+
+  async function onCopyPix() {
+    if (!pixResult) return;
+    await navigator.clipboard.writeText(pixResult.pixCopyPaste);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -207,7 +211,7 @@ export function PlanPanel({
             {PLANS.map((plan) => {
               const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
               const isCurrent =
-                hasAsaasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
+                hasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
 
               return (
                 <Card key={plan.id} className={isCurrent ? "border-primary" : undefined}>
@@ -242,7 +246,7 @@ export function PlanPanel({
                       ) : (
                         <Button
                           className="w-full"
-                          onClick={onResumeCheckout}
+                          onClick={() => onResumeCheckout(plan.id)}
                           disabled={pending}
                         >
                           {pending ? "Abrindo..." : "Concluir pagamento"}
@@ -269,79 +273,58 @@ export function PlanPanel({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Contratar {checkoutPlan ? planLabel(checkoutPlan) : ""}
+              {pixResult
+                ? "Pague com Pix"
+                : `Contratar ${checkoutPlan ? planLabel(checkoutPlan) : ""}`}
             </DialogTitle>
           </DialogHeader>
 
-          {awaitingInvoice ? (
+          {pixResult ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Sua assinatura foi criada, mas ainda não conseguimos abrir a
-                página de pagamento. Isso costuma ser só um instante — tente de
-                novo.
+                Abra o app do seu banco, escolha pagar com Pix e cole o código
+                abaixo. A cobrança vence em {formatDueDate(pixResult.nextDueDate)}.
               </p>
-              <Button className="w-full" onClick={onResumeCheckout} disabled={pending}>
-                {pending ? "Abrindo..." : "Tentar novamente"}
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <p className="break-all font-mono text-xs">{pixResult.pixCopyPaste}</p>
+              </div>
+              <Button className="w-full" onClick={onCopyPix} variant="outline">
+                {copied ? (
+                  <>
+                    <Check className="size-4" /> Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-4" /> Copiar código Pix
+                  </>
+                )}
               </Button>
             </div>
           ) : (
             <form action={onSubscribe} className="space-y-4">
-            <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
-            <input type="hidden" name="cycle" value={cycle} />
-            <input type="hidden" name="confirmSwitch" value={switchConfirmed ? "true" : "false"} />
+              <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
+              <input type="hidden" name="cycle" value={cycle} />
 
-            {isSwitchingPlan && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-                <div className="space-y-2 text-warning">
-                  <p>
-                    Você já tem uma assinatura{" "}
-                    {currentPlan ? planLabel(currentPlan) : ""}
-                    {currentCycle ? ` (${CYCLE_LABEL[currentCycle]})` : ""} ativa no
-                    Asaas. Ela <strong>continua sendo cobrada</strong> até ser
-                    cancelada manualmente pela nossa equipe — trocar de plano por
-                    aqui não cancela a anterior.
-                  </p>
-                  <label className="flex items-start gap-2 font-normal text-foreground">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={switchConfirmed}
-                      onChange={(e) => setSwitchConfirmed(e.target.checked)}
-                    />
-                    Entendo e quero contratar{" "}
-                    {checkoutPlan ? planLabel(checkoutPlan) : ""} ({CYCLE_LABEL[cycle]})
-                    mesmo assim.
-                  </label>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
+                <Input
+                  id="cpfCnpj"
+                  name="cpfCnpj"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  onChange={(e) => {
+                    e.currentTarget.value = applyCpfCnpjMask(e.currentTarget.value);
+                  }}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Usado para gerar a cobrança Pix em seu nome.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
-              <Input
-                id="cpfCnpj"
-                name="cpfCnpj"
-                inputMode="numeric"
-                placeholder="000.000.000-00"
-                onChange={(e) => {
-                  e.currentTarget.value = applyCpfCnpjMask(e.currentTarget.value);
-                }}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Usado para identificar você no Asaas. Na próxima tela você
-                escolhe entre Pix, boleto ou cartão.
-              </p>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={pending || (isSwitchingPlan && !switchConfirmed)}
-              className="w-full"
-            >
-              {pending ? "Continuando..." : "Continuar para pagamento"}
-            </Button>
+              <Button type="submit" disabled={pending} className="w-full">
+                {pending ? "Gerando o Pix..." : "Gerar código Pix"}
+              </Button>
             </form>
           )}
         </DialogContent>

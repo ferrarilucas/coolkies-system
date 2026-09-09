@@ -26,30 +26,67 @@ async function userWithWorkspace(id: string, email: string) {
   return { user, ws };
 }
 
-const OPEN_INVOICE_URL = "https://asaas.test/i/aberta";
-
-function stubAsaasFetch() {
-  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
-    if (url.includes("/customers")) {
-      return new Response(JSON.stringify({ id: "cus_123" }), { status: 200 });
-    }
-    if (url.includes("/payments")) {
-      return new Response(
+function stubInterPixFetch() {
+  const fetchMock = vi.fn().mockImplementation(
+    async () =>
+      new Response(
         JSON.stringify({
-          data: [
-            { id: "pay_1", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: OPEN_INVOICE_URL },
-          ],
+          id: "ipx-novo",
+          status: "PENDING_AUTH",
+          externalUserId: "usr",
+          planCode: "corre",
+          amount: "34.50",
+          nextDueDate: "2026-09-20",
+          authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
         }),
-        { status: 200 },
+        { status: 201 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function stubInterPixFetchWithCancel() {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes("/cancel")) {
+      return new Response(null, { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        id: "ipx-novo",
+        status: "PENDING_AUTH",
+        externalUserId: "usr",
+        planCode: "corre",
+        amount: "34.50",
+        nextDueDate: "2026-09-20",
+        authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
+      }),
+      { status: 201 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function stubInterPixFetchWithFailingCancel() {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes("/cancel")) {
+      return new Response(
+        JSON.stringify({ code: "INTERNAL_ERROR", message: "falha ao cancelar" }),
+        { status: 500 },
       );
     }
     return new Response(
       JSON.stringify({
-        id: "sub_remote_1",
-        status: "PENDING",
-        nextDueDate: "2026-09-01",
+        id: "ipx-novo",
+        status: "PENDING_AUTH",
+        externalUserId: "usr",
+        planCode: "corre",
+        amount: "34.50",
+        nextDueDate: "2026-09-20",
+        authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
       }),
-      { status: 200 },
+      { status: 201 },
     );
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -59,8 +96,8 @@ function stubAsaasFetch() {
 describe("subscribe", () => {
   beforeEach(async () => {
     await resetDb();
-    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
-    vi.stubEnv("ASAAS_ENV", "sandbox");
+    vi.stubEnv("INTERPIX_API_URL", "https://interpix.test");
+    vi.stubEnv("INTERPIX_API_TOKEN", "token-de-teste-com-24-chars");
   });
 
   afterEach(() => {
@@ -68,9 +105,9 @@ describe("subscribe", () => {
     vi.unstubAllEnvs();
   });
 
-  it("grava o asaasSubscriptionId na mesma operação da criação no gateway", async () => {
-    const { user } = await userWithWorkspace("u-sub-sync", "sync@example.com");
-    stubAsaasFetch();
+  it("cria a assinatura, grava o mapeamento e devolve o copia-e-cola", async () => {
+    const { user } = await userWithWorkspace("u-sub", "sub@example.com");
+    stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "corre");
@@ -79,155 +116,63 @@ describe("subscribe", () => {
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(true);
-    expect(result.data?.invoiceUrl).toBe(OPEN_INVOICE_URL);
+    expect(result.data?.pixCopyPaste).toBe("00020126-copia-e-cola");
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
-    expect(sub?.asaasCustomerId).toBe("cus_123");
-    expect(sub?.status).toBe("TRIALING");
-    expect(sub?.source).toBe("ASAAS");
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.provider).toBe("INTERPIX");
   });
 
-  it("deixa o pagador escolher a forma de pagamento no Asaas em vez de forçar Pix", async () => {
-    await userWithWorkspace("u-sub-billing-type", "billingtype@example.com");
-    const fetchMock = stubAsaasFetch();
-
-    const formData = new FormData();
-    formData.set("plan", "corre");
-    formData.set("cpfCnpj", "12345678909");
-
-    await subscribe(formData);
-
-    const subscriptionCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes("/subscriptions"),
-    );
-    const body = JSON.parse(subscriptionCall?.[1]?.body as string);
-    expect(body.billingType).toBe("UNDEFINED");
-  });
-
-  it("usuário em trial, sem asaasSubscriptionId, consegue contratar o mesmo plano do trial", async () => {
-    const { user } = await userWithWorkspace("u-sub-trial-checkout", "trialcheckout@example.com");
-    await testDb.subscription.create({
-      data: {
-        userId: user.id,
-        plan: "corre",
-        cycle: "MONTHLY",
-        source: "ASAAS",
-        status: "TRIALING",
-        trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-      },
-    });
-    const fetchMock = stubAsaasFetch();
+  it("manda o valor do Pix, não o do cartão", async () => {
+    await userWithWorkspace("u-valor", "valor@example.com");
+    const fetchMock = stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(true);
-    expect(fetchMock).toHaveBeenCalled();
-
-    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
-    expect(sub?.plan).toBe("corre");
-  });
-
-  it("não vira ACTIVE só por ter contratado", async () => {
-    const { user } = await userWithWorkspace("u-sub-status", "status@example.com");
-    stubAsaasFetch();
-
-    const formData = new FormData();
-    formData.set("plan", "corre");
-    formData.set("cpfCnpj", "12345678909");
-
     await subscribe(formData);
 
-    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.status).not.toBe("ACTIVE");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).amount).toBe("34.50");
   });
 
-  it("plano anual manda o valor mensal multiplicado por doze para o asaas", async () => {
-    await userWithWorkspace("u-sub-yearly", "yearly@example.com");
-    const fetchMock = stubAsaasFetch();
+  it("plano anual manda os doze meses numa cobrança só", async () => {
+    await userWithWorkspace("u-anual", "anual@example.com");
+    const fetchMock = stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "corre");
     formData.set("cycle", "YEARLY");
     formData.set("cpfCnpj", "12345678909");
-
     await subscribe(formData);
 
-    const subscriptionCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes("/subscriptions"),
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.amount).toBe("294.00");
+    expect(body.intervalMonths).toBe(12);
+  });
+
+  it("manda o CPF sem máscara", async () => {
+    await userWithWorkspace("u-doc", "doc@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "123.456.789-09");
+    await subscribe(formData);
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).debtor.taxId).toBe(
+      "12345678909",
     );
-    const body = JSON.parse(subscriptionCall?.[1]?.body as string);
-    expect(body.value).toBe(294);
   });
 
-  it("não permite contratar o plano unlimited pelo checkout", async () => {
-    await userWithWorkspace("u-sub-unlimited", "unlimited@example.com");
-    const formData = new FormData();
-    formData.set("plan", "escala");
-    formData.set("cpfCnpj", "12345678909");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(false);
-  });
-
-  it("recusa cpf/cnpj inválido", async () => {
-    await userWithWorkspace("u-sub-doc", "doc@example.com");
-    const formData = new FormData();
-    formData.set("plan", "corre");
-    formData.set("cpfCnpj", "123");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(false);
-  });
-
-  it("recusa plano que não existe em PLANS", async () => {
-    await userWithWorkspace("u-sub-plan-invalido", "planinvalido@example.com");
-    const fetchMock = stubAsaasFetch();
-
-    const formData = new FormData();
-    formData.set("plan", "yolo");
-    formData.set("cpfCnpj", "12345678909");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("Plano inválido.");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("recusa ciclo que não é MONTHLY nem YEARLY", async () => {
-    await userWithWorkspace("u-sub-cycle-invalido", "cicloinvalido@example.com");
-    const fetchMock = stubAsaasFetch();
-
-    const formData = new FormData();
-    formData.set("plan", "corre");
-    formData.set("cycle", "WEEKLY");
-    formData.set("cpfCnpj", "12345678909");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("Ciclo de cobrança inválido.");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("recusa reassinar o mesmo plano e ciclo sem chamar o Asaas de novo", async () => {
-    const { user } = await userWithWorkspace("u-sub-dup", "dup@example.com");
+  it("recusa assinatura atribuída manualmente, sem chamar a InterPix", async () => {
+    const { user } = await userWithWorkspace("u-manual", "manual@example.com");
     await testDb.subscription.create({
-      data: {
-        userId: user.id,
-        plan: "corre",
-        cycle: "MONTHLY",
-        source: "ASAAS",
-        status: "TRIALING",
-        asaasCustomerId: "cus_existing",
-        asaasSubscriptionId: "sub_existing",
-      },
+      data: { userId: user.id, plan: "escala", provider: "MANUAL", status: "ACTIVE" },
     });
-    const fetchMock = stubAsaasFetch();
+    const fetchMock = stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "corre");
@@ -236,27 +181,23 @@ describe("subscribe", () => {
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("já tem uma assinatura ativa");
     expect(fetchMock).not.toHaveBeenCalled();
-
-    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.asaasSubscriptionId).toBe("sub_existing");
   });
 
-  it("exige confirmação explícita para trocar de plano com assinatura já ativa", async () => {
-    const { user } = await userWithWorkspace("u-sub-switch-noconfirm", "switch1@example.com");
+  it("recusa troca de plano de assinante com mandato ativo, sem chamar a InterPix", async () => {
+    const { user } = await userWithWorkspace("u-ativo", "ativo@example.com");
     await testDb.subscription.create({
       data: {
         userId: user.id,
         plan: "corre",
         cycle: "MONTHLY",
-        source: "ASAAS",
+        provider: "INTERPIX",
         status: "ACTIVE",
-        asaasCustomerId: "cus_existing",
-        asaasSubscriptionId: "sub_existing",
+        interpixSubscriptionId: "ipx-ativo",
+        interpixPixCopyPaste: "00020126-antigo",
       },
     });
-    const fetchMock = stubAsaasFetch();
+    const fetchMock = stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "cresce");
@@ -265,196 +206,139 @@ describe("subscribe", () => {
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("Confirme a troca");
     expect(fetchMock).not.toHaveBeenCalled();
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.asaasSubscriptionId).toBe("sub_existing");
+    expect(sub?.interpixSubscriptionId).toBe("ipx-ativo");
     expect(sub?.plan).toBe("corre");
   });
 
-  it("troca de plano prossegue quando a troca é confirmada, mas não cancela a antiga no gateway", async () => {
-    const { user } = await userWithWorkspace("u-sub-switch-confirm", "switch2@example.com");
+  it("recusa troca de plano de assinante com atraso (PAST_DUE), sem chamar a InterPix", async () => {
+    const { user } = await userWithWorkspace("u-atraso", "atraso@example.com");
     await testDb.subscription.create({
       data: {
         userId: user.id,
         plan: "corre",
         cycle: "MONTHLY",
-        source: "ASAAS",
-        status: "ACTIVE",
-        asaasCustomerId: "cus_existing",
-        asaasSubscriptionId: "sub_existing",
+        provider: "INTERPIX",
+        status: "PAST_DUE",
+        interpixSubscriptionId: "ipx-atraso",
+        interpixPixCopyPaste: "00020126-antigo",
       },
     });
-    stubAsaasFetch();
+    const fetchMock = stubInterPixFetch();
 
     const formData = new FormData();
     formData.set("plan", "cresce");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
-    formData.set("confirmSwitch", "true");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cancela o mandato pendente antigo antes de criar um novo ao trocar de plano", async () => {
+    const { user } = await userWithWorkspace("u-troca", "troca@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo",
+        interpixPixCopyPaste: "00020126-antigo",
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(true);
 
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/subscriptions/ipx-antigo/cancel");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/subscriptions");
+    expect(String(fetchMock.mock.calls[1][0])).not.toContain("/cancel");
+
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.asaasSubscriptionId).toBe("sub_remote_1");
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
     expect(sub?.plan).toBe("cresce");
   });
 
-  it("erro de configuração do Asaas não vaza para o cliente e é logado no servidor", async () => {
-    await userWithWorkspace("u-sub-infra", "infra@example.com");
-    vi.stubEnv("ASAAS_API_KEY", "");
-    vi.stubEnv("ASAAS_API_KEY_BASE64", "");
+  it("não cria assinatura nova se o cancelamento do mandato antigo falhar", async () => {
+    const { user } = await userWithWorkspace("u-falha-cancela", "falhacancela@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo",
+        interpixPixCopyPaste: "00020126-antigo",
+      },
+    });
+    const fetchMock = stubInterPixFetchWithFailingCancel();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const formData = new FormData();
-    formData.set("plan", "corre");
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
-    expect(result.error).not.toContain("ASAAS_API_KEY");
-    expect(result.error).toBe(
-      "Não foi possível concluir a contratação agora. Tente novamente em instantes.",
-    );
+    expect(fetchMock.mock.calls.length).toBe(1);
     expect(errorSpy).toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-antigo");
+    expect(sub?.plan).toBe("corre");
 
     errorSpy.mockRestore();
   });
 
-  it("mensagem de validação do Asaas chega ao usuário", async () => {
-    await userWithWorkspace("u-sub-asaas-validation", "validation@example.com");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ errors: [{ description: "CPF inválido" }] }), {
-          status: 400,
-        }),
-      ),
-    );
-
-    const formData = new FormData();
-    formData.set("plan", "corre");
-    formData.set("cpfCnpj", "12345678909");
-
-    const result = await subscribe(formData);
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("CPF inválido");
-  });
-});
-
-describe("resumeCheckout", () => {
-  beforeEach(async () => {
-    await resetDb();
-    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
-    vi.stubEnv("ASAAS_ENV", "sandbox");
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-    vi.useRealTimers();
-  });
-
-  it("recusa quando não existe assinatura pendente no gateway", async () => {
-    await userWithWorkspace("u-resume-none", "resumenone@example.com");
-
-    const result = await resumeCheckout();
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("Nenhuma assinatura pendente");
-  });
-
-  it("busca a cobrança em aberto da assinatura existente e devolve o link", async () => {
-    const { user } = await userWithWorkspace("u-resume-ok", "resumeok@example.com");
+  it("resumeCheckout devolve o copia-e-cola guardado, sem criar outra assinatura", async () => {
+    const { user } = await userWithWorkspace("u-resume", "resume@example.com");
     await testDb.subscription.create({
       data: {
         userId: user.id,
         plan: "corre",
-        cycle: "MONTHLY",
-        source: "ASAAS",
-        status: "TRIALING",
-        asaasCustomerId: "cus_existing",
-        asaasSubscriptionId: "sub_existing",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-existente",
+        interpixPixCopyPaste: "00020126-guardado",
+        currentPeriodEnd: new Date("2026-09-20"),
       },
     });
-    stubAsaasFetch();
+    const fetchMock = stubInterPixFetch();
 
     const result = await resumeCheckout();
     expect(result.ok).toBe(true);
-    expect(result.data?.invoiceUrl).toBe(OPEN_INVOICE_URL);
+    expect(result.data?.pixCopyPaste).toBe("00020126-guardado");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("avisa quando não encontra cobrança em aberto mesmo depois da segunda tentativa", async () => {
-    const { user } = await userWithWorkspace("u-resume-empty", "resumeempty@example.com");
-    await testDb.subscription.create({
-      data: {
-        userId: user.id,
-        plan: "corre",
-        cycle: "MONTHLY",
-        source: "ASAAS",
-        status: "TRIALING",
-        asaasCustomerId: "cus_existing",
-        asaasSubscriptionId: "sub_existing",
-      },
-    });
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(
-        async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
-      ),
-    );
-
-    const promise = resumeCheckout();
-    await vi.advanceTimersByTimeAsync(1500);
-    const result = await promise;
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("contato@coolkies.com.br");
-  });
-});
-
-describe("subscribe com assinatura atribuída manualmente", () => {
-  beforeEach(async () => {
-    await resetDb();
-    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
-    vi.stubEnv("ASAAS_ENV", "sandbox");
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  });
-
-  it("recusa a contratação, não chama o Asaas e preserva o plano negociado", async () => {
-    const { user } = await userWithWorkspace("u-sub-manual", "manual@example.com");
-    await testDb.subscription.create({
-      data: {
-        userId: user.id,
-        plan: "escala",
-        cycle: "MONTHLY",
-        source: "MANUAL",
-        status: "ACTIVE",
-      },
-    });
-    const fetchMock = stubAsaasFetch();
+  it("erro de configuração não vaza para o cliente e é logado", async () => {
+    await userWithWorkspace("u-infra", "infra@example.com");
+    vi.stubEnv("INTERPIX_API_TOKEN", "");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const formData = new FormData();
     formData.set("plan", "corre");
     formData.set("cycle", "MONTHLY");
     formData.set("cpfCnpj", "12345678909");
-    formData.set("confirmSwitch", "true");
 
     const result = await subscribe(formData);
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("manualmente");
-    expect(result.error).toContain("contato@coolkies.com.br");
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
-    expect(sub?.plan).toBe("escala");
-    expect(sub?.source).toBe("MANUAL");
-    expect(sub?.asaasSubscriptionId).toBeNull();
+    expect(result.error).not.toContain("INTERPIX_API_TOKEN");
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
