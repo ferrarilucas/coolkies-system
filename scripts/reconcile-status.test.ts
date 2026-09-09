@@ -27,9 +27,19 @@ describe("conciliação InterPix — decisão de status", () => {
     expect(decision).toMatchObject({ action: "apply", status: "AUTH_DENIED" });
   });
 
-  it("rebaixamento para PAST_DUE é aplicado", () => {
+  it("PAST_DUE remoto vindo de ACTIVE é aplicado — quem pagava deixou de pagar", () => {
     const decision = decideReconcile({ local: "ACTIVE", remote: "PAST_DUE" });
     expect(decision).toMatchObject({ action: "apply", status: "PAST_DUE" });
+  });
+
+  it("PAST_DUE remoto vindo de PENDING_AUTH só relata — nunca autorizou, não pode promover", () => {
+    const decision = decideReconcile({ local: "PENDING_AUTH", remote: "PAST_DUE" });
+    expect(decision.action).toBe("report");
+  });
+
+  it("PAST_DUE remoto vindo de SUSPENDED só relata — não devolve acesso a quem foi suspenso", () => {
+    const decision = decideReconcile({ local: "SUSPENDED", remote: "PAST_DUE" });
+    expect(decision.action).toBe("report");
   });
 
   it("aplica suspensão perdida (PAST_DUE local, SUSPENDED remoto)", () => {
@@ -85,6 +95,24 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "2026-09-01",
+    });
+
+    expect(decision.action).toBe("none");
+  });
+
+  it("vencimento remoto ausente não é aplicado — não derruba a mudança de status legítima", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
+      remoteNextDueDate: "",
+    });
+
+    expect(decision.action).toBe("none");
+  });
+
+  it("vencimento remoto fora do formato não é aplicado", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
+      remoteNextDueDate: "não é uma data",
     });
 
     expect(decision.action).toBe("none");

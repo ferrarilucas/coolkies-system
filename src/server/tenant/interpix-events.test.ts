@@ -123,6 +123,62 @@ describe("eventos da InterPix", () => {
     expect(sub?.status).toBe("ACTIVE");
   });
 
+  it("subscription.past_due vindo de ACTIVE é aplicado — quem pagava deixou de pagar", async () => {
+    const user = await subscriber("u-past-due-from-active", { status: "ACTIVE" });
+
+    const outcome = await applyInterPixEvent({
+      type: "subscription.past_due",
+      eventId: "70",
+      data: { subscriptionId: "ipx-u-past-due-from-active", externalUserId: user.id, retryDate: "2026-09-25" },
+    });
+
+    expect(outcome).toBe("applied");
+    expect((await subOf(user.id))?.status).toBe("PAST_DUE");
+  });
+
+  it("subscription.past_due vindo de PENDING_AUTH não promove — nunca autorizou, não pode ganhar acesso", async () => {
+    const user = await subscriber("u-past-due-from-pending", { status: "PENDING_AUTH" });
+
+    const outcome = await applyInterPixEvent({
+      type: "subscription.past_due",
+      eventId: "71",
+      data: { subscriptionId: "ipx-u-past-due-from-pending", externalUserId: user.id, retryDate: "2026-09-25" },
+    });
+
+    expect(outcome).toBe("applied");
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.lastAppliedEventId).toBe(71n);
+  });
+
+  it("subscription.past_due vindo de SUSPENDED não devolve acesso", async () => {
+    const user = await subscriber("u-past-due-from-suspended", { status: "SUSPENDED" });
+
+    const outcome = await applyInterPixEvent({
+      type: "subscription.past_due",
+      eventId: "72",
+      data: { subscriptionId: "ipx-u-past-due-from-suspended", externalUserId: user.id, retryDate: "2026-09-25" },
+    });
+
+    expect(outcome).toBe("applied");
+    const sub = await subOf(user.id);
+    expect(sub?.status).toBe("SUSPENDED");
+    expect(sub?.lastAppliedEventId).toBe(72n);
+  });
+
+  it("subscription.past_due vindo de PENDING_AUTH não reaplica se o evento chegar de novo", async () => {
+    const user = await subscriber("u-past-due-no-replay", { status: "PENDING_AUTH" });
+    const event = {
+      type: "subscription.past_due" as const,
+      eventId: "73",
+      data: { subscriptionId: "ipx-u-past-due-no-replay", externalUserId: user.id, retryDate: "2026-09-25" },
+    };
+
+    expect(await applyInterPixEvent(event)).toBe("applied");
+    expect(await applyInterPixEvent(event)).toBe("duplicate");
+    expect((await subOf(user.id))?.status).toBe("PENDING_AUTH");
+  });
+
   it("subscription.suspended corta o acesso", async () => {
     const user = await subscriber("u-susp", { status: "PAST_DUE" });
 

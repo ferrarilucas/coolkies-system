@@ -81,7 +81,9 @@ function changesFor(
     case "subscription.auth_denied":
       return { status: "AUTH_DENIED" };
     case "subscription.past_due":
-      return { status: "PAST_DUE" };
+      return current.status === "ACTIVE" || current.status === "PAST_DUE"
+        ? { status: "PAST_DUE" }
+        : {};
     case "subscription.suspended":
       return { status: "SUSPENDED" };
     case "subscription.canceled":

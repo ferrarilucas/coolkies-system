@@ -23,8 +23,17 @@ async function main() {
 
   for (const sub of subs) {
     checked += 1;
+
+    let remote: Awaited<ReturnType<typeof getInterPixSubscription>>;
     try {
-      const remote = await getInterPixSubscription(sub.interpixSubscriptionId as string);
+      remote = await getInterPixSubscription(sub.interpixSubscriptionId as string);
+    } catch (e) {
+      failed += 1;
+      console.error(`falha ao consultar ${sub.id}:`, e instanceof Error ? e.message : e);
+      continue;
+    }
+
+    try {
       const statusDecision = decideReconcile({ local: sub.status, remote: remote.status });
       const periodDecision = decidePeriodEndCorrection({
         localPeriodEnd: sub.currentPeriodEnd,
@@ -34,7 +43,7 @@ async function main() {
       const data: { status?: SubscriptionStatus; currentPeriodEnd?: Date } = {};
 
       if (statusDecision.action === "apply") {
-        data.status = statusDecision.status as SubscriptionStatus;
+        data.status = statusDecision.status;
       }
 
       if (periodDecision.action === "apply") {
@@ -57,7 +66,7 @@ async function main() {
       }
     } catch (e) {
       failed += 1;
-      console.error(`falha ao consultar ${sub.id}:`, e instanceof Error ? e.message : e);
+      console.error(`falha ao gravar ${sub.id}:`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -70,6 +79,10 @@ async function main() {
       "nosso — é invisível para ela. Só um endpoint de listagem no gateway resolveria isso, e " +
       "o cliente HTTP atual (src/server/tenant/interpix.ts) não expõe um.",
   );
+
+  if (failed > 0) {
+    process.exitCode = 1;
+  }
 }
 
 main()
