@@ -4,3 +4,6 @@
 -- AlterTable
 ALTER TABLE "subscription" ADD COLUMN "paidThroughAt" TIMESTAMP(3);
 ALTER TABLE "subscription" ADD COLUMN "pendingChargeDueAt" TIMESTAMP(3);
+
+-- Backfill: quem esta ativo hoje com periodo em aberto ja tem a cobertura assumida
+UPDATE "subscription" SET "paidThroughAt" = "currentPeriodEnd" WHERE "status" = 'ACTIVE' AND "currentPeriodEnd" IS NOT NULL;

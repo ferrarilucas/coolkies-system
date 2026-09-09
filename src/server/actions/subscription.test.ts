@@ -110,6 +110,31 @@ function stubInterPixFetchWithCancelPendingCycleAndFailingCreate() {
   return fetchMock;
 }
 
+function stubInterPixFetchWithCancelInvalidPendingCycle() {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes("/cancel")) {
+      return new Response(
+        JSON.stringify({ pendingCycle: { cycleSeq: 4, dueDate: "não é uma data" } }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: "ipx-novo",
+        status: "PENDING_AUTH",
+        externalUserId: "usr",
+        planCode: "corre",
+        amount: "34.50",
+        nextDueDate: "2026-09-20",
+        authorization: { pixCopyPaste: "00020126-copia-e-cola", url: "https://qr.test/1" },
+      }),
+      { status: 201 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function stubInterPixFetchWithoutCopyPaste() {
   const fetchMock = vi.fn().mockImplementation(
     async () =>
@@ -524,6 +549,39 @@ describe("subscribe", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.pendingCycleSeq).toBe(9);
+  });
+
+  it("vencimento inválido da cobrança pendente reportada no cancelamento não aborta a contratação nem grava aviso", async () => {
+    const { user } = await userWithWorkspace(
+      "u-pending-cycle-invalido",
+      "pendingcycleinvalido@example.com",
+    );
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo-cobranca-invalida",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    stubInterPixFetchWithCancelInvalidPendingCycle();
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(result.data?.previousPendingCharge).toBeNull();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+    expect(sub?.pendingChargeDueAt).toBeNull();
   });
 
   it("cancela o mandato pendente antigo antes de criar um novo ao trocar de plano", async () => {

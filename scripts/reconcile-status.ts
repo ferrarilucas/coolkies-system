@@ -1,3 +1,5 @@
+import { isValidIsoCalendarDate } from "../src/lib/date-validation";
+
 export type ReconcileApplyStatus = "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | "AUTH_DENIED";
 
 export type ReconcileDecision =
@@ -6,7 +8,7 @@ export type ReconcileDecision =
   | { action: "none"; reason: string };
 
 export type PeriodEndDecision =
-  | { action: "apply"; currentPeriodEnd: Date; reason: string }
+  | { action: "apply"; currentPeriodEnd: Date; recordPaidThroughAt: boolean; reason: string }
   | { action: "none"; reason: string };
 
 const KNOWN_REMOTE_STATUSES = new Set([
@@ -28,7 +30,7 @@ const PAID_ACCESS_LOCAL_STATUSES = new Set(["ACTIVE", "PAST_DUE"]);
 
 const RECOVERABLE_LOCAL_STATUSES = new Set(["PAST_DUE", "SUSPENDED"]);
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const PAID_EVIDENCE_BLOCKED_LOCAL_STATUSES = new Set(["SUSPENDED"]);
 
 function isUnconditionalDowngradeStatus(value: string): value is ReconcileApplyStatus {
   return (UNCONDITIONAL_DOWNGRADE_STATUSES as readonly string[]).includes(value);
@@ -86,41 +88,30 @@ export function decideReconcile(input: {
   };
 }
 
-function isRealCalendarDate(isoDate: string): boolean {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const remote = new Date(Date.UTC(year, month - 1, day));
-  return (
-    remote.getUTCFullYear() === year &&
-    remote.getUTCMonth() === month - 1 &&
-    remote.getUTCDate() === day
-  );
-}
-
 export function decidePeriodEndCorrection(input: {
   localPeriodEnd: Date | null;
   remoteNextDueDate: string;
+  priorLocalStatus: string;
+  effectiveStatus: string;
 }): PeriodEndDecision {
-  if (!ISO_DATE_PATTERN.test(input.remoteNextDueDate)) {
-    return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
-  }
-
-  if (!isRealCalendarDate(input.remoteNextDueDate)) {
+  if (!isValidIsoCalendarDate(input.remoteNextDueDate)) {
     return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
   }
 
   const remote = new Date(`${input.remoteNextDueDate}T00:00:00.000Z`);
 
-  if (Number.isNaN(remote.getTime())) {
-    return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
-  }
-
   if (input.localPeriodEnd && input.localPeriodEnd.getTime() === remote.getTime()) {
     return { action: "none", reason: "vencimento igual" };
   }
 
+  const recordPaidThroughAt =
+    input.effectiveStatus === "ACTIVE" &&
+    !PAID_EVIDENCE_BLOCKED_LOCAL_STATUSES.has(input.priorLocalStatus);
+
   return {
     action: "apply",
     currentPeriodEnd: remote,
+    recordPaidThroughAt,
     reason: input.localPeriodEnd
       ? `vencimento local ${input.localPeriodEnd.toISOString()} difere do remoto ${input.remoteNextDueDate}`
       : `vencimento local ausente, remoto ${input.remoteNextDueDate}`,

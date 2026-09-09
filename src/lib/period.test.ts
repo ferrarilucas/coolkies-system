@@ -30,11 +30,7 @@ describe("advancePeriod", () => {
 });
 
 describe("isPeriodPaid", () => {
-  it("pagamento liquidado horas antes do vencimento conta como período pago", () => {
-    // Reflete o fixture canônico de interpix-events.test.ts: pago em
-    // 2026-09-19T09:00Z, período termina em 2026-09-20T00:00Z. O evento de
-    // cycle.paid grava paidThroughAt com o novo currentPeriodEnd, não com o
-    // instante do pagamento — por isso a comparação é exata, sem aritmética.
+  it("pagamento liquidado horas antes do vencimento conta como período pago — reflete o fixture canônico de interpix-events.test.ts: pago em 2026-09-19T09:00Z, período termina em 2026-09-20T00:00Z; o evento de cycle.paid grava paidThroughAt com o novo currentPeriodEnd, não com o instante do pagamento, por isso a comparação é exata, sem aritmética", () => {
     const sub = {
       paidThroughAt: new Date("2026-09-20T00:00:00.000Z"),
       currentPeriodEnd: new Date("2026-09-20T00:00:00.000Z"),

@@ -204,7 +204,6 @@ export function PlanPanel({
   nextDueDate,
   authorizedAt,
   graceUntil,
-  pendingCycleSeq,
   pendingChargeDueAt,
 }: {
   currentPlan: string | null;
@@ -219,7 +218,6 @@ export function PlanPanel({
   nextDueDate: string | null;
   authorizedAt: string | null;
   graceUntil: string | null;
-  pendingCycleSeq: number | null;
   pendingChargeDueAt: string | null;
 }) {
   const [pending, startTransition] = useTransition();
@@ -300,7 +298,7 @@ export function PlanPanel({
         )}
       </Card>
 
-      {pendingChargeDueAt !== null ? (
+      {pendingChargeDueAt !== null && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <p className="text-warning">
@@ -310,17 +308,6 @@ export function PlanPanel({
             cobrança já em andamento.
           </p>
         </div>
-      ) : (
-        pendingCycleSeq !== null && (
-          <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-            <p className="text-warning">
-              Uma cobrança da sua assinatura anterior já foi enviada ao banco e
-              pode ser debitada mesmo com o cancelamento — regra do Banco
-              Central, cancelamento não impede a cobrança já em andamento.
-            </p>
-          </div>
-        )
       )}
 
       {overLimit > 0 && suggestedPlan && (

@@ -86,6 +86,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
       remoteNextDueDate: "2026-09-01",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("apply");
@@ -99,6 +101,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: null,
       remoteNextDueDate: "2026-09-01",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("apply");
@@ -108,6 +112,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "2026-09-01",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("none");
@@ -117,6 +123,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("none");
@@ -126,6 +134,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "não é uma data",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("none");
@@ -135,6 +145,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "2026-02-30",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("none");
@@ -144,6 +156,8 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "2028-02-29",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("apply");
@@ -153,8 +167,32 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
     const decision = decidePeriodEndCorrection({
       localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
       remoteNextDueDate: "2026-02-29",
+      priorLocalStatus: "ACTIVE",
+      effectiveStatus: "ACTIVE",
     });
 
     expect(decision.action).toBe("none");
+  });
+
+  it("promoção vinda de atraso grava a evidência de pagamento no período", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      remoteNextDueDate: "2026-09-01",
+      priorLocalStatus: "PAST_DUE",
+      effectiveStatus: "ACTIVE",
+    });
+
+    expect(decision).toMatchObject({ action: "apply", recordPaidThroughAt: true });
+  });
+
+  it("promoção vinda de suspenso não grava evidência de pagamento no período", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      remoteNextDueDate: "2026-09-01",
+      priorLocalStatus: "SUSPENDED",
+      effectiveStatus: "ACTIVE",
+    });
+
+    expect(decision).toMatchObject({ action: "apply", recordPaidThroughAt: false });
   });
 });

@@ -9,6 +9,7 @@ import {
   type PlanCycle,
 } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
+import { isValidIsoCalendarDate } from "@/lib/date-validation";
 import type { Subscription } from "@prisma/client";
 import {
   getBillingUser,
@@ -119,14 +120,21 @@ export async function subscribe(
       try {
         const cancelResult = await cancelInterPixSubscription(existing.interpixSubscriptionId);
         if (cancelResult.pendingCycle) {
-          previousPendingCharge = {
-            cycleSeq: cancelResult.pendingCycle.cycleSeq,
-            dueDate: cancelResult.pendingCycle.dueDate,
-          };
-          await recordPendingChargeWarning(
-            userId,
-            new Date(`${cancelResult.pendingCycle.dueDate}T00:00:00.000Z`),
-          );
+          if (isValidIsoCalendarDate(cancelResult.pendingCycle.dueDate)) {
+            previousPendingCharge = {
+              cycleSeq: cancelResult.pendingCycle.cycleSeq,
+              dueDate: cancelResult.pendingCycle.dueDate,
+            };
+            await recordPendingChargeWarning(
+              userId,
+              new Date(`${cancelResult.pendingCycle.dueDate}T00:00:00.000Z`),
+            );
+          } else {
+            console.error(
+              "subscribe: vencimento da cobrança pendente inválido",
+              cancelResult.pendingCycle.dueDate,
+            );
+          }
         }
       } catch (e) {
         if (e instanceof InterPixApiError) {

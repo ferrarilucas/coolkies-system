@@ -35,9 +35,13 @@ async function main() {
 
     try {
       const statusDecision = decideReconcile({ local: sub.status, remote: remote.status });
+      const effectiveStatus =
+        statusDecision.action === "apply" ? statusDecision.status : sub.status;
       const periodDecision = decidePeriodEndCorrection({
         localPeriodEnd: sub.currentPeriodEnd,
         remoteNextDueDate: remote.nextDueDate,
+        priorLocalStatus: sub.status,
+        effectiveStatus,
       });
 
       const data: {
@@ -56,8 +60,7 @@ async function main() {
 
       if (periodDecision.action === "apply") {
         data.currentPeriodEnd = periodDecision.currentPeriodEnd;
-        const effectiveStatus = data.status ?? sub.status;
-        if (effectiveStatus === "ACTIVE") {
+        if (periodDecision.recordPaidThroughAt) {
           data.paidThroughAt = periodDecision.currentPeriodEnd;
         }
       }
