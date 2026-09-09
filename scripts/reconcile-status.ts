@@ -1,58 +1,71 @@
-import { addMonths, addYears } from "date-fns";
-
-export type ReconcileCycle = "MONTHLY" | "YEARLY";
-
-export type RemoteCharge = { status: string; dueDate: string | null };
-
 export type ReconcileDecision =
-  | { action: "activate"; reason: string }
+  | { action: "apply"; status: string; reason: string }
   | { action: "report"; reason: string }
   | { action: "none"; reason: string };
 
-const PAID_CHARGE_STATUSES = new Set(["RECEIVED", "CONFIRMED"]);
+export type PeriodEndDecision =
+  | { action: "apply"; currentPeriodEnd: Date; reason: string }
+  | { action: "none"; reason: string };
 
-function coverageEnd(dueDate: string, cycle: ReconcileCycle): Date {
-  const due = new Date(`${dueDate}T00:00:00.000Z`);
-  return cycle === "YEARLY" ? addYears(due, 1) : addMonths(due, 1);
+const KNOWN_REMOTE_STATUSES = new Set([
+  "PENDING_AUTH",
+  "ACTIVE",
+  "PAST_DUE",
+  "SUSPENDED",
+  "CANCELED",
+  "AUTH_DENIED",
+]);
+
+const DOWNGRADE_STATUSES = new Set(["SUSPENDED", "CANCELED", "AUTH_DENIED", "PAST_DUE"]);
+
+const RECOVERABLE_LOCAL_STATUSES = new Set(["PAST_DUE", "SUSPENDED"]);
+
+export function decideReconcile(input: { local: string; remote: string }): ReconcileDecision {
+  if (!KNOWN_REMOTE_STATUSES.has(input.remote)) {
+    return { action: "report", reason: `status remoto desconhecido: ${input.remote}` };
+  }
+
+  if (input.local === input.remote) {
+    return { action: "none", reason: "estados iguais" };
+  }
+
+  if (DOWNGRADE_STATUSES.has(input.remote)) {
+    return {
+      action: "apply",
+      status: input.remote,
+      reason: `remoto rebaixou para ${input.remote} (local ${input.local})`,
+    };
+  }
+
+  if (input.remote === "ACTIVE" && RECOVERABLE_LOCAL_STATUSES.has(input.local)) {
+    return {
+      action: "apply",
+      status: input.remote,
+      reason: `remoto voltou a cobrar normalmente (local ${input.local})`,
+    };
+  }
+
+  return {
+    action: "report",
+    reason: `local ${input.local}, remoto ${input.remote} — divergência não aplicada por segurança`,
+  };
 }
 
-export function hasPaidCurrentCycle(
-  charges: RemoteCharge[],
-  cycle: ReconcileCycle,
-  now: Date,
-): boolean {
-  return charges.some((charge) => {
-    if (!PAID_CHARGE_STATUSES.has(charge.status)) return false;
-    if (!charge.dueDate) return false;
-    const end = coverageEnd(charge.dueDate, cycle);
-    return end.getTime() > now.getTime();
-  });
-}
+export function decidePeriodEndCorrection(input: {
+  localPeriodEnd: Date | null;
+  remoteNextDueDate: string;
+}): PeriodEndDecision {
+  const remote = new Date(`${input.remoteNextDueDate}T00:00:00.000Z`);
 
-export function decideReconcile(input: {
-  localStatus: string;
-  cycle: ReconcileCycle;
-  charges: RemoteCharge[];
-  now: Date;
-}): ReconcileDecision {
-  if (input.localStatus === "CANCELED") {
-    return { action: "none", reason: "cancelada localmente" };
+  if (input.localPeriodEnd && input.localPeriodEnd.getTime() === remote.getTime()) {
+    return { action: "none", reason: "vencimento igual" };
   }
 
-  const paid = hasPaidCurrentCycle(input.charges, input.cycle, input.now);
-
-  if (input.localStatus === "ACTIVE") {
-    return paid
-      ? { action: "none", reason: "ativa com o ciclo corrente pago" }
-      : {
-          action: "report",
-          reason: "ativa localmente sem cobranca paga no ciclo corrente",
-        };
-  }
-
-  if (!paid) {
-    return { action: "none", reason: "sem cobranca paga no ciclo corrente" };
-  }
-
-  return { action: "activate", reason: "cobranca paga cobrindo o ciclo corrente" };
+  return {
+    action: "apply",
+    currentPeriodEnd: remote,
+    reason: input.localPeriodEnd
+      ? `vencimento local ${input.localPeriodEnd.toISOString()} difere do remoto ${input.remoteNextDueDate}`
+      : `vencimento local ausente, remoto ${input.remoteNextDueDate}`,
+  };
 }
