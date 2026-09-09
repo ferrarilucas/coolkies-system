@@ -80,11 +80,25 @@ export function decideReconcile(input: { local: string; remote: string }): Recon
   };
 }
 
+function isRealCalendarDate(isoDate: string): boolean {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const remote = new Date(Date.UTC(year, month - 1, day));
+  return (
+    remote.getUTCFullYear() === year &&
+    remote.getUTCMonth() === month - 1 &&
+    remote.getUTCDate() === day
+  );
+}
+
 export function decidePeriodEndCorrection(input: {
   localPeriodEnd: Date | null;
   remoteNextDueDate: string;
 }): PeriodEndDecision {
   if (!ISO_DATE_PATTERN.test(input.remoteNextDueDate)) {
+    return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
+  }
+
+  if (!isRealCalendarDate(input.remoteNextDueDate)) {
     return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
   }
 

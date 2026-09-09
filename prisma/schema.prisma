@@ -159,6 +159,7 @@ model Subscription {
 
   trialEndsAt      DateTime?
   graceUntil       DateTime?
+  graceGrantedAt   DateTime?
   currentPeriodEnd DateTime?
 
   notes String?

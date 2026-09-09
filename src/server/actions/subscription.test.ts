@@ -573,6 +573,38 @@ describe("subscribe", () => {
     expect(sub?.interpixSubscriptionId).toBe("ipx-pendente");
   });
 
+  it("carência vencida no mesmo plano não é recusada: cancela o mandato antigo e cria um novo", async () => {
+    const { user } = await userWithWorkspace("u-carencia-mesmo-plano", "carenciamesmoplano@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-carencia-mesmo-plano",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/subscriptions/ipx-carencia-mesmo-plano/cancel",
+    );
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+    expect(sub?.plan).toBe("corre");
+  });
+
   it("autorização negada no mesmo plano não é recusada: cancela o mandato antigo e cria um novo", async () => {
     const { user } = await userWithWorkspace("u-auth-negada", "authnegada@example.com");
     await testDb.subscription.create({

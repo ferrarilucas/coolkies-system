@@ -41,4 +41,24 @@ describe("estado de checkout derivado do servidor", () => {
     expect(checkoutViewState("AUTH_DENIED", null, null, null)).toEqual({ kind: "none" });
     expect(checkoutViewState("PAST_DUE", null, null, null)).toEqual({ kind: "none" });
   });
+
+  it("carência vencida: cobrança não foi debitada, estado de falha em vez de espera", () => {
+    const now = new Date("2026-09-28T00:00:00.000Z");
+    expect(
+      checkoutViewState("PENDING_AUTH", "00020126...", "2026-09-12", "2026-09-27", now),
+    ).toEqual({
+      kind: "expired",
+      nextDueDate: "2026-09-12",
+    });
+  });
+
+  it("carência ainda válida continua no estado de espera", () => {
+    const now = new Date("2026-09-20T00:00:00.000Z");
+    expect(
+      checkoutViewState("PENDING_AUTH", "00020126...", "2026-09-12", "2026-09-27", now),
+    ).toEqual({
+      kind: "waiting",
+      nextDueDate: "2026-09-12",
+    });
+  });
 });

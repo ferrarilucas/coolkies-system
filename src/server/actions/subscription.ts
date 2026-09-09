@@ -90,6 +90,7 @@ export async function subscribe(
 
     if (
       existing?.status === "PENDING_AUTH" &&
+      existing.graceUntil === null &&
       existing.interpixPixCopyPaste &&
       existing.plan === plan &&
       existing.cycle === cycle

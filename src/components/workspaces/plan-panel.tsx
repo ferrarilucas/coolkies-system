@@ -307,13 +307,19 @@ export function PlanPanel({
             <Card className="border-primary">
               <CardHeader>
                 <CardTitle className="text-base">
-                  {checkoutState.kind === "failed" ? "Cobrança não gerada" : "Autorização pendente"}{" "}
+                  {checkoutState.kind === "failed"
+                    ? "Cobrança não gerada"
+                    : checkoutState.kind === "expired"
+                      ? "Cobrança não debitada"
+                      : "Autorização pendente"}{" "}
                   — {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
                 </CardTitle>
                 <CardDescription>
                   {checkoutState.kind === "authorize" &&
                     "Você ainda não autorizou o débito recorrente deste plano."}
                   {checkoutState.kind === "waiting" && "Sua autorização foi recebida."}
+                  {checkoutState.kind === "expired" &&
+                    "O prazo para debitar a primeira cobrança passou."}
                   {checkoutState.kind === "failed" &&
                     "Não foi possível gerar a cobrança Pix para este plano."}
                 </CardDescription>
@@ -334,6 +340,24 @@ export function PlanPanel({
                     . Isso pode levar alguns dias — nenhuma ação é necessária da sua
                     parte até lá.
                   </p>
+                )}
+                {checkoutState.kind === "expired" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      A primeira cobrança deste plano não foi debitada dentro do prazo
+                      e o acesso foi encerrado. Gere uma nova autorização para
+                      recomeçar.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        setCycle(currentCycle ?? "MONTHLY");
+                        openCheckout(currentPlan);
+                      }}
+                    >
+                      Recomeçar
+                    </Button>
+                  </>
                 )}
                 {checkoutState.kind === "failed" && (
                   <>
@@ -367,9 +391,17 @@ export function PlanPanel({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {PLANS.map((plan) => {
               const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
+              const isExpiredThisPlan =
+                checkoutState.kind === "expired" && currentPlan === plan.id;
               const isCurrent =
-                hasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
-              const isPendingThisPlan = checkoutState.kind !== "none" && currentPlan === plan.id;
+                hasSubscriptionId &&
+                currentPlan === plan.id &&
+                currentCycle === cycle &&
+                !isExpiredThisPlan;
+              const isPendingThisPlan =
+                checkoutState.kind !== "none" &&
+                checkoutState.kind !== "expired" &&
+                currentPlan === plan.id;
 
               return (
                 <Card
@@ -416,7 +448,7 @@ export function PlanPanel({
                       </Button>
                     ) : (
                       <Button className="w-full" onClick={() => openCheckout(plan.id)}>
-                        Contratar
+                        {isExpiredThisPlan ? "Recontratar" : "Contratar"}
                       </Button>
                     )}
                   </CardFooter>

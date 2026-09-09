@@ -20,6 +20,7 @@ type SubscriptionState = {
   currentPeriodEnd: Date | null;
   status: SubscriptionStatus;
   cycle: SubscriptionCycle;
+  graceGrantedAt: Date | null;
 };
 
 function isDuplicateEventError(error: unknown): boolean {
@@ -59,6 +60,7 @@ function advancePeriod(periodEnd: Date, cycle: SubscriptionCycle): Date {
 function changesFor(
   event: InterPixEvent,
   current: SubscriptionState,
+  now: Date,
 ): Prisma.SubscriptionUpdateManyMutationInput {
   switch (event.type) {
     case "cycle.paid":
@@ -71,13 +73,20 @@ function changesFor(
       };
     case "cycle.failed":
       return {};
-    case "subscription.authorized":
+    case "subscription.authorized": {
+      const statusChange: Prisma.SubscriptionUpdateManyMutationInput =
+        current.status === "ACTIVE" ? {} : { status: "PENDING_AUTH" };
+      if (current.graceGrantedAt !== null) {
+        return statusChange;
+      }
       return {
-        ...(current.status === "ACTIVE" ? {} : { status: "PENDING_AUTH" }),
+        ...statusChange,
         graceUntil: current.currentPeriodEnd
           ? addDays(current.currentPeriodEnd, GRACE_DAYS)
           : null,
+        graceGrantedAt: now,
       };
+    }
     case "subscription.auth_denied":
       return { status: "AUTH_DENIED" };
     case "subscription.past_due":
@@ -119,12 +128,21 @@ export async function applyInterPixEvent(event: InterPixEvent): Promise<EventOut
 
   try {
     return await db.$transaction(async (tx) => {
+      const current = await tx.subscription.findUnique({ where: { id: sub.id } });
+      if (!current) return "unknown";
+
+      if (current.lastAppliedEventId !== null && incoming <= current.lastAppliedEventId) {
+        return "stale";
+      }
+
       const updated = await tx.subscription.updateMany({
         where: {
-          id: sub.id,
+          id: current.id,
+          status: current.status,
+          graceGrantedAt: current.graceGrantedAt,
           OR: [{ lastAppliedEventId: null }, { lastAppliedEventId: { lt: incoming } }],
         },
-        data: { ...changesFor(event, sub), lastAppliedEventId: incoming },
+        data: { ...changesFor(event, current, new Date()), lastAppliedEventId: incoming },
       });
 
       if (updated.count === 0) return "stale";

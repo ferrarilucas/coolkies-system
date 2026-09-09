@@ -117,4 +117,31 @@ describe("conciliação InterPix — correção da data de vencimento", () => {
 
     expect(decision.action).toBe("none");
   });
+
+  it("vencimento remoto com data que não existe (2026-02-30) não é aplicado", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
+      remoteNextDueDate: "2026-02-30",
+    });
+
+    expect(decision.action).toBe("none");
+  });
+
+  it("vencimento remoto de ano bissexto (2028-02-29) é aceito", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
+      remoteNextDueDate: "2028-02-29",
+    });
+
+    expect(decision.action).toBe("apply");
+  });
+
+  it("vencimento remoto em ano não bissexto (2026-02-29) não é aplicado", () => {
+    const decision = decidePeriodEndCorrection({
+      localPeriodEnd: new Date("2026-09-01T00:00:00.000Z"),
+      remoteNextDueDate: "2026-02-29",
+    });
+
+    expect(decision.action).toBe("none");
+  });
 });
