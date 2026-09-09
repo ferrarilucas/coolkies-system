@@ -183,6 +183,7 @@ export function PlanPanel({
   activeCount,
   pixCopyPaste,
   nextDueDate,
+  authorizedAt,
   graceUntil,
 }: {
   currentPlan: string | null;
@@ -195,6 +196,7 @@ export function PlanPanel({
   activeCount: number;
   pixCopyPaste: string | null;
   nextDueDate: string | null;
+  authorizedAt: string | null;
   graceUntil: string | null;
 }) {
   const [pending, startTransition] = useTransition();
@@ -205,7 +207,13 @@ export function PlanPanel({
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
-  const checkoutState = checkoutViewState(status, pixCopyPaste, nextDueDate, graceUntil);
+  const checkoutState = checkoutViewState(
+    status,
+    pixCopyPaste,
+    nextDueDate,
+    authorizedAt,
+    graceUntil,
+  );
 
   function openCheckout(planId: string) {
     setPixResult(null);

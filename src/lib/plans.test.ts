@@ -67,6 +67,11 @@ describe("catálogo", () => {
     expect(effectiveLimit("cresce", "ACTIVE")).toBe(4);
   });
 
+  it("PENDING_AUTH não amplia o limite antes do primeiro pagamento", () => {
+    expect(effectiveLimit("cresce", "PENDING_AUTH")).toBe(1);
+    expect(effectiveLimit("escala", "PENDING_AUTH")).toBe(1);
+  });
+
   it("rotula o plano pelo nome comercial", () => {
     expect(planLabel("corre")).toBe("Corre");
   });

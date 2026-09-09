@@ -77,7 +77,7 @@ export function planLimit(plan: string): number {
 }
 
 export function effectiveLimit(plan: string, status: string): number {
-  return status === "TRIALING" ? 1 : planLimit(plan);
+  return status === "TRIALING" || status === "PENDING_AUTH" ? 1 : planLimit(plan);
 }
 
 export function planLabel(plan: string): string {

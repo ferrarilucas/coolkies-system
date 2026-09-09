@@ -9,10 +9,15 @@ export function checkoutViewState(
   status: string | null,
   pixCopyPaste: string | null,
   nextDueDate: string | null,
+  authorizedAt: string | null,
   graceUntil: string | null,
   now: Date = new Date(),
 ): CheckoutViewState {
   if (status !== "PENDING_AUTH") return { kind: "none" };
+  if (!authorizedAt) {
+    if (pixCopyPaste) return { kind: "authorize", pixCopyPaste, nextDueDate };
+    return { kind: "failed" };
+  }
   if (graceUntil) {
     const graceDate = new Date(graceUntil);
     if (Number.isNaN(graceDate.getTime())) {
@@ -23,6 +28,5 @@ export function checkoutViewState(
     }
     return { kind: "waiting", nextDueDate };
   }
-  if (pixCopyPaste) return { kind: "authorize", pixCopyPaste, nextDueDate };
-  return { kind: "failed" };
+  return { kind: "waiting", nextDueDate };
 }

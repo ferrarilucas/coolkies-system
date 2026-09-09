@@ -1,5 +1,6 @@
-import { Prisma, type SubscriptionCycle, type SubscriptionStatus } from "@prisma/client";
+import { Prisma, type Subscription, type SubscriptionCycle } from "@prisma/client";
 import { db } from "@/lib/db";
+import { isSubscriptionUsable } from "./subscription";
 
 const GRACE_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -15,13 +16,6 @@ export type InterPixEvent =
   | { type: "subscription.canceled"; eventId: string; data: { subscriptionId: string; externalUserId: string; pendingCycleSeq: number | null } };
 
 export type EventOutcome = "applied" | "duplicate" | "stale" | "conflict" | "unknown" | "invalid";
-
-type SubscriptionState = {
-  currentPeriodEnd: Date | null;
-  status: SubscriptionStatus;
-  cycle: SubscriptionCycle;
-  graceGrantedAt: Date | null;
-};
 
 function isDuplicateEventError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -59,7 +53,7 @@ function advancePeriod(periodEnd: Date, cycle: SubscriptionCycle): Date {
 
 function changesFor(
   event: InterPixEvent,
-  current: SubscriptionState,
+  current: Subscription,
   now: Date,
 ): Prisma.SubscriptionUpdateManyMutationInput {
   switch (event.type) {
@@ -77,11 +71,13 @@ function changesFor(
     case "subscription.authorized": {
       const statusChange: Prisma.SubscriptionUpdateManyMutationInput =
         current.status === "ACTIVE" ? {} : { status: "PENDING_AUTH" };
-      if (current.graceGrantedAt !== null) {
-        return statusChange;
+      const hadAccess = isSubscriptionUsable(current, now);
+      if (current.graceGrantedAt !== null || !hadAccess) {
+        return { ...statusChange, authorizedAt: now };
       }
       return {
         ...statusChange,
+        authorizedAt: now,
         graceUntil: current.currentPeriodEnd
           ? addDays(current.currentPeriodEnd, GRACE_DAYS)
           : null,

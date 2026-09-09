@@ -115,6 +115,19 @@ describe("eventos da InterPix", () => {
     expect(sub?.status).toBe("PENDING_AUTH");
   });
 
+  it("subscription.authorized sempre grava o instante da autorização, mesmo quando não concede carência", async () => {
+    const user = await subscriber("u-auth-timestamp");
+
+    await applyInterPixEvent({
+      type: "subscription.authorized",
+      eventId: "93",
+      data: { subscriptionId: "ipx-u-auth-timestamp", externalUserId: user.id },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.authorizedAt).not.toBeNull();
+  });
+
   it("subscription.authorized não rebaixa quem já está ativo, mas estende a carência", async () => {
     const user = await subscriber("u-auth-active", { status: "ACTIVE" });
 
@@ -127,6 +140,7 @@ describe("eventos da InterPix", () => {
     const sub = await subOf(user.id);
     expect(sub?.status).toBe("ACTIVE");
     expect(sub?.graceUntil?.toISOString()).toBe("2026-09-27T00:00:00.000Z");
+    expect(sub?.authorizedAt).not.toBeNull();
   });
 
   it("subscription.authorized a partir de SUSPENDED não concede carência quando já foi concedida antes", async () => {
@@ -144,6 +158,7 @@ describe("eventos da InterPix", () => {
     const sub = await subOf(user.id);
     expect(sub?.graceUntil).toBeNull();
     expect(sub?.graceGrantedAt?.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(sub?.authorizedAt).not.toBeNull();
   });
 
   it("subscription.authorized a partir de CANCELED não concede carência quando já foi concedida antes", async () => {
@@ -197,25 +212,45 @@ describe("eventos da InterPix", () => {
     expect(sub?.lastAppliedEventId).toBe(91n);
     expect(sub?.graceGrantedAt?.toISOString()).toBe("2026-01-01T00:00:00.000Z");
     expect(sub?.graceUntil).toBeNull();
+    expect(sub?.authorizedAt).not.toBeNull();
   });
 
-  it("primeira autorização de uma assinatura nova concede carência e grava o instante", async () => {
-    const user = await subscriber("u-auth-first");
+  it("primeira autorização de quem está em trial vigente concede carência e grava o instante — não pode perder o acesso que já tinha", async () => {
+    const user = await subscriber("u-auth-first-trial", {
+      trialEndsAt: new Date("2026-12-01T00:00:00Z"),
+    });
 
     const outcome = await applyInterPixEvent({
       type: "subscription.authorized",
       eventId: "92",
-      data: { subscriptionId: "ipx-u-auth-first", externalUserId: user.id },
+      data: { subscriptionId: "ipx-u-auth-first-trial", externalUserId: user.id },
     });
     expect(outcome).toBe("applied");
 
     const sub = await subOf(user.id);
     expect(sub?.graceUntil?.toISOString()).toBe("2026-09-27T00:00:00.000Z");
     expect(sub?.graceGrantedAt).not.toBeNull();
+    expect(sub?.authorizedAt).not.toBeNull();
   });
 
-  it("subscription.authorized estende a carência até o vencimento mais sete dias", async () => {
-    const user = await subscriber("u-grace");
+  it("primeira autorização de quem nunca teve acesso (sem trial vigente) não concede carência, mas grava o instante da autorização", async () => {
+    const user = await subscriber("u-auth-first-no-access");
+
+    const outcome = await applyInterPixEvent({
+      type: "subscription.authorized",
+      eventId: "94",
+      data: { subscriptionId: "ipx-u-auth-first-no-access", externalUserId: user.id },
+    });
+    expect(outcome).toBe("applied");
+
+    const sub = await subOf(user.id);
+    expect(sub?.graceUntil).toBeNull();
+    expect(sub?.graceGrantedAt).toBeNull();
+    expect(sub?.authorizedAt).not.toBeNull();
+  });
+
+  it("subscription.authorized estende a carência até o vencimento mais sete dias, para quem já tinha acesso via trial", async () => {
+    const user = await subscriber("u-grace", { trialEndsAt: new Date("2026-12-01T00:00:00Z") });
 
     await applyInterPixEvent({
       type: "subscription.authorized",

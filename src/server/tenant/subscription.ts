@@ -37,6 +37,7 @@ export async function recordInterPixSubscription(input: {
       cycle: input.cycle,
       provider: "INTERPIX",
       status: "PENDING_AUTH",
+      authorizedAt: null,
       interpixSubscriptionId: input.interpixSubscriptionId,
       interpixPixCopyPaste: input.pixCopyPaste,
       currentPeriodEnd: input.nextDueDate,
@@ -47,6 +48,7 @@ export async function recordInterPixSubscription(input: {
       provider: "INTERPIX",
       status: existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING_AUTH",
       graceUntil: existing?.status === "ACTIVE" ? existing.graceUntil : null,
+      authorizedAt: null,
       interpixSubscriptionId: input.interpixSubscriptionId,
       interpixPixCopyPaste: input.pixCopyPaste,
       currentPeriodEnd: input.nextDueDate,
@@ -87,7 +89,12 @@ export function isSubscriptionUsable(
     return sub.trialEndsAt === null || sub.trialEndsAt > now;
   }
   if (sub.status === "PENDING_AUTH") {
-    return sub.graceUntil !== null && sub.graceUntil > now;
+    const graceValid = sub.graceUntil !== null && sub.graceUntil > now;
+    const trialActive = sub.trialEndsAt !== null && sub.trialEndsAt > now;
+    return graceValid || trialActive;
+  }
+  if (sub.status === "CANCELED") {
+    return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }
   return false;
 }

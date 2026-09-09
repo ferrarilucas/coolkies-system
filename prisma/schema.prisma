@@ -139,7 +139,7 @@ model Subscription {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  plan     String               @default("solo")
+  plan     String               @default("corre")
   status   SubscriptionStatus   @default(TRIALING)
   provider SubscriptionProvider @default(INTERPIX)
   cycle    SubscriptionCycle    @default(MONTHLY)
@@ -151,6 +151,7 @@ model Subscription {
   trialEndsAt      DateTime?
   graceUntil       DateTime?
   graceGrantedAt   DateTime?
+  authorizedAt     DateTime?
   currentPeriodEnd DateTime?
 
   notes String?

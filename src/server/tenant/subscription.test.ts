@@ -179,10 +179,48 @@ describe("assinatura utilizavel", () => {
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
-  it("SUSPENDED, CANCELED e AUTH_DENIED não valem", () => {
+  it("PENDING_AUTH sem carência mas com trial ainda vigente vale — contratar durante o teste não pode derrubar o acesso", () => {
+    const sub = {
+      status: "PENDING_AUTH",
+      graceUntil: null,
+      trialEndsAt: new Date("2026-09-30"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
+  it("PENDING_AUTH com trial já vencido e sem carência não vale", () => {
+    const sub = {
+      status: "PENDING_AUTH",
+      graceUntil: null,
+      trialEndsAt: new Date("2026-09-01"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
+  it("SUSPENDED e AUTH_DENIED não valem", () => {
     expect(isSubscriptionUsable({ status: "SUSPENDED" } as never, now)).toBe(false);
-    expect(isSubscriptionUsable({ status: "CANCELED" } as never, now)).toBe(false);
     expect(isSubscriptionUsable({ status: "AUTH_DENIED" } as never, now)).toBe(false);
+  });
+
+  it("CANCELED continua utilizável até o fim do período pago", () => {
+    const sub = {
+      status: "CANCELED",
+      currentPeriodEnd: new Date("2026-09-30"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
+  it("CANCELED deixa de valer depois do fim do período pago", () => {
+    const sub = {
+      status: "CANCELED",
+      currentPeriodEnd: new Date("2026-09-10"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
+  it("CANCELED sem período pago registrado não vale", () => {
+    const sub = { status: "CANCELED", currentPeriodEnd: null } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("TRIALING vale dentro do prazo", () => {
@@ -334,6 +372,29 @@ describe("recordInterPixSubscription", () => {
     expect(sub?.cycle).toBe("MONTHLY");
     expect(sub?.interpixSubscriptionId).toBe("ip_sub_nova");
     expect(isSubscriptionUsable(sub, new Date())).toBe(true);
+    expect(sub?.authorizedAt).toBeNull();
+  });
+
+  it("contratar durante o trial vigente preserva o trialEndsAt e continua utilizável", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-during-trial", name: "Helo", email: "helo@example.com" },
+    });
+    await ensureTrialSubscription(user.id);
+    const trialAntes = await testDb.subscription.findUnique({ where: { userId: user.id } });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_during_trial",
+      pixCopyPaste: "00020101...trial",
+      nextDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.status).toBe("PENDING_AUTH");
+    expect(sub?.trialEndsAt?.toISOString()).toBe(trialAntes?.trialEndsAt?.toISOString());
+    expect(isSubscriptionUsable(sub, new Date())).toBe(true);
   });
 
   it("nunca limpa graceGrantedAt — é a invariante que impede reabrir o laço de carência reciclável", async () => {
@@ -364,10 +425,37 @@ describe("recordInterPixSubscription", () => {
     expect(sub?.graceGrantedAt?.toISOString()).toBe("2025-06-01T00:00:00.000Z");
   });
 
+  it("registrar um mandato novo zera o instante de autorização do mandato anterior", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-authorized-reset", name: "Ivo", email: "ivo@example.com" },
+    });
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        status: "SUSPENDED",
+        authorizedAt: new Date("2026-08-01T00:00:00Z"),
+      },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "corre",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_authorized_reset",
+      pixCopyPaste: "00020101...novomandato",
+      nextDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.authorizedAt).toBeNull();
+  });
+
   it("ciclo completo: autorizar, carência vencer, recontratar, autorizar de novo — carência continua nula", async () => {
     const user = await testDb.user.create({
       data: { id: "u-full-cycle", name: "Guga", email: "guga@example.com" },
     });
+    await ensureTrialSubscription(user.id);
 
     await recordInterPixSubscription({
       userId: user.id,
@@ -388,6 +476,7 @@ describe("recordInterPixSubscription", () => {
     const afterFirstAuth = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(afterFirstAuth?.graceGrantedAt).not.toBeNull();
     expect(afterFirstAuth?.graceUntil).not.toBeNull();
+    expect(afterFirstAuth?.authorizedAt).not.toBeNull();
 
     await applyInterPixEvent({
       type: "subscription.suspended",
@@ -407,6 +496,7 @@ describe("recordInterPixSubscription", () => {
     const afterRecontratacao = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(afterRecontratacao?.status).toBe("PENDING_AUTH");
     expect(afterRecontratacao?.graceGrantedAt).not.toBeNull();
+    expect(afterRecontratacao?.authorizedAt).toBeNull();
 
     const secondAuth = await applyInterPixEvent({
       type: "subscription.authorized",
