@@ -27,10 +27,12 @@ export default async function PlanPage() {
         currentCycle={sub?.cycle ?? null}
         status={sub?.status ?? null}
         trialExpired={isTrialExpired(sub?.status ?? "NONE", sub?.trialEndsAt ?? null)}
-        source={sub?.provider ?? null}
+        provider={sub?.provider ?? null}
         hasSubscriptionId={Boolean(sub?.interpixSubscriptionId)}
         ownedCount={owned}
         activeCount={active.size}
+        pixCopyPaste={sub?.interpixPixCopyPaste ?? null}
+        nextDueDate={sub?.currentPeriodEnd ? sub.currentPeriodEnd.toISOString().slice(0, 10) : null}
       />
     </div>
   );
