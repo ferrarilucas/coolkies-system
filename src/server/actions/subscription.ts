@@ -123,14 +123,23 @@ export async function subscribe(
             cycleSeq: cancelResult.pendingCycle.cycleSeq,
             dueDate: cancelResult.pendingCycle.dueDate,
           };
+          await recordPendingCycleWarning(userId, cancelResult.pendingCycle.cycleSeq);
         }
-        await recordPendingCycleWarning(userId, cancelResult.pendingCycle?.cycleSeq ?? null);
       } catch (e) {
-        console.error(
-          "subscribe: falha ao cancelar mandato antigo",
-          existing.interpixSubscriptionId,
-          e,
-        );
+        if (e instanceof InterPixApiError) {
+          console.error(
+            "subscribe: falha ao cancelar mandato antigo",
+            existing.interpixSubscriptionId,
+            e.code,
+            e.requestId,
+          );
+        } else {
+          console.error(
+            "subscribe: falha ao cancelar mandato antigo",
+            existing.interpixSubscriptionId,
+            e instanceof Error ? e.name : "erro desconhecido",
+          );
+        }
         return { ok: false, error: GENERIC_ERROR };
       }
     }

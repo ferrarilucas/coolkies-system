@@ -57,6 +57,12 @@ describe("conciliação InterPix — decisão de status", () => {
     expect(decision).toMatchObject({ action: "apply", status: "ACTIVE" });
   });
 
+  it("promoção para ACTIVE grava a evidência de pagamento, coerente com o período reconhecido", () => {
+    const now = new Date("2026-09-20T12:00:00Z");
+    const decision = decideReconcile({ local: "PAST_DUE", remote: "ACTIVE", now });
+    expect(decision).toMatchObject({ action: "apply", status: "ACTIVE", lastPaidAt: now });
+  });
+
   it("PENDING_AUTH local com ACTIVE remoto apenas relata — ambiguidade não resolvida", () => {
     const decision = decideReconcile({ local: "PENDING_AUTH", remote: "ACTIVE" });
     expect(decision.action).toBe("report");

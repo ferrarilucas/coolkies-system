@@ -1,4 +1,6 @@
-export type PlanCycle = "MONTHLY" | "YEARLY";
+import type { Cycle } from "./period";
+
+export type PlanCycle = Cycle;
 export type PaymentMethod = "PIX" | "CARD";
 
 type PlanDefinition = {

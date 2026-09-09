@@ -40,10 +40,13 @@ async function main() {
         remoteNextDueDate: remote.nextDueDate,
       });
 
-      const data: { status?: SubscriptionStatus; currentPeriodEnd?: Date } = {};
+      const data: { status?: SubscriptionStatus; currentPeriodEnd?: Date; lastPaidAt?: Date } = {};
 
       if (statusDecision.action === "apply") {
         data.status = statusDecision.status;
+        if (statusDecision.lastPaidAt) {
+          data.lastPaidAt = statusDecision.lastPaidAt;
+        }
       }
 
       if (periodDecision.action === "apply") {

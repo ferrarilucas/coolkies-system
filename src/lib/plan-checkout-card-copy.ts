@@ -32,14 +32,16 @@ export function planCheckoutCardCopy(kind: CheckoutViewState["kind"]): PlanCheck
   }
 }
 
-export const PENDING_AUTH_BADGE_LABEL: Record<string, string> = {
+type CheckoutKind = CheckoutViewState["kind"];
+
+export const PENDING_AUTH_BADGE_LABEL: Partial<Record<CheckoutKind, string>> = {
   authorize: "Autorização pendente",
   waiting: "Aguardando 1ª cobrança",
   expired: "Prazo vencido",
   failed: "Cobrança não gerada",
 };
 
-export const PENDING_AUTH_BUTTON_LABEL: Record<string, string> = {
+export const PENDING_AUTH_BUTTON_LABEL: Partial<Record<CheckoutKind, string>> = {
   authorize: "Autorização pendente acima",
   waiting: "Aguardando cobrança acima",
   failed: "Tentar novamente acima",

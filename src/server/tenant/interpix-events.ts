@@ -1,5 +1,6 @@
-import { Prisma, type Subscription, type SubscriptionCycle } from "@prisma/client";
+import { Prisma, type Subscription } from "@prisma/client";
 import { db } from "@/lib/db";
+import { advancePeriod } from "@/lib/period";
 import { isSubscriptionUsable } from "./subscription";
 
 const GRACE_DAYS = 7;
@@ -30,27 +31,6 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * MS_PER_DAY);
 }
 
-function addMonths(date: Date, months: number): Date {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + months;
-  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(
-    Date.UTC(
-      year,
-      month,
-      Math.min(date.getUTCDate(), lastDayOfTargetMonth),
-      date.getUTCHours(),
-      date.getUTCMinutes(),
-      date.getUTCSeconds(),
-      date.getUTCMilliseconds(),
-    ),
-  );
-}
-
-function advancePeriod(periodEnd: Date, cycle: SubscriptionCycle): Date {
-  return addMonths(periodEnd, cycle === "YEARLY" ? 12 : 1);
-}
-
 function changesFor(
   event: InterPixEvent,
   current: Subscription,
@@ -67,6 +47,7 @@ function changesFor(
         ...(current.currentPeriodEnd
           ? { currentPeriodEnd: advancePeriod(current.currentPeriodEnd, current.cycle) }
           : {}),
+        ...(current.pendingCycleSeq === event.data.cycleSeq ? { pendingCycleSeq: null } : {}),
       };
     case "cycle.failed":
       return { lastFailureReason: event.data.reason };

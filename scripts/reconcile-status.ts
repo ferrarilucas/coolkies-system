@@ -1,7 +1,7 @@
 export type ReconcileApplyStatus = "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | "AUTH_DENIED";
 
 export type ReconcileDecision =
-  | { action: "apply"; status: ReconcileApplyStatus; reason: string }
+  | { action: "apply"; status: ReconcileApplyStatus; reason: string; lastPaidAt?: Date }
   | { action: "report"; reason: string }
   | { action: "none"; reason: string };
 
@@ -34,7 +34,12 @@ function isUnconditionalDowngradeStatus(value: string): value is ReconcileApplyS
   return (UNCONDITIONAL_DOWNGRADE_STATUSES as readonly string[]).includes(value);
 }
 
-export function decideReconcile(input: { local: string; remote: string }): ReconcileDecision {
+export function decideReconcile(input: {
+  local: string;
+  remote: string;
+  now?: Date;
+}): ReconcileDecision {
+  const now = input.now ?? new Date();
   if (!KNOWN_REMOTE_STATUSES.has(input.remote)) {
     return { action: "report", reason: `status remoto desconhecido: ${input.remote}` };
   }
@@ -71,6 +76,7 @@ export function decideReconcile(input: { local: string; remote: string }): Recon
       action: "apply",
       status: input.remote,
       reason: `remoto voltou a cobrar normalmente (local ${input.local})`,
+      lastPaidAt: now,
     };
   }
 

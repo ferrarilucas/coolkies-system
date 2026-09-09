@@ -117,6 +117,32 @@ describe("eventos da InterPix", () => {
     expect(sub?.currentPeriodEnd?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
   });
 
+  it("cycle.paid limpa o pendingCycleSeq quando o ciclo pago é o ciclo que estava pendente", async () => {
+    const user = await subscriber("u-paid-clears-pending", { pendingCycleSeq: 3 });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "52",
+      data: { subscriptionId: "ipx-u-paid-clears-pending", cycleSeq: 3, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.pendingCycleSeq).toBeNull();
+  });
+
+  it("cycle.paid não toca o pendingCycleSeq quando o ciclo pago não é o ciclo pendente registrado", async () => {
+    const user = await subscriber("u-paid-keeps-other-pending", { pendingCycleSeq: 9 });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "53",
+      data: { subscriptionId: "ipx-u-paid-keeps-other-pending", cycleSeq: 3, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.pendingCycleSeq).toBe(9);
+  });
+
   it("cycle.paid avança o vencimento em um ano no ciclo anual", async () => {
     const user = await subscriber("u-period-yearly", { cycle: "YEARLY" });
 

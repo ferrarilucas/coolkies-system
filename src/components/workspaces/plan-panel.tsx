@@ -155,7 +155,7 @@ function PixCheckoutContent({
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <p className="text-warning">
             Uma cobrança da sua assinatura anterior já foi enviada ao banco e
-            será debitada em {formatDueDate(previousPendingCharge.dueDate)}
+            será debitada em {formatDueDate(previousPendingCharge.dueDate)}{" "}
             mesmo com o cancelamento — regra do Banco Central, cancelamento não
             impede a cobrança já em andamento.
           </p>

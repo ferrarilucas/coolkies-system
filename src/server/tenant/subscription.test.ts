@@ -244,6 +244,26 @@ describe("assinatura utilizavel", () => {
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
+  it("CANCELED cujo período em aberto não é coberto pelo último pagamento não dá acesso — recontratação avançou o vencimento sem novo pagamento", () => {
+    const sub = {
+      status: "CANCELED",
+      cycle: "MONTHLY",
+      lastPaidAt: new Date("2026-07-15"),
+      currentPeriodEnd: new Date("2026-09-30"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
+  it("CANCELED cujo período em aberto é coberto pelo último pagamento dá acesso até o fim dele", () => {
+    const sub = {
+      status: "CANCELED",
+      cycle: "YEARLY",
+      lastPaidAt: new Date("2026-01-10"),
+      currentPeriodEnd: new Date("2026-09-30"),
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
   it("TRIALING vale dentro do prazo", () => {
     const sub = { status: "TRIALING", trialEndsAt: new Date("2026-09-30") } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(true);
