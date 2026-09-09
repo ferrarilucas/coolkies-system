@@ -156,6 +156,7 @@ model Subscription {
 
   pendingCycleSeq   Int?
   lastFailureReason String?
+  lastPaidAt        DateTime?
 
   notes String?
 

@@ -14,6 +14,7 @@ import {
   getBillingUser,
   getSubscription,
   recordInterPixSubscription,
+  recordPendingCycleWarning,
 } from "@/server/tenant/subscription";
 import {
   cancelInterPixSubscription,
@@ -123,6 +124,7 @@ export async function subscribe(
             dueDate: cancelResult.pendingCycle.dueDate,
           };
         }
+        await recordPendingCycleWarning(userId, cancelResult.pendingCycle?.cycleSeq ?? null);
       } catch (e) {
         console.error(
           "subscribe: falha ao cancelar mandato antigo",
@@ -177,7 +179,14 @@ export async function subscribe(
       console.error("subscribe: InterPix rejeitou os dados enviados", e.code, e.requestId);
       return { ok: false, error: VALIDATION_ERROR };
     }
-    console.error("subscribe: falha ao contratar", remote?.id ?? null, e);
+    if (e instanceof InterPixApiError) {
+      console.error("subscribe: falha ao contratar", e.code, e.requestId);
+    } else {
+      console.error(
+        "subscribe: falha ao contratar",
+        e instanceof Error ? e.name : "erro desconhecido",
+      );
+    }
     return { ok: false, error: GENERIC_ERROR };
   }
 }

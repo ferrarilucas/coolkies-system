@@ -62,6 +62,8 @@ function changesFor(
         status: "ACTIVE",
         graceUntil: null,
         graceGrantedAt: null,
+        lastPaidAt: new Date(event.data.paidAt),
+        lastFailureReason: null,
         ...(current.currentPeriodEnd
           ? { currentPeriodEnd: advancePeriod(current.currentPeriodEnd, current.cycle) }
           : {}),

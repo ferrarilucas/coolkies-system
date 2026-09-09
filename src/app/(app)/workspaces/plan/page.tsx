@@ -35,6 +35,7 @@ export default async function PlanPage() {
         nextDueDate={sub?.currentPeriodEnd ? sub.currentPeriodEnd.toISOString().slice(0, 10) : null}
         authorizedAt={sub?.authorizedAt ? sub.authorizedAt.toISOString() : null}
         graceUntil={sub?.graceUntil ? sub.graceUntil.toISOString() : null}
+        pendingCycleSeq={sub?.pendingCycleSeq ?? null}
       />
     </div>
   );

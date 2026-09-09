@@ -160,8 +160,14 @@ describe("assinatura utilizavel", () => {
     expect(isSubscriptionUsable({ status: "ACTIVE" } as never, now)).toBe(true);
   });
 
-  it("PAST_DUE vale — está em dunning e ainda pode pagar", () => {
-    expect(isSubscriptionUsable({ status: "PAST_DUE" } as never, now)).toBe(true);
+  it("PAST_DUE com pagamento comprovado vale — está em dunning e ainda pode pagar", () => {
+    const sub = { status: "PAST_DUE", lastPaidAt: new Date("2026-08-20") } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
+  it("PAST_DUE sem pagamento comprovado não vale", () => {
+    const sub = { status: "PAST_DUE", lastPaidAt: null } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("PENDING_AUTH vale enquanto a carência da autorização durar", () => {
@@ -202,24 +208,39 @@ describe("assinatura utilizavel", () => {
     expect(isSubscriptionUsable({ status: "AUTH_DENIED" } as never, now)).toBe(false);
   });
 
-  it("CANCELED continua utilizável até o fim do período pago", () => {
+  it("CANCELED com pagamento comprovado continua utilizável até o fim do período pago", () => {
     const sub = {
       status: "CANCELED",
+      lastPaidAt: new Date("2026-09-15"),
       currentPeriodEnd: new Date("2026-09-30"),
     } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(true);
   });
 
-  it("CANCELED deixa de valer depois do fim do período pago", () => {
+  it("CANCELED com pagamento comprovado deixa de valer depois do fim do período pago", () => {
     const sub = {
       status: "CANCELED",
+      lastPaidAt: new Date("2026-09-01"),
       currentPeriodEnd: new Date("2026-09-10"),
     } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
   it("CANCELED sem período pago registrado não vale", () => {
-    const sub = { status: "CANCELED", currentPeriodEnd: null } as never;
+    const sub = {
+      status: "CANCELED",
+      lastPaidAt: new Date("2026-09-01"),
+      currentPeriodEnd: null,
+    } as never;
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
+  it("CANCELED sem pagamento comprovado não dá acesso, mesmo com período em aberto", () => {
+    const sub = {
+      status: "CANCELED",
+      lastPaidAt: null,
+      currentPeriodEnd: new Date("2026-09-30"),
+    } as never;
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
@@ -395,6 +416,35 @@ describe("recordInterPixSubscription", () => {
     expect(sub?.status).toBe("PENDING_AUTH");
     expect(sub?.trialEndsAt?.toISOString()).toBe(trialAntes?.trialEndsAt?.toISOString());
     expect(isSubscriptionUsable(sub, new Date())).toBe(true);
+  });
+
+  it("recontratar preserva o lastPaidAt — a evidência de pagamento não é apagada por uma nova contratação", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-interpix-keeps-paid-at", name: "Rita", email: "rita@example.com" },
+    });
+    const pagoEm = new Date("2026-08-15T00:00:00Z");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        status: "CANCELED",
+        interpixSubscriptionId: "ip_sub_cancelada",
+        lastPaidAt: pagoEm,
+        currentPeriodEnd: new Date("2026-08-20T00:00:00Z"),
+      },
+    });
+
+    await recordInterPixSubscription({
+      userId: user.id,
+      plan: "cresce",
+      cycle: "MONTHLY",
+      interpixSubscriptionId: "ip_sub_recontratada",
+      pixCopyPaste: "00020101...recontratada",
+      nextDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.lastPaidAt?.toISOString()).toBe(pagoEm.toISOString());
   });
 
   it("nunca limpa graceGrantedAt — é a invariante que impede reabrir o laço de carência reciclável", async () => {

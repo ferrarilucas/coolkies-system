@@ -44,6 +44,34 @@ describe("eventos da InterPix", () => {
     expect(sub?.graceUntil).toBeNull();
   });
 
+  it("cycle.paid grava o instante do pagamento — é a evidência que sustenta o acesso depois de CANCELED/PAST_DUE", async () => {
+    const user = await subscriber("u-paid-evidence");
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "17",
+      data: { subscriptionId: "ipx-u-paid-evidence", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.lastPaidAt?.toISOString()).toBe("2026-09-19T09:00:00.000Z");
+  });
+
+  it("cycle.paid limpa o motivo da última falha — atraso futuro não deve exibir motivo de tentativa antiga", async () => {
+    const user = await subscriber("u-paid-clears-reason", {
+      lastFailureReason: "saldo insuficiente",
+    });
+
+    await applyInterPixEvent({
+      type: "cycle.paid",
+      eventId: "18",
+      data: { subscriptionId: "ipx-u-paid-clears-reason", cycleSeq: 1, amount: "34.50", paidAt: "2026-09-19T09:00:00.000Z" },
+    });
+
+    const sub = await subOf(user.id);
+    expect(sub?.lastFailureReason).toBeNull();
+  });
+
   it("cycle.paid limpa graceGrantedAt — quem paga de verdade recupera o direito à ponte no futuro", async () => {
     const user = await subscriber("u-paid-grants", {
       graceUntil: new Date("2026-09-27T00:00:00Z"),

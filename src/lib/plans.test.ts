@@ -72,6 +72,18 @@ describe("catálogo", () => {
     expect(effectiveLimit("escala", "PENDING_AUTH")).toBe(1);
   });
 
+  it("CANCELED e PAST_DUE sem pagamento comprovado não recebem o limite cheio do plano", () => {
+    expect(effectiveLimit("cresce", "CANCELED")).toBe(1);
+    expect(effectiveLimit("cresce", "CANCELED", false)).toBe(1);
+    expect(effectiveLimit("cresce", "PAST_DUE")).toBe(1);
+    expect(effectiveLimit("cresce", "PAST_DUE", false)).toBe(1);
+  });
+
+  it("CANCELED e PAST_DUE com pagamento comprovado recebem o limite cheio do plano", () => {
+    expect(effectiveLimit("cresce", "CANCELED", true)).toBe(4);
+    expect(effectiveLimit("cresce", "PAST_DUE", true)).toBe(4);
+  });
+
   it("rotula o plano pelo nome comercial", () => {
     expect(planLabel("corre")).toBe("Corre");
   });

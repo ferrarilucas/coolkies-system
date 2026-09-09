@@ -19,6 +19,16 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
   return db.member.count({ where: { userId, role: "OWNER" } });
 }
 
+export async function recordPendingCycleWarning(
+  userId: string,
+  pendingCycleSeq: number | null,
+): Promise<void> {
+  await db.subscription.updateMany({
+    where: { userId },
+    data: { pendingCycleSeq },
+  });
+}
+
 export async function recordInterPixSubscription(input: {
   userId: string;
   plan: string;
@@ -86,7 +96,7 @@ export function isSubscriptionUsable(
 ): boolean {
   if (!sub) return false;
   if (sub.status === "ACTIVE") return true;
-  if (sub.status === "PAST_DUE") return true;
+  if (sub.status === "PAST_DUE") return sub.lastPaidAt !== null;
   if (sub.status === "TRIALING") {
     return sub.trialEndsAt === null || sub.trialEndsAt > now;
   }
@@ -96,7 +106,11 @@ export function isSubscriptionUsable(
     return graceValid || trialActive;
   }
   if (sub.status === "CANCELED") {
-    return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
+    return (
+      sub.lastPaidAt !== null &&
+      sub.currentPeriodEnd !== null &&
+      sub.currentPeriodEnd > now
+    );
   }
   return false;
 }
@@ -111,7 +125,11 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
     }),
   ]);
 
-  const limit = effectiveLimit(sub?.plan ?? "corre", sub?.status ?? "TRIALING");
+  const limit = effectiveLimit(
+    sub?.plan ?? "corre",
+    sub?.status ?? "TRIALING",
+    sub?.lastPaidAt !== null && sub?.lastPaidAt !== undefined,
+  );
   const allowed = owned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
   return new Set(allowed.map((m) => m.workspaceId));
 }

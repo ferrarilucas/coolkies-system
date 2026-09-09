@@ -76,8 +76,10 @@ export function planLimit(plan: string): number {
   return findPlan(plan).maxWorkspaces;
 }
 
-export function effectiveLimit(plan: string, status: string): number {
-  return status === "TRIALING" || status === "PENDING_AUTH" ? 1 : planLimit(plan);
+export function effectiveLimit(plan: string, status: string, hasPaid = false): number {
+  if (status === "TRIALING" || status === "PENDING_AUTH") return 1;
+  if ((status === "PAST_DUE" || status === "CANCELED") && !hasPaid) return 1;
+  return planLimit(plan);
 }
 
 export function planLabel(plan: string): string {

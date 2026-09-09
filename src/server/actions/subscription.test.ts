@@ -93,6 +93,23 @@ function stubInterPixFetchWithCancelPendingCycle() {
   return fetchMock;
 }
 
+function stubInterPixFetchWithCancelPendingCycleAndFailingCreate() {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes("/cancel")) {
+      return new Response(
+        JSON.stringify({ pendingCycle: { cycleSeq: 7, dueDate: "2026-09-22" } }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({ code: "INTERNAL_ERROR", message: "falha ao criar" }),
+      { status: 500 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function stubInterPixFetchWithoutCopyPaste() {
   const fetchMock = vi.fn().mockImplementation(
     async () =>
@@ -508,6 +525,38 @@ describe("subscribe", () => {
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.interpixSubscriptionId).toBe("ipx-antigo");
     expect(sub?.plan).toBe("corre");
+
+    errorSpy.mockRestore();
+  });
+
+  it("persiste o aviso de cobrança a caminho antes de criar o novo mandato, para sobreviver à falha na criação", async () => {
+    const { user } = await userWithWorkspace("u-falha-criacao", "falhacriacao@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-antigo-com-cobranca-e-falha",
+        interpixPixCopyPaste: "00020126-antigo",
+        graceUntil: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancelPendingCycleAndFailingCreate();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "cresce");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock.mock.calls.length).toBe(2);
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.pendingCycleSeq).toBe(7);
 
     errorSpy.mockRestore();
   });

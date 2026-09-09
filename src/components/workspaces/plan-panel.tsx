@@ -9,6 +9,11 @@ import { toast } from "sonner";
 import { checkoutViewState } from "@/lib/checkout-state";
 import { isCurrentPlanCard } from "@/lib/plan-card-state";
 import {
+  PENDING_AUTH_BADGE_LABEL,
+  PENDING_AUTH_BUTTON_LABEL,
+  planCheckoutCardCopy,
+} from "@/lib/plan-checkout-card-copy";
+import {
   PLANS,
   monthlyPriceCents,
   planLabel,
@@ -199,6 +204,7 @@ export function PlanPanel({
   nextDueDate,
   authorizedAt,
   graceUntil,
+  pendingCycleSeq,
 }: {
   currentPlan: string | null;
   currentCycle: PlanCycle | null;
@@ -212,6 +218,7 @@ export function PlanPanel({
   nextDueDate: string | null;
   authorizedAt: string | null;
   graceUntil: string | null;
+  pendingCycleSeq: number | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
@@ -267,7 +274,11 @@ export function PlanPanel({
                       : "secondary"
                 }
               >
-                {trialExpired ? "Teste encerrado" : (STATUS_LABEL[status] ?? status)}
+                {trialExpired
+                  ? "Teste encerrado"
+                  : status === "PENDING_AUTH"
+                    ? (PENDING_AUTH_BADGE_LABEL[checkoutState.kind] ?? STATUS_LABEL[status])
+                    : (STATUS_LABEL[status] ?? status)}
               </Badge>
             )}
           </CardTitle>
@@ -286,6 +297,17 @@ export function PlanPanel({
           </CardContent>
         )}
       </Card>
+
+      {pendingCycleSeq !== null && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <p className="text-warning">
+            Uma cobrança da sua assinatura anterior já foi enviada ao banco e
+            pode ser debitada mesmo com o cancelamento — regra do Banco
+            Central, cancelamento não impede a cobrança já em andamento.
+          </p>
+        </div>
+      )}
 
       {overLimit > 0 && suggestedPlan && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
@@ -329,21 +351,11 @@ export function PlanPanel({
             <Card className="border-primary">
               <CardHeader>
                 <CardTitle className="text-base">
-                  {checkoutState.kind === "failed"
-                    ? "Cobrança não gerada"
-                    : checkoutState.kind === "expired"
-                      ? "Cobrança não debitada"
-                      : "Autorização pendente"}{" "}
-                  — {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
+                  {planCheckoutCardCopy(checkoutState.kind).title} —{" "}
+                  {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
                 </CardTitle>
                 <CardDescription>
-                  {checkoutState.kind === "authorize" &&
-                    "Você ainda não autorizou o débito recorrente deste plano."}
-                  {checkoutState.kind === "waiting" && "Sua autorização foi recebida."}
-                  {checkoutState.kind === "expired" &&
-                    "O prazo para debitar a primeira cobrança passou."}
-                  {checkoutState.kind === "failed" &&
-                    "Não foi possível gerar a cobrança Pix para este plano."}
+                  {planCheckoutCardCopy(checkoutState.kind).description}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -462,9 +474,8 @@ export function PlanPanel({
                   <CardFooter>
                     {isPendingThisPlan ? (
                       <Button className="w-full" variant="outline" disabled>
-                        {checkoutState.kind === "failed"
-                          ? "Tentar novamente acima"
-                          : "Autorização pendente acima"}
+                        {PENDING_AUTH_BUTTON_LABEL[checkoutState.kind] ??
+                          "Autorização pendente acima"}
                       </Button>
                     ) : isCurrent ? (
                       <Button className="w-full" variant="outline" disabled>
