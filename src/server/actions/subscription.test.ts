@@ -68,6 +68,37 @@ function stubInterPixFetchWithCancel() {
   return fetchMock;
 }
 
+function stubInterPixFetchWithoutCopyPaste() {
+  const fetchMock = vi.fn().mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          id: "ipx-sem-copia",
+          status: "PENDING_AUTH",
+          externalUserId: "usr",
+          planCode: "corre",
+          amount: "34.50",
+          nextDueDate: "2026-09-20",
+        }),
+        { status: 201 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function stubInterPixFetchWithValidationError() {
+  const fetchMock = vi.fn().mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({ code: "BAD_REQUEST", message: "CPF inválido para a InterPix" }),
+        { status: 400 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function stubInterPixFetchWithFailingCancel() {
   const fetchMock = vi.fn().mockImplementation(async (url: string) => {
     if (String(url).includes("/cancel")) {
@@ -323,6 +354,191 @@ describe("subscribe", () => {
     expect(result.ok).toBe(true);
     expect(result.data?.pixCopyPaste).toBe("00020126-guardado");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("resumeCheckout sem autorização pendente devolve erro", async () => {
+    await userWithWorkspace("u-resume-sem-pendencia", "resumesempendencia@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const result = await resumeCheckout();
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa plano de atendimento (escala), sem chamar a InterPix", async () => {
+    await userWithWorkspace("u-escala", "escala@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "escala");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa CPF/CNPJ inválido, sem chamar a InterPix", async () => {
+    await userWithWorkspace("u-cpf-invalido", "cpfinvalido@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "123");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa plano desconhecido, sem chamar a InterPix", async () => {
+    await userWithWorkspace("u-plano-desconhecido", "planodesconhecido@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "inexistente");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa ciclo de cobrança inválido, sem chamar a InterPix", async () => {
+    await userWithWorkspace("u-ciclo-invalido", "cicloinvalido@example.com");
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "SEMANAL");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("assinante em teste, sem id de assinatura, consegue contratar o mesmo plano do teste", async () => {
+    const { user } = await userWithWorkspace("u-trial-mesmo-plano", "trialmesmoplano@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "TRIALING",
+        trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      },
+    });
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("recusa novo pedido do mesmo plano quando já há mandato pendente com copia-e-cola, sem chamar a InterPix", async () => {
+    const { user } = await userWithWorkspace("u-pendente-copia", "pendentecopia@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "PENDING_AUTH",
+        interpixSubscriptionId: "ipx-pendente",
+        interpixPixCopyPaste: "00020126-pendente",
+      },
+    });
+    const fetchMock = stubInterPixFetch();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-pendente");
+  });
+
+  it("autorização negada no mesmo plano não é recusada: cancela o mandato antigo e cria um novo", async () => {
+    const { user } = await userWithWorkspace("u-auth-negada", "authnegada@example.com");
+    await testDb.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "corre",
+        cycle: "MONTHLY",
+        provider: "INTERPIX",
+        status: "AUTH_DENIED",
+        interpixSubscriptionId: "ipx-negado",
+        interpixPixCopyPaste: "00020126-negado",
+      },
+    });
+    const fetchMock = stubInterPixFetchWithCancel();
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/subscriptions/ipx-negado/cancel");
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-novo");
+  });
+
+  it("quando a InterPix não devolve o copia-e-cola, grava o mapeamento e loga o erro", async () => {
+    const { user } = await userWithWorkspace("u-sem-copia", "semcopia@example.com");
+    const fetchMock = stubInterPixFetchWithoutCopyPaste();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
+    expect(sub?.interpixSubscriptionId).toBe("ipx-sem-copia");
+    expect(sub?.status).toBe("PENDING_AUTH");
+
+    errorSpy.mockRestore();
+  });
+
+  it("repassa a mensagem de validação da InterPix ao usuário", async () => {
+    await userWithWorkspace("u-validacao-gateway", "validacaogateway@example.com");
+    stubInterPixFetchWithValidationError();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.set("plan", "corre");
+    formData.set("cycle", "MONTHLY");
+    formData.set("cpfCnpj", "12345678909");
+
+    const result = await subscribe(formData);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("CPF inválido para a InterPix");
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 
   it("erro de configuração não vaza para o cliente e é logado", async () => {

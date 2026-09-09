@@ -18,6 +18,7 @@ import {
   cancelInterPixSubscription,
   createInterPixSubscription,
   InterPixApiError,
+  type InterPixSubscription,
 } from "@/server/tenant/interpix";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -38,10 +39,12 @@ const PLAN_CHANGE_ERROR =
 const LIVE_STATUSES = new Set(["ACTIVE", "PAST_DUE"]);
 
 function firstDueDate(trialEndsAt: Date | null, now: Date = new Date()): string {
-  const minimo = new Date(now);
-  minimo.setDate(minimo.getDate() + CHARGE_LEAD_DAYS);
-  const escolhida = trialEndsAt && trialEndsAt > minimo ? trialEndsAt : minimo;
-  return escolhida.toISOString().slice(0, 10);
+  const minimumDueDate = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + CHARGE_LEAD_DAYS),
+  );
+  const chosenDueDate =
+    trialEndsAt && trialEndsAt > minimumDueDate ? trialEndsAt : minimumDueDate;
+  return chosenDueDate.toISOString().slice(0, 10);
 }
 
 export async function subscribe(
@@ -63,6 +66,8 @@ export async function subscribe(
     return { ok: false, error: "Informe um CPF ou CNPJ válido." };
   }
 
+  let remote: InterPixSubscription | undefined;
+
   try {
     const { userId } = await getWorkspaceContext();
     const existing = await getSubscription(userId);
@@ -76,7 +81,8 @@ export async function subscribe(
     }
 
     if (
-      existing?.interpixSubscriptionId &&
+      existing?.status === "PENDING_AUTH" &&
+      existing.interpixPixCopyPaste &&
       existing.plan === plan &&
       existing.cycle === cycle
     ) {
@@ -85,6 +91,9 @@ export async function subscribe(
         error: `Você já tem uma assinatura ${planLabel(plan)} em andamento.`,
       };
     }
+
+    const user = await getBillingUser(userId);
+    if (!user) return { ok: false, error: "Usuário não encontrado." };
 
     if (existing?.interpixSubscriptionId) {
       try {
@@ -99,10 +108,7 @@ export async function subscribe(
       }
     }
 
-    const user = await getBillingUser(userId);
-    if (!user) return { ok: false, error: "Usuário não encontrado." };
-
-    const remote = await createInterPixSubscription({
+    remote = await createInterPixSubscription({
       externalUserId: userId,
       planCode: plan,
       amountCents,
@@ -110,6 +116,14 @@ export async function subscribe(
       firstDueDate: firstDueDate(existing?.trialEndsAt ?? null),
       debtor: { taxId, name: user.name },
     });
+
+    if (!remote.id || !remote.nextDueDate) {
+      console.error(
+        "subscribe: resposta da InterPix sem id ou nextDueDate",
+        remote.id ?? null,
+      );
+      return { ok: false, error: GENERIC_ERROR };
+    }
 
     const pixCopyPaste = remote.authorization?.pixCopyPaste ?? null;
 
@@ -132,9 +146,10 @@ export async function subscribe(
     return { ok: true, data: { pixCopyPaste, nextDueDate: remote.nextDueDate } };
   } catch (e) {
     if (e instanceof InterPixApiError && e.code === "BAD_REQUEST") {
+      console.error("subscribe: InterPix rejeitou os dados enviados", e.code, e.requestId);
       return { ok: false, error: e.message };
     }
-    console.error("subscribe: falha ao contratar", e);
+    console.error("subscribe: falha ao contratar", remote?.id ?? null, e);
     return { ok: false, error: GENERIC_ERROR };
   }
 }

@@ -283,7 +283,10 @@ export function PlanPanel({
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
                 Abra o app do seu banco, escolha pagar com Pix e cole o código
-                abaixo. A cobrança vence em {formatDueDate(pixResult.nextDueDate)}.
+                abaixo.
+                {pixResult.nextDueDate
+                  ? ` A cobrança vence em ${formatDueDate(pixResult.nextDueDate)}.`
+                  : ""}
               </p>
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="break-all font-mono text-xs">{pixResult.pixCopyPaste}</p>
