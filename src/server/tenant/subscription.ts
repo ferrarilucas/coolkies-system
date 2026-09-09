@@ -2,7 +2,6 @@ import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
-import { listAsaasPaymentsOfSubscription, type AsaasPayment } from "./asaas";
 
 const TRIAL_DAYS = 14;
 
@@ -18,34 +17,6 @@ export async function getBillingUser(userId: string): Promise<BillingUser | null
 
 export async function countOwnedWorkspaces(userId: string): Promise<number> {
   return db.member.count({ where: { userId, role: "OWNER" } });
-}
-
-export async function recordAsaasSubscription(input: {
-  userId: string;
-  plan: string;
-  cycle: SubscriptionCycle;
-  asaasCustomerId: string;
-  asaasSubscriptionId: string;
-}): Promise<void> {
-  await db.subscription.upsert({
-    where: { userId: input.userId },
-    create: {
-      userId: input.userId,
-      plan: input.plan,
-      cycle: input.cycle,
-      source: "ASAAS",
-      status: "TRIALING",
-      asaasCustomerId: input.asaasCustomerId,
-      asaasSubscriptionId: input.asaasSubscriptionId,
-    },
-    update: {
-      plan: input.plan,
-      cycle: input.cycle,
-      source: "ASAAS",
-      asaasCustomerId: input.asaasCustomerId,
-      asaasSubscriptionId: input.asaasSubscriptionId,
-    },
-  });
 }
 
 export async function recordInterPixSubscription(input: {
@@ -81,26 +52,6 @@ export async function recordInterPixSubscription(input: {
       currentPeriodEnd: input.nextDueDate,
     },
   });
-}
-
-const OPEN_PAYMENT_STATUSES = new Set(["PENDING", "OVERDUE"]);
-const INVOICE_RETRY_DELAY_MS = 1500;
-
-function pickOpenInvoiceUrl(payments: AsaasPayment[]): string | null {
-  const open = payments
-    .filter((p) => OPEN_PAYMENT_STATUSES.has(p.status) && p.invoiceUrl)
-    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
-  return open[0]?.invoiceUrl ?? null;
-}
-
-export async function resolveInvoiceUrl(asaasSubscriptionId: string): Promise<string | null> {
-  const first = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
-  const url = pickOpenInvoiceUrl(first);
-  if (url) return url;
-
-  await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_DELAY_MS));
-  const retry = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
-  return pickOpenInvoiceUrl(retry);
 }
 
 export async function ensureTrialSubscription(userId: string): Promise<void> {

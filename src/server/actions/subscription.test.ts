@@ -9,7 +9,7 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getSession: async () => sessionResult } },
 }));
 
-const { subscribe, resumeCheckout } = await import("./subscription");
+const { subscribe } = await import("./subscription");
 
 async function userWithWorkspace(id: string, email: string) {
   const user = await testDb.user.create({ data: { id, name: "Dona", email } });
@@ -433,36 +433,6 @@ describe("subscribe", () => {
     expect(sub?.plan).toBe("corre");
 
     errorSpy.mockRestore();
-  });
-
-  it("resumeCheckout devolve o copia-e-cola guardado, sem criar outra assinatura", async () => {
-    const { user } = await userWithWorkspace("u-resume", "resume@example.com");
-    await testDb.subscription.create({
-      data: {
-        userId: user.id,
-        plan: "corre",
-        provider: "INTERPIX",
-        status: "PENDING_AUTH",
-        interpixSubscriptionId: "ipx-existente",
-        interpixPixCopyPaste: "00020126-guardado",
-        currentPeriodEnd: new Date("2026-09-20"),
-      },
-    });
-    const fetchMock = stubInterPixFetch();
-
-    const result = await resumeCheckout();
-    expect(result.ok).toBe(true);
-    expect(result.data?.pixCopyPaste).toBe("00020126-guardado");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("resumeCheckout sem autorização pendente devolve erro", async () => {
-    await userWithWorkspace("u-resume-sem-pendencia", "resumesempendencia@example.com");
-    const fetchMock = stubInterPixFetch();
-
-    const result = await resumeCheckout();
-    expect(result.ok).toBe(false);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("recusa plano de atendimento (escala), sem chamar a InterPix", async () => {

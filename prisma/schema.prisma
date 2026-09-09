@@ -124,11 +124,6 @@ enum SubscriptionStatus {
   AUTH_DENIED
 }
 
-enum SubscriptionSource {
-  ASAAS
-  MANUAL
-}
-
 enum SubscriptionProvider {
   INTERPIX
   MANUAL
@@ -146,12 +141,8 @@ model Subscription {
 
   plan     String               @default("solo")
   status   SubscriptionStatus   @default(TRIALING)
-  source   SubscriptionSource   @default(ASAAS)
   provider SubscriptionProvider @default(INTERPIX)
   cycle    SubscriptionCycle    @default(MONTHLY)
-
-  asaasCustomerId     String?
-  asaasSubscriptionId String?
 
   interpixSubscriptionId String? @unique
   interpixPixCopyPaste   String?

@@ -162,27 +162,3 @@ export async function subscribe(
     return { ok: false, error: GENERIC_ERROR };
   }
 }
-
-export async function resumeCheckout(): Promise<ActionResult<CheckoutResult>> {
-  try {
-    const { userId } = await getWorkspaceContext();
-    const existing = await getSubscription(userId);
-
-    if (!existing?.interpixSubscriptionId || !existing.interpixPixCopyPaste) {
-      return { ok: false, error: "Nenhuma autorização pendente." };
-    }
-
-    return {
-      ok: true,
-      data: {
-        pixCopyPaste: existing.interpixPixCopyPaste,
-        nextDueDate: existing.currentPeriodEnd
-          ? existing.currentPeriodEnd.toISOString().slice(0, 10)
-          : "",
-      },
-    };
-  } catch (e) {
-    console.error("resumeCheckout: falha ao recuperar autorização", e);
-    return { ok: false, error: GENERIC_ERROR };
-  }
-}

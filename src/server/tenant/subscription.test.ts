@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb, testDb } from "@/test/db";
 import { applyInterPixEvent } from "./interpix-events";
 import {
@@ -7,80 +7,7 @@ import {
   ensureTrialSubscription,
   isSubscriptionUsable,
   recordInterPixSubscription,
-  resolveInvoiceUrl,
 } from "./subscription";
-
-function stubPaymentsResponse(...payloads: unknown[]) {
-  const fetchMock = vi.fn();
-  for (const payload of payloads) {
-    fetchMock.mockImplementationOnce(async () =>
-      new Response(JSON.stringify(payload), { status: 200 }),
-    );
-  }
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-describe("resolveInvoiceUrl", () => {
-  beforeEach(() => {
-    vi.stubEnv("ASAAS_API_KEY", "chave-de-teste");
-    vi.stubEnv("ASAAS_ENV", "sandbox");
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-    vi.useRealTimers();
-  });
-
-  it("prefere a cobrança pendente em aberto e ignora a já paga", async () => {
-    stubPaymentsResponse({
-      data: [
-        { id: "pay_old", status: "RECEIVED", dueDate: "2026-08-01", invoiceUrl: "https://asaas.test/i/old" },
-        { id: "pay_open", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: "https://asaas.test/i/open" },
-      ],
-    });
-
-    const url = await resolveInvoiceUrl("sub_1");
-    expect(url).toBe("https://asaas.test/i/open");
-  });
-
-  it("aceita cobrança OVERDUE como aberta", async () => {
-    stubPaymentsResponse({
-      data: [{ id: "pay_over", status: "OVERDUE", dueDate: "2026-08-01", invoiceUrl: "https://asaas.test/i/over" }],
-    });
-
-    const url = await resolveInvoiceUrl("sub_1");
-    expect(url).toBe("https://asaas.test/i/over");
-  });
-
-  it("tenta de novo uma vez quando a primeira consulta não acha cobrança aberta", async () => {
-    vi.useFakeTimers();
-    const fetchMock = stubPaymentsResponse(
-      { data: [] },
-      { data: [{ id: "pay_new", status: "PENDING", dueDate: "2026-09-01", invoiceUrl: "https://asaas.test/i/new" }] },
-    );
-
-    const promise = resolveInvoiceUrl("sub_1");
-    await vi.advanceTimersByTimeAsync(1500);
-    const url = await promise;
-
-    expect(url).toBe("https://asaas.test/i/new");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("desiste depois da segunda tentativa e retorna null", async () => {
-    vi.useFakeTimers();
-    const fetchMock = stubPaymentsResponse({ data: [] }, { data: [] });
-
-    const promise = resolveInvoiceUrl("sub_1");
-    await vi.advanceTimersByTimeAsync(1500);
-    const url = await promise;
-
-    expect(url).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-});
 
 describe("model de assinatura", () => {
   beforeEach(async () => {
@@ -93,11 +20,10 @@ describe("model de assinatura", () => {
     });
 
     const sub = await testDb.subscription.create({
-      data: { userId: user.id, plan: "corre", source: "MANUAL" },
+      data: { userId: user.id, plan: "corre" },
     });
 
     expect(sub.status).toBe("TRIALING");
-    expect(sub.asaasSubscriptionId).toBeNull();
   });
 
   it("permite no máximo uma assinatura por usuário", async () => {
@@ -105,12 +31,12 @@ describe("model de assinatura", () => {
       data: { id: "u-dup", name: "Bia", email: "bia@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "corre", source: "MANUAL" },
+      data: { userId: user.id, plan: "corre" },
     });
 
     await expect(
       testDb.subscription.create({
-        data: { userId: user.id, plan: "cresce", source: "MANUAL" },
+        data: { userId: user.id, plan: "cresce" },
       }),
     ).rejects.toThrow();
   });
@@ -126,7 +52,7 @@ describe("workspaces ativos por plano", () => {
       data: { id: `u-${plan}-${count}`, name: "Dono", email: `${plan}${count}@example.com` },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan, source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan, status: "ACTIVE" },
     });
 
     const ids: string[] = [];
@@ -171,7 +97,7 @@ describe("workspaces ativos por plano", () => {
       data: { id: "u-empate", name: "Dona", email: "empate@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", status: "ACTIVE" },
     });
 
     const mesmoInstante = new Date("2026-08-01T12:00:00Z");
@@ -204,7 +130,7 @@ describe("workspaces ativos por plano", () => {
       data: { id: "u-member-nao-consome", name: "Dono", email: "membernaoconsome@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", status: "ACTIVE" },
     });
 
     const alheio = await testDb.workspace.create({
@@ -284,7 +210,7 @@ describe("permissao de escrita", () => {
       data: { id: "u-write", name: "Dono", email: "write@example.com" },
     });
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "corre", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", status: "ACTIVE" },
     });
 
     const primeiro = await testDb.workspace.create({
@@ -356,7 +282,6 @@ describe("recordInterPixSubscription", () => {
       data: {
         userId: user.id,
         plan: "corre",
-        source: "MANUAL",
         status: "SUSPENDED",
         graceUntil: new Date("2026-09-01T00:00:00Z"),
       },
@@ -388,7 +313,6 @@ describe("recordInterPixSubscription", () => {
       data: {
         userId: user.id,
         plan: "corre",
-        source: "MANUAL",
         status: "ACTIVE",
         interpixSubscriptionId: "ip_sub_antiga",
       },
@@ -420,7 +344,6 @@ describe("recordInterPixSubscription", () => {
       data: {
         userId: user.id,
         plan: "corre",
-        source: "MANUAL",
         status: "SUSPENDED",
         graceUntil: new Date("2026-09-01T00:00:00Z"),
         graceGrantedAt: new Date("2025-06-01T00:00:00Z"),
@@ -527,7 +450,6 @@ describe("trial na criacao do primeiro workspace", () => {
       data: {
         userId: user.id,
         plan: "corre",
-        source: "MANUAL",
         trialEndsAt: antiga,
       },
     });
