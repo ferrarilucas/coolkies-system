@@ -12,3 +12,4 @@ tsconfig.tsbuildinfo
 .claude/worktrees
 .env.test
 .vercel
+package-lock.json
