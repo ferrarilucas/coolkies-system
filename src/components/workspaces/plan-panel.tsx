@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { checkoutViewState } from "@/lib/checkout-state";
 import { isCurrentPlanCard } from "@/lib/plan-card-state";
 import {
@@ -12,9 +13,9 @@ import {
 } from "@/lib/plan-checkout-card-copy";
 import {
   PLANS,
+  chargeAmountCents,
   monthlyPriceCents,
   planLabel,
-  planWorkspacesLabel,
   type PlanCycle,
 } from "@/lib/plans";
 import { formatBRL } from "@/lib/money";
@@ -48,6 +49,13 @@ const WARNING_STATUSES = new Set(["PAST_DUE", "CANCELED", "AUTH_DENIED", "SUSPEN
 
 const CONTACT_EMAIL = "contato@coolkies.com.br";
 
+const GUARANTEES = [
+  "14 dias grátis com todos os recursos",
+  "Sem cartão de crédito para testar",
+  "Sem fidelidade — cancele quando quiser",
+  "Troque de plano ou forma de pagamento quando quiser",
+];
+
 function planThatCovers(count: number) {
   return PLANS.find((p) => p.maxWorkspaces >= count) ?? PLANS[PLANS.length - 1];
 }
@@ -56,6 +64,56 @@ function cycleLabel(cycle: PlanCycle | null): string {
   if (cycle === "YEARLY") return "ciclo anual";
   if (cycle === "MONTHLY") return "ciclo mensal";
   return "ciclo não identificado";
+}
+
+function PriceBlock({
+  planId,
+  baseCents,
+  cycle,
+}: {
+  planId: string;
+  baseCents: number | null;
+  cycle: PlanCycle;
+}) {
+  const pixMonthly = monthlyPriceCents(planId, cycle, "PIX");
+
+  if (baseCents === null || pixMonthly === null) {
+    return (
+      <div className="space-y-1">
+        <p className="text-2xl font-semibold tracking-tight">Sob medida</p>
+        <p className="text-xs text-muted-foreground">
+          Preço fechado conforme o tamanho da sua operação.
+        </p>
+      </div>
+    );
+  }
+
+  const offPct = Math.round((1 - pixMonthly / baseCents) * 100);
+  const annualTotal = chargeAmountCents(planId, "YEARLY", "PIX");
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground line-through">
+          {formatBRL(baseCents)}
+        </span>
+        {offPct > 0 && <Badge variant="secondary">−{offPct}%</Badge>}
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-3xl font-semibold tracking-tight tabular-nums">
+          {formatBRL(pixMonthly)}
+        </span>
+        <span className="text-sm text-muted-foreground">/mês</span>
+      </div>
+      {cycle === "YEARLY" && annualTotal !== null ? (
+        <p className="text-xs text-muted-foreground">
+          {formatBRL(annualTotal)} por ano, em uma cobrança só
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Cobrado todo mês</p>
+      )}
+    </div>
+  );
 }
 
 export function PlanPanel({
@@ -193,7 +251,7 @@ export function PlanPanel({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {checkoutState.kind !== "none" && currentPlan && (
             <Card className="border-primary">
               <CardHeader>
@@ -256,16 +314,35 @@ export function PlanPanel({
             </Card>
           )}
 
-          <Tabs value={cycle} onValueChange={(v) => setCycle(v as PlanCycle)}>
-            <TabsList>
-              <TabsTrigger value="MONTHLY">Mensal</TabsTrigger>
-              <TabsTrigger value="YEARLY">Anual</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Escolha o seu plano
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Todos os planos vêm com os recursos completos do Coolkies — o que
+              muda é quantos workspaces e quantas pessoas trabalham com você. O
+              plano anual pago com Pix recorrente junta o desconto por assinar o
+              ano inteiro com o do Pix; o percentual de cada plano aparece no
+              cartão.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Tabs value={cycle} onValueChange={(v) => setCycle(v as PlanCycle)}>
+              <TabsList>
+                <TabsTrigger value="MONTHLY">Mensal</TabsTrigger>
+                <TabsTrigger value="YEARLY">Anual</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <span className="text-xs font-medium text-muted-foreground">
+              Pix recorrente sai mais barato que no cartão
+            </span>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {PLANS.map((plan) => {
               const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
+              const cardMonthly = monthlyPriceCents(plan.id, cycle, "CARD");
               const isExpiredThisPlan =
                 checkoutState.kind === "expired" &&
                 currentPlan === plan.id &&
@@ -287,32 +364,52 @@ export function PlanPanel({
               return (
                 <Card
                   key={plan.id}
-                  className={isCurrent || isPendingThisPlan ? "border-primary" : undefined}
+                  className={cn(
+                    "flex h-full flex-col overflow-hidden",
+                    (plan.highlight || isCurrent || isPendingThisPlan) &&
+                      "border-primary",
+                  )}
                 >
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between gap-2 text-base">
-                      {plan.label}
-                      {isCurrent && <Badge>Atual</Badge>}
-                    </CardTitle>
-                    <CardDescription>
-                      {priceCents === null
-                        ? "Sob consulta"
-                        : `${formatBRL(priceCents)}/mês${
-                            cycle === "YEARLY" ? " no plano anual" : ""
-                          }`}
-                    </CardDescription>
+                  <CardHeader className="gap-3">
+                    {plan.highlight && (
+                      <div className="-mx-4 -mt-4 mb-1 bg-primary px-4 py-1.5 text-center text-xs font-semibold text-primary-foreground">
+                        Mais escolhido
+                      </div>
+                    )}
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {plan.categoryLabel}
+                    </p>
+                    <div className="space-y-1">
+                      <CardTitle className="flex items-center justify-between gap-2 text-lg">
+                        {plan.label}
+                        {isCurrent && <Badge>Atual</Badge>}
+                      </CardTitle>
+                      <CardDescription>{plan.tagline}</CardDescription>
+                    </div>
+                    <PriceBlock
+                      planId={plan.id}
+                      baseCents={plan.baseMonthlyCents}
+                      cycle={cycle}
+                    />
                   </CardHeader>
-                  <CardContent className="space-y-1">
-                    <p className="text-xs font-medium">{planWorkspacesLabel(plan.id)}</p>
-                    {priceCents !== null && (
-                      <p className="text-xs text-muted-foreground">
-                        {cycle === "YEARLY"
-                          ? `Total de ${formatBRL(priceCents * 12)} por ano, cobrado à vista.`
-                          : "Cobrado todo mês."}
+
+                  <CardContent className="flex-1 space-y-3">
+                    {plan.inheritsFrom && (
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Tudo do {plan.inheritsFrom}, mais:
                       </p>
                     )}
+                    <ul className="space-y-2 text-sm">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex gap-2">
+                          <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </CardContent>
-                  <CardFooter>
+
+                  <CardFooter className="flex-col items-stretch gap-2">
                     {isPendingThisPlan ? (
                       <Button className="w-full" variant="outline" disabled>
                         {PENDING_AUTH_BUTTON_LABEL[checkoutState.kind] ??
@@ -327,15 +424,32 @@ export function PlanPanel({
                         <a href={`mailto:${CONTACT_EMAIL}`}>Fale com a gente</a>
                       </Button>
                     ) : (
-                      <Button className="w-full" onClick={() => goToCheckout(plan.id)}>
-                        {isExpiredThisPlan ? "Recontratar" : "Contratar"}
+                      <Button
+                        className="w-full"
+                        onClick={() => goToCheckout(plan.id)}
+                      >
+                        {isExpiredThisPlan ? "Recontratar" : "Assinar"}
                       </Button>
+                    )}
+                    {priceCents !== null && cardMonthly !== null && (
+                      <p className="text-center text-xs text-muted-foreground">
+                        No cartão, {formatBRL(cardMonthly)}/mês
+                      </p>
                     )}
                   </CardFooter>
                 </Card>
               );
             })}
           </div>
+
+          <ul className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            {GUARANTEES.map((item) => (
+              <li key={item} className="flex items-center gap-1.5">
+                <Check className="size-3.5 shrink-0 text-primary" />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

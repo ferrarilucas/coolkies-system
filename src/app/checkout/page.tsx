@@ -5,7 +5,6 @@ import {
   chargeAmountCents,
   isKnownCycle,
   isKnownPlan,
-  monthlyPriceCents,
   planLabel,
   planWorkspacesLabel,
   type PlanCycle,
@@ -32,9 +31,7 @@ export default async function CheckoutPage({
   const cycle: PlanCycle =
     rawCycle && isKnownCycle(rawCycle) ? rawCycle : "MONTHLY";
 
-  const monthlyCents = monthlyPriceCents(plan, cycle, "PIX");
-  const totalCents = chargeAmountCents(plan, cycle, "PIX");
-  if (monthlyCents === null || totalCents === null) redirect("/workspaces/plan");
+  if (chargeAmountCents(plan, cycle, "PIX") === null) redirect("/workspaces/plan");
 
   const { userId } = await getWorkspaceContext();
   const [sub, user] = await Promise.all([
@@ -49,8 +46,6 @@ export default async function CheckoutPage({
       cycle={cycle}
       planName={planLabel(plan)}
       workspacesLabel={planWorkspacesLabel(plan)}
-      monthlyCents={monthlyCents}
-      totalCents={totalCents}
       defaultCpf={user?.cpf ?? null}
     />
   );

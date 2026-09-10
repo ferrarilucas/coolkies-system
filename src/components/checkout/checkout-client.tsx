@@ -7,7 +7,11 @@ import { ArrowLeft, Cookie, CreditCard, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { maskCpf, isCompleteCpf, onlyDigits } from "@/lib/cpf";
 import { formatBRL } from "@/lib/money";
-import { type PlanCycle } from "@/lib/plans";
+import {
+  chargeAmountCents,
+  monthlyPriceCents,
+  type PlanCycle,
+} from "@/lib/plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,27 +25,37 @@ const CYCLE_NOTE: Record<PlanCycle, string> = {
   YEARLY: "Cobrado uma vez por ano",
 };
 
+type CheckoutMethod = "pix" | "card";
+
 export function CheckoutClient({
   plan,
   cycle,
   planName,
   workspacesLabel,
-  monthlyCents,
-  totalCents,
   defaultCpf,
 }: {
   plan: string;
   cycle: PlanCycle;
   planName: string;
   workspacesLabel: string;
-  monthlyCents: number;
-  totalCents: number;
   defaultCpf: string | null;
 }) {
   const router = useRouter();
+  const [method, setMethod] = useState<CheckoutMethod>("pix");
   const [cpf, setCpf] = useState(defaultCpf ? maskCpf(defaultCpf) : "");
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const pixMonthly = monthlyPriceCents(plan, cycle, "PIX") ?? 0;
+  const cardMonthly = monthlyPriceCents(plan, cycle, "CARD") ?? 0;
+  const pixOffPct =
+    cardMonthly > 0 ? Math.round((1 - pixMonthly / cardMonthly) * 100) : 0;
+
+  const monthlyCents = method === "pix" ? pixMonthly : cardMonthly;
+  const totalCents =
+    (method === "pix"
+      ? chargeAmountCents(plan, cycle, "PIX")
+      : chargeAmountCents(plan, cycle, "CARD")) ?? monthlyCents;
 
   function onGeneratePix(formData: FormData) {
     formData.set("plan", plan);
@@ -93,9 +107,23 @@ export function CheckoutClient({
             vencimento.
           </p>
 
-          <Tabs defaultValue="pix" className="mt-6">
+          <Tabs
+            value={method}
+            onValueChange={(v) => setMethod(v as CheckoutMethod)}
+            className="mt-6"
+          >
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="pix">Pix recorrente</TabsTrigger>
+              <TabsTrigger value="pix" className="gap-1.5">
+                Pix recorrente
+                {pixOffPct > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="hidden sm:inline-flex"
+                  >
+                    −{pixOffPct}%
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="card" className="gap-1.5">
                 Cartão de crédito
                 <Badge variant="secondary" className="hidden sm:inline-flex">
@@ -156,7 +184,8 @@ export function CheckoutClient({
                 <p className="font-medium">Em breve</p>
                 <p className="max-w-xs text-sm text-muted-foreground">
                   O pagamento com cartão de crédito ainda está em
-                  desenvolvimento. Por enquanto, use o Pix recorrente.
+                  desenvolvimento. Ele não tem o desconto do Pix recorrente — por
+                  enquanto, assine pelo Pix.
                 </p>
               </div>
             </TabsContent>
@@ -173,6 +202,20 @@ export function CheckoutClient({
             </span>
             <span className="text-sm text-muted-foreground">/mês</span>
           </div>
+          {pixOffPct > 0 && method === "pix" && (
+            <p className="mt-1 text-xs font-medium text-success">
+              Desconto do Pix recorrente aplicado (−{pixOffPct}%)
+            </p>
+          )}
+          {pixOffPct > 0 && method === "card" && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No Pix recorrente sai{" "}
+              <span className="font-medium text-foreground">
+                {formatBRL(pixMonthly)}/mês
+              </span>{" "}
+              — {pixOffPct}% mais barato.
+            </p>
+          )}
 
           <dl className="mt-5 space-y-2.5 text-sm">
             <div className="flex justify-between gap-4">
@@ -189,6 +232,12 @@ export function CheckoutClient({
                 {cycle === "YEARLY" ? "Anual" : "Mensal"}
               </dd>
             </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Forma de pagamento</dt>
+              <dd className="font-medium">
+                {method === "pix" ? "Pix recorrente" : "Cartão de crédito"}
+              </dd>
+            </div>
             {cycle === "YEARLY" && (
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Total por ano</dt>
@@ -200,13 +249,16 @@ export function CheckoutClient({
           </dl>
 
           <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
-            {CYCLE_NOTE[cycle]} via Pix recorrente. Você pode cancelar quando
-            quiser, direto na página do plano.
+            {method === "pix"
+              ? `${CYCLE_NOTE[cycle]} via Pix recorrente. Você pode cancelar quando quiser, direto na página do plano.`
+              : "O pagamento com cartão ainda não está disponível. O valor acima é sem o desconto do Pix."}
           </p>
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Lock className="size-3.5" />
-            Autorização feita no app do seu banco.
-          </p>
+          {method === "pix" && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock className="size-3.5" />
+              Autorização feita no app do seu banco.
+            </p>
+          )}
         </aside>
       </main>
     </div>
