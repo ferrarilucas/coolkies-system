@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import Image from "next/image";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import QRCode from "qrcode";
-import { AlertTriangle, Check, Copy } from "lucide-react";
-import { toast } from "sonner";
+import { AlertTriangle } from "lucide-react";
 import { checkoutViewState } from "@/lib/checkout-state";
 import { isCurrentPlanCard } from "@/lib/plan-card-state";
 import {
@@ -31,16 +28,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { subscribe, type CheckoutResult } from "@/server/actions/subscription";
+import {
+  PixCheckoutContent,
+  formatDueDate,
+} from "@/components/checkout/pix-checkout-content";
 
 const STATUS_LABEL: Record<string, string> = {
   TRIALING: "Em teste",
@@ -56,139 +48,14 @@ const WARNING_STATUSES = new Set(["PAST_DUE", "CANCELED", "AUTH_DENIED", "SUSPEN
 
 const CONTACT_EMAIL = "contato@coolkies.com.br";
 
-function applyCpfCnpjMask(raw: string): string {
-  const d = raw.replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 11) {
-    return d
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-  }
-  return d
-    .replace(/(\d{2})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1/$2")
-    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
-}
-
 function planThatCovers(count: number) {
   return PLANS.find((p) => p.maxWorkspaces >= count) ?? PLANS[PLANS.length - 1];
-}
-
-function formatDueDate(isoDate: string): string {
-  if (!isoDate) return "";
-  const [year, month, day] = isoDate.split("-");
-  return `${day}/${month}/${year}`;
 }
 
 function cycleLabel(cycle: PlanCycle | null): string {
   if (cycle === "YEARLY") return "ciclo anual";
   if (cycle === "MONTHLY") return "ciclo mensal";
   return "ciclo não identificado";
-}
-
-const QR_IMAGE_SIZE = 320;
-
-function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDataUrl(null);
-    QRCode.toDataURL(pixCopyPaste, { width: QR_IMAGE_SIZE, margin: 2 })
-      .then((url) => {
-        if (!cancelled) setDataUrl(url);
-      })
-      .catch((e) => {
-        console.error("PixQrImage: falha ao gerar o QR do Pix", e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pixCopyPaste]);
-
-  if (!dataUrl) return null;
-
-  return (
-    <div className="flex justify-center">
-      <Image
-        src={dataUrl}
-        alt="QR code do Pix para autorizar o débito recorrente"
-        width={QR_IMAGE_SIZE}
-        height={QR_IMAGE_SIZE}
-        unoptimized
-        className="size-64 rounded-lg border bg-white p-2"
-      />
-    </div>
-  );
-}
-
-function PixCheckoutContent({
-  pixCopyPaste,
-  nextDueDate,
-  previousPendingCharge,
-}: {
-  pixCopyPaste: string;
-  nextDueDate: string | null;
-  previousPendingCharge?: { cycleSeq: number; dueDate: string } | null;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  async function onCopy() {
-    try {
-      if (!navigator.clipboard) throw new Error("Clipboard API indisponível");
-      await navigator.clipboard.writeText(pixCopyPaste);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error("PixCheckoutContent: falha ao copiar o código Pix", e);
-      toast.error(
-        "Não foi possível copiar automaticamente. Selecione o código acima e copie manualmente.",
-      );
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      {previousPendingCharge && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p className="text-warning">
-            Uma cobrança da sua assinatura anterior já foi enviada ao banco e
-            será debitada em {formatDueDate(previousPendingCharge.dueDate)}{" "}
-            mesmo com o cancelamento — regra do Banco Central, cancelamento não
-            impede a cobrança já em andamento.
-          </p>
-        </div>
-      )}
-      <p className="text-sm text-muted-foreground">
-        Abra o app do seu banco, escolha pagar com Pix e escaneie o QR ou cole o
-        código abaixo. Isso autoriza um débito recorrente — você não está
-        pagando nada agora.
-      </p>
-      <PixQrImage pixCopyPaste={pixCopyPaste} />
-      <div className="rounded-lg border bg-muted/40 p-3">
-        <p className="select-all break-all font-mono text-xs">{pixCopyPaste}</p>
-      </div>
-      <Button className="w-full" onClick={onCopy} variant="outline">
-        {copied ? (
-          <>
-            <Check className="size-4" /> Copiado
-          </>
-        ) : (
-          <>
-            <Copy className="size-4" /> Copiar código Pix
-          </>
-        )}
-      </Button>
-      {nextDueDate && (
-        <p className="text-xs text-muted-foreground">
-          Depois de autorizado, a primeira cobrança é debitada em{" "}
-          {formatDueDate(nextDueDate)}.
-        </p>
-      )}
-    </div>
-  );
 }
 
 export function PlanPanel({
@@ -220,10 +87,7 @@ export function PlanPanel({
   graceUntil: string | null;
   pendingChargeDueAt: string | null;
 }) {
-  const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
-  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
-  const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
@@ -236,26 +100,8 @@ export function PlanPanel({
     graceUntil,
   );
 
-  function openCheckout(planId: string) {
-    setPixResult(null);
-    setCheckoutPlan(planId);
-  }
-
-  function closeCheckout() {
-    setCheckoutPlan(null);
-    setPixResult(null);
-  }
-
-  function onSubscribe(formData: FormData) {
-    startTransition(async () => {
-      const result = await subscribe(formData);
-      if (!result.ok) {
-        toast.error(result.error ?? "Não foi possível contratar o plano.");
-        return;
-      }
-      router.refresh();
-      if (result.data) setPixResult(result.data);
-    });
+  function goToCheckout(planId: string, planCycle: PlanCycle = cycle) {
+    router.push(`/checkout?plan=${planId}&cycle=${planCycle}`);
   }
 
   return (
@@ -385,10 +231,7 @@ export function PlanPanel({
                     </p>
                     <Button
                       className="w-full"
-                      onClick={() => {
-                        setCycle(currentCycle ?? "MONTHLY");
-                        openCheckout(currentPlan);
-                      }}
+                      onClick={() => goToCheckout(currentPlan, currentCycle ?? "MONTHLY")}
                     >
                       Recomeçar
                     </Button>
@@ -403,10 +246,7 @@ export function PlanPanel({
                     </p>
                     <Button
                       className="w-full"
-                      onClick={() => {
-                        setCycle(currentCycle ?? "MONTHLY");
-                        openCheckout(currentPlan);
-                      }}
+                      onClick={() => goToCheckout(currentPlan, currentCycle ?? "MONTHLY")}
                     >
                       Tentar novamente
                     </Button>
@@ -487,7 +327,7 @@ export function PlanPanel({
                         <a href={`mailto:${CONTACT_EMAIL}`}>Fale com a gente</a>
                       </Button>
                     ) : (
-                      <Button className="w-full" onClick={() => openCheckout(plan.id)}>
+                      <Button className="w-full" onClick={() => goToCheckout(plan.id)}>
                         {isExpiredThisPlan ? "Recontratar" : "Contratar"}
                       </Button>
                     )}
@@ -498,52 +338,6 @@ export function PlanPanel({
           </div>
         </div>
       )}
-
-      <Dialog open={checkoutPlan !== null} onOpenChange={(open) => !open && closeCheckout()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {pixResult
-                ? "Autorize o débito recorrente"
-                : `Contratar ${checkoutPlan ? planLabel(checkoutPlan) : ""}`}
-            </DialogTitle>
-          </DialogHeader>
-
-          {pixResult ? (
-            <PixCheckoutContent
-              pixCopyPaste={pixResult.pixCopyPaste}
-              nextDueDate={pixResult.nextDueDate}
-              previousPendingCharge={pixResult.previousPendingCharge}
-            />
-          ) : (
-            <form action={onSubscribe} className="space-y-4">
-              <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
-              <input type="hidden" name="cycle" value={cycle} />
-
-              <div className="space-y-2">
-                <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
-                <Input
-                  id="cpfCnpj"
-                  name="cpfCnpj"
-                  inputMode="numeric"
-                  placeholder="000.000.000-00"
-                  onChange={(e) => {
-                    e.currentTarget.value = applyCpfCnpjMask(e.currentTarget.value);
-                  }}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Usado para gerar a cobrança Pix em seu nome.
-                </p>
-              </div>
-
-              <Button type="submit" disabled={pending} className="w-full">
-                {pending ? "Gerando o Pix..." : "Gerar código Pix"}
-              </Button>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -28,9 +28,9 @@ const rightItems: NavItem[] = [
   { href: "/customers", label: "Clientes", icon: Users },
   {
     href: "/more",
-    label: "Mais",
+    label: "Ajustes",
     icon: Menu,
-    extraPrefixes: ["/products", "/pantry", "/markets", "/admin"],
+    extraPrefixes: ["/products", "/pantry", "/markets", "/admin", "/workspaces"],
   },
 ];
 

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Cookie,
+  CreditCard,
   UtensilsCrossed,
   Store,
   Settings,
@@ -45,6 +46,7 @@ const items: NavItem[] = [
   { href: "/pantry", label: "Despensa", icon: UtensilsCrossed },
   { href: "/markets", label: "Mercados e preços", icon: Store },
   { href: "/admin", label: "Cadastros", icon: Settings, adminOnly: true },
+  { href: "/workspaces/plan", label: "Plano", icon: CreditCard },
 ];
 
 const STORAGE_KEY = "sidebar:collapsed";

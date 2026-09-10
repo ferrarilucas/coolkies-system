@@ -10,10 +10,17 @@ export async function getSubscription(userId: string): Promise<Subscription | nu
   return db.subscription.findUnique({ where: { userId } });
 }
 
-export type BillingUser = { name: string; email: string };
+export type BillingUser = { name: string; email: string; cpf: string | null };
 
 export async function getBillingUser(userId: string): Promise<BillingUser | null> {
-  return db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+  return db.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, cpf: true },
+  });
+}
+
+export async function recordUserCpf(userId: string, cpf: string): Promise<void> {
+  await db.user.update({ where: { id: userId }, data: { cpf } });
 }
 
 export async function countOwnedWorkspaces(userId: string): Promise<number> {

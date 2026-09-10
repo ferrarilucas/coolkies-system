@@ -16,6 +16,7 @@ import {
   getSubscription,
   recordInterPixSubscription,
   recordPendingChargeWarning,
+  recordUserCpf,
 } from "@/server/tenant/subscription";
 import {
   cancelInterPixSubscription,
@@ -182,6 +183,10 @@ export async function subscribe(
       pixCopyPaste,
       nextDueDate: new Date(`${remote.nextDueDate}T00:00:00.000Z`),
     });
+
+    if (taxId.length === 11) {
+      await recordUserCpf(userId, taxId);
+    }
 
     revalidatePath("/", "layout");
 

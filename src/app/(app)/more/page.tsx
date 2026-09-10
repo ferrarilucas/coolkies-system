@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import {
   ChevronRight,
   Cookie,
+  CreditCard,
   Palette,
   Settings,
   Store,
@@ -45,6 +46,12 @@ export default async function MorePage() {
 
   const links: MoreLink[] = [
     {
+      href: "/workspaces/plan",
+      label: "Plano",
+      description: "Sua assinatura e forma de pagamento",
+      icon: CreditCard,
+    },
+    {
       href: "/products",
       label: "Produtos",
       description: "Estoque de produto final e produções",
@@ -83,7 +90,7 @@ export default async function MorePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Mais" description="Outras áreas e configurações." />
+      <PageHeader title="Configurações" description="Seu plano e outras áreas." />
 
       <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
         <Avatar className="size-11">
