@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PlanPanel } from "@/components/workspaces/plan-panel";
+import { isPendingChargeWarningActive } from "@/lib/pending-charge";
 import { isTrialExpired } from "@/lib/trial";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import {
@@ -27,10 +28,19 @@ export default async function PlanPage() {
         currentCycle={sub?.cycle ?? null}
         status={sub?.status ?? null}
         trialExpired={isTrialExpired(sub?.status ?? "NONE", sub?.trialEndsAt ?? null)}
-        source={sub?.source ?? null}
-        hasAsaasSubscriptionId={Boolean(sub?.asaasSubscriptionId)}
+        provider={sub?.provider ?? null}
+        hasSubscriptionId={Boolean(sub?.interpixSubscriptionId)}
         ownedCount={owned}
         activeCount={active.size}
+        pixCopyPaste={sub?.interpixPixCopyPaste ?? null}
+        nextDueDate={sub?.currentPeriodEnd ? sub.currentPeriodEnd.toISOString().slice(0, 10) : null}
+        authorizedAt={sub?.authorizedAt ? sub.authorizedAt.toISOString() : null}
+        graceUntil={sub?.graceUntil ? sub.graceUntil.toISOString() : null}
+        pendingChargeDueAt={
+          sub?.pendingChargeDueAt && isPendingChargeWarningActive(sub.pendingChargeDueAt)
+            ? sub.pendingChargeDueAt.toISOString().slice(0, 10)
+            : null
+        }
       />
     </div>
   );

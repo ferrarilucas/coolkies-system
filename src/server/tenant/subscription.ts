@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { effectiveLimit } from "@/lib/plans";
-import { listAsaasPaymentsOfSubscription, type AsaasPayment } from "./asaas";
+import { hasPaidAccess } from "@/lib/period";
 
 const TRIAL_DAYS = 14;
 
@@ -20,52 +20,52 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
   return db.member.count({ where: { userId, role: "OWNER" } });
 }
 
-export async function recordAsaasSubscription(input: {
+export async function recordPendingChargeWarning(
+  userId: string,
+  dueAt: Date,
+): Promise<void> {
+  await db.subscription.updateMany({
+    where: { userId },
+    data: { pendingChargeDueAt: dueAt },
+  });
+}
+
+export async function recordInterPixSubscription(input: {
   userId: string;
   plan: string;
   cycle: SubscriptionCycle;
-  asaasCustomerId: string;
-  asaasSubscriptionId: string;
+  interpixSubscriptionId: string;
+  pixCopyPaste: string | null;
+  nextDueDate: Date;
 }): Promise<void> {
+  const existing = await db.subscription.findUnique({ where: { userId: input.userId } });
+
   await db.subscription.upsert({
     where: { userId: input.userId },
     create: {
       userId: input.userId,
       plan: input.plan,
       cycle: input.cycle,
-      source: "ASAAS",
-      status: "TRIALING",
-      asaasCustomerId: input.asaasCustomerId,
-      asaasSubscriptionId: input.asaasSubscriptionId,
+      provider: "INTERPIX",
+      status: "PENDING_AUTH",
+      authorizedAt: null,
+      interpixSubscriptionId: input.interpixSubscriptionId,
+      interpixPixCopyPaste: input.pixCopyPaste,
+      currentPeriodEnd: input.nextDueDate,
     },
     update: {
       plan: input.plan,
       cycle: input.cycle,
-      source: "ASAAS",
-      asaasCustomerId: input.asaasCustomerId,
-      asaasSubscriptionId: input.asaasSubscriptionId,
+      provider: "INTERPIX",
+      status: existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING_AUTH",
+      graceUntil: existing?.status === "ACTIVE" ? existing.graceUntil : null,
+      authorizedAt: null,
+      interpixSubscriptionId: input.interpixSubscriptionId,
+      interpixPixCopyPaste: input.pixCopyPaste,
+      currentPeriodEnd: input.nextDueDate,
+      lastFailureReason: null,
     },
   });
-}
-
-const OPEN_PAYMENT_STATUSES = new Set(["PENDING", "OVERDUE"]);
-const INVOICE_RETRY_DELAY_MS = 1500;
-
-function pickOpenInvoiceUrl(payments: AsaasPayment[]): string | null {
-  const open = payments
-    .filter((p) => OPEN_PAYMENT_STATUSES.has(p.status) && p.invoiceUrl)
-    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
-  return open[0]?.invoiceUrl ?? null;
-}
-
-export async function resolveInvoiceUrl(asaasSubscriptionId: string): Promise<string | null> {
-  const first = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
-  const url = pickOpenInvoiceUrl(first);
-  if (url) return url;
-
-  await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_DELAY_MS));
-  const retry = await listAsaasPaymentsOfSubscription(asaasSubscriptionId);
-  return pickOpenInvoiceUrl(retry);
 }
 
 export async function ensureTrialSubscription(userId: string): Promise<void> {
@@ -76,8 +76,8 @@ export async function ensureTrialSubscription(userId: string): Promise<void> {
     await db.subscription.create({
       data: {
         userId,
-        plan: "solo",
-        source: "ASAAS",
+        plan: "corre",
+        provider: "INTERPIX",
         status: "TRIALING",
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
       },
@@ -96,11 +96,18 @@ export function isSubscriptionUsable(
 ): boolean {
   if (!sub) return false;
   if (sub.status === "ACTIVE") return true;
+  if (sub.status === "PAST_DUE") return hasPaidAccess(sub);
   if (sub.status === "TRIALING") {
     return sub.trialEndsAt === null || sub.trialEndsAt > now;
   }
-  if (sub.status === "PAST_DUE") {
-    return sub.graceUntil !== null && sub.graceUntil > now;
+  if (sub.status === "PENDING_AUTH") {
+    const graceValid = sub.graceUntil !== null && sub.graceUntil > now;
+    const trialActive = sub.trialEndsAt !== null && sub.trialEndsAt > now;
+    return graceValid || trialActive;
+  }
+  if (sub.status === "CANCELED") {
+    if (!hasPaidAccess(sub)) return false;
+    return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }
   return false;
 }
@@ -115,7 +122,11 @@ export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {
     }),
   ]);
 
-  const limit = effectiveLimit(sub?.plan ?? "solo", sub?.status ?? "TRIALING");
+  const limit = effectiveLimit(
+    sub?.plan ?? "corre",
+    sub?.status ?? "TRIALING",
+    sub !== null && hasPaidAccess(sub),
+  );
   const allowed = owned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
   return new Set(allowed.map((m) => m.workspaceId));
 }
@@ -138,6 +149,8 @@ export type WorkspacePlanState = {
   status: SubscriptionStatus | "NONE";
   isOverLimit: boolean;
   trialEndsAt: Date | null;
+  hasAuthorized: boolean;
+  lastFailureReason: string | null;
 };
 
 export async function getWorkspacePlanState(workspaceId: string): Promise<WorkspacePlanState> {
@@ -145,7 +158,15 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
     where: { workspaceId, role: "OWNER" },
     select: { userId: true },
   });
-  if (!owner) return { status: "NONE", isOverLimit: false, trialEndsAt: null };
+  if (!owner) {
+    return {
+      status: "NONE",
+      isOverLimit: false,
+      trialEndsAt: null,
+      hasAuthorized: false,
+      lastFailureReason: null,
+    };
+  }
 
   const sub = await getSubscription(owner.userId);
   const usable = isSubscriptionUsable(sub);
@@ -155,5 +176,7 @@ export async function getWorkspacePlanState(workspaceId: string): Promise<Worksp
     status: sub?.status ?? "NONE",
     isOverLimit: usable && !active.has(workspaceId),
     trialEndsAt: sub?.trialEndsAt ?? null,
+    hasAuthorized: sub?.authorizedAt !== null && sub?.authorizedAt !== undefined,
+    lastFailureReason: sub?.lastFailureReason ?? null,
   };
 }

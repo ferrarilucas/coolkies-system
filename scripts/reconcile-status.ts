@@ -1,58 +1,119 @@
-import { addMonths, addYears } from "date-fns";
+import { isValidIsoCalendarDate } from "../src/lib/date-validation";
 
-export type ReconcileCycle = "MONTHLY" | "YEARLY";
-
-export type RemoteCharge = { status: string; dueDate: string | null };
+export type ReconcileApplyStatus = "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | "AUTH_DENIED";
 
 export type ReconcileDecision =
-  | { action: "activate"; reason: string }
+  | { action: "apply"; status: ReconcileApplyStatus; reason: string; lastPaidAt?: Date }
   | { action: "report"; reason: string }
   | { action: "none"; reason: string };
 
-const PAID_CHARGE_STATUSES = new Set(["RECEIVED", "CONFIRMED"]);
+export type PeriodEndDecision =
+  | { action: "apply"; currentPeriodEnd: Date; recordPaidThroughAt: boolean; reason: string }
+  | { action: "none"; reason: string };
 
-function coverageEnd(dueDate: string, cycle: ReconcileCycle): Date {
-  const due = new Date(`${dueDate}T00:00:00.000Z`);
-  return cycle === "YEARLY" ? addYears(due, 1) : addMonths(due, 1);
-}
+const KNOWN_REMOTE_STATUSES = new Set([
+  "PENDING_AUTH",
+  "ACTIVE",
+  "PAST_DUE",
+  "SUSPENDED",
+  "CANCELED",
+  "AUTH_DENIED",
+]);
 
-export function hasPaidCurrentCycle(
-  charges: RemoteCharge[],
-  cycle: ReconcileCycle,
-  now: Date,
-): boolean {
-  return charges.some((charge) => {
-    if (!PAID_CHARGE_STATUSES.has(charge.status)) return false;
-    if (!charge.dueDate) return false;
-    const end = coverageEnd(charge.dueDate, cycle);
-    return end.getTime() > now.getTime();
-  });
+const UNCONDITIONAL_DOWNGRADE_STATUSES: ReadonlyArray<ReconcileApplyStatus> = [
+  "SUSPENDED",
+  "CANCELED",
+  "AUTH_DENIED",
+];
+
+const PAID_ACCESS_LOCAL_STATUSES = new Set(["ACTIVE", "PAST_DUE"]);
+
+const RECOVERABLE_LOCAL_STATUSES = new Set(["PAST_DUE", "SUSPENDED"]);
+
+const PAID_EVIDENCE_BLOCKED_LOCAL_STATUSES = new Set(["SUSPENDED"]);
+
+function isUnconditionalDowngradeStatus(value: string): value is ReconcileApplyStatus {
+  return (UNCONDITIONAL_DOWNGRADE_STATUSES as readonly string[]).includes(value);
 }
 
 export function decideReconcile(input: {
-  localStatus: string;
-  cycle: ReconcileCycle;
-  charges: RemoteCharge[];
-  now: Date;
+  local: string;
+  remote: string;
+  now?: Date;
 }): ReconcileDecision {
-  if (input.localStatus === "CANCELED") {
-    return { action: "none", reason: "cancelada localmente" };
+  const now = input.now ?? new Date();
+  if (!KNOWN_REMOTE_STATUSES.has(input.remote)) {
+    return { action: "report", reason: `status remoto desconhecido: ${input.remote}` };
   }
 
-  const paid = hasPaidCurrentCycle(input.charges, input.cycle, input.now);
-
-  if (input.localStatus === "ACTIVE") {
-    return paid
-      ? { action: "none", reason: "ativa com o ciclo corrente pago" }
-      : {
-          action: "report",
-          reason: "ativa localmente sem cobranca paga no ciclo corrente",
-        };
+  if (input.local === input.remote) {
+    return { action: "none", reason: "estados iguais" };
   }
 
-  if (!paid) {
-    return { action: "none", reason: "sem cobranca paga no ciclo corrente" };
+  if (isUnconditionalDowngradeStatus(input.remote)) {
+    return {
+      action: "apply",
+      status: input.remote,
+      reason: `remoto rebaixou para ${input.remote} (local ${input.local})`,
+    };
   }
 
-  return { action: "activate", reason: "cobranca paga cobrindo o ciclo corrente" };
+  if (input.remote === "PAST_DUE") {
+    if (PAID_ACCESS_LOCAL_STATUSES.has(input.local)) {
+      return {
+        action: "apply",
+        status: "PAST_DUE",
+        reason: `remoto deixou de receber o pagamento (local ${input.local})`,
+      };
+    }
+
+    return {
+      action: "report",
+      reason: `local ${input.local} nunca teve acesso pago; PAST_DUE remoto não concede nada`,
+    };
+  }
+
+  if (input.remote === "ACTIVE" && RECOVERABLE_LOCAL_STATUSES.has(input.local)) {
+    return {
+      action: "apply",
+      status: input.remote,
+      reason: `remoto voltou a cobrar normalmente (local ${input.local})`,
+      ...(input.local === "PAST_DUE" ? { lastPaidAt: now } : {}),
+    };
+  }
+
+  return {
+    action: "report",
+    reason: `local ${input.local}, remoto ${input.remote} — divergência não aplicada por segurança`,
+  };
+}
+
+export function decidePeriodEndCorrection(input: {
+  localPeriodEnd: Date | null;
+  remoteNextDueDate: string;
+  priorLocalStatus: string;
+  effectiveStatus: string;
+}): PeriodEndDecision {
+  if (!isValidIsoCalendarDate(input.remoteNextDueDate)) {
+    return { action: "none", reason: `vencimento remoto inválido: ${input.remoteNextDueDate}` };
+  }
+
+  const remote = new Date(`${input.remoteNextDueDate}T00:00:00.000Z`);
+
+  if (input.localPeriodEnd && input.localPeriodEnd.getTime() === remote.getTime()) {
+    return { action: "none", reason: "vencimento igual" };
+  }
+
+  const recordPaidThroughAt =
+    input.effectiveStatus === "ACTIVE" &&
+    !PAID_EVIDENCE_BLOCKED_LOCAL_STATUSES.has(input.priorLocalStatus);
+
+  return {
+    action: "apply",
+    currentPeriodEnd: remote,
+    recordPaidThroughAt,
+    reason: input.localPeriodEnd
+      ? `vencimento local ${input.localPeriodEnd.toISOString()} difere do remoto ${input.remoteNextDueDate}`
+      : `vencimento local ausente, remoto ${input.remoteNextDueDate}`,
+  };
 }

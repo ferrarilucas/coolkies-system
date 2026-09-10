@@ -1,30 +1,41 @@
-export type PlanCycle = "MONTHLY" | "YEARLY";
+import type { Cycle } from "./period";
+
+export type PlanCycle = Cycle;
+export type PaymentMethod = "PIX" | "CARD";
 
 type PlanDefinition = {
   id: string;
   label: string;
+  workspacesLabel: string;
   maxWorkspaces: number;
-  priceCents: Record<PlanCycle, number> | null;
+  baseMonthlyCents: number | null;
 };
+
+const YEARLY_DISCOUNT_CENTS = 1000;
+const PIX_DISCOUNT_CENTS = 500;
+const MONTHS_IN_YEAR = 12;
 
 export const PLANS: PlanDefinition[] = [
   {
-    id: "solo",
-    label: "1 workspace",
+    id: "corre",
+    label: "Corre",
+    workspacesLabel: "1 workspace",
     maxWorkspaces: 1,
-    priceCents: { MONTHLY: 2990, YEARLY: 1990 },
+    baseMonthlyCents: 3950,
   },
   {
-    id: "team",
-    label: "Até 4 workspaces",
+    id: "cresce",
+    label: "Cresce",
+    workspacesLabel: "Até 4 workspaces",
     maxWorkspaces: 4,
-    priceCents: { MONTHLY: 9990, YEARLY: 8990 },
+    baseMonthlyCents: 9990,
   },
   {
-    id: "unlimited",
-    label: "Workspaces ilimitados",
+    id: "escala",
+    label: "Escala",
+    workspacesLabel: "Workspaces ilimitados",
     maxWorkspaces: Number.POSITIVE_INFINITY,
-    priceCents: null,
+    baseMonthlyCents: null,
   },
 ];
 
@@ -40,18 +51,43 @@ export function isKnownCycle(cycle: string): cycle is PlanCycle {
   return cycle === "MONTHLY" || cycle === "YEARLY";
 }
 
+export function monthlyPriceCents(
+  plan: string,
+  cycle: PlanCycle,
+  method: PaymentMethod,
+): number | null {
+  const base = findPlan(plan).baseMonthlyCents;
+  if (base === null) return null;
+
+  const yearly = cycle === "YEARLY" ? YEARLY_DISCOUNT_CENTS : 0;
+  const pix = method === "PIX" ? PIX_DISCOUNT_CENTS : 0;
+  return base - yearly - pix;
+}
+
+export function chargeAmountCents(
+  plan: string,
+  cycle: PlanCycle,
+  method: PaymentMethod,
+): number | null {
+  const monthly = monthlyPriceCents(plan, cycle, method);
+  if (monthly === null) return null;
+  return cycle === "YEARLY" ? monthly * MONTHS_IN_YEAR : monthly;
+}
+
 export function planLimit(plan: string): number {
   return findPlan(plan).maxWorkspaces;
 }
 
-export function planPriceCents(plan: string, cycle: PlanCycle): number | null {
-  return findPlan(plan).priceCents?.[cycle] ?? null;
-}
-
-export function effectiveLimit(plan: string, status: string): number {
-  return status === "TRIALING" ? 1 : planLimit(plan);
+export function effectiveLimit(plan: string, status: string, hasPaid = false): number {
+  if (status === "TRIALING" || status === "PENDING_AUTH") return 1;
+  if ((status === "PAST_DUE" || status === "CANCELED") && !hasPaid) return 1;
+  return planLimit(plan);
 }
 
 export function planLabel(plan: string): string {
   return findPlan(plan).label;
+}
+
+export function planWorkspacesLabel(plan: string): string {
+  return findPlan(plan).workspacesLabel;
 }

@@ -1,7 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type SubscriptionStatus } from "@prisma/client";
 import { DIRECT_DATABASE_URL } from "./direct-database-url";
-import { decideReconcile } from "./reconcile-status";
-import { listAsaasPaymentsOfSubscription } from "../src/server/tenant/asaas";
+import { decidePeriodEndCorrection, decideReconcile } from "./reconcile-status";
+import { getInterPixSubscription } from "../src/server/tenant/interpix";
 
 const db = new PrismaClient({
   datasources: { db: { url: DIRECT_DATABASE_URL } },
@@ -9,49 +9,95 @@ const db = new PrismaClient({
 
 async function main() {
   const subs = await db.subscription.findMany({
-    where: { source: "ASAAS", asaasSubscriptionId: { not: null } },
+    where: {
+      provider: "INTERPIX",
+      interpixSubscriptionId: { not: null },
+      status: { in: ["PENDING_AUTH", "ACTIVE", "PAST_DUE", "SUSPENDED"] },
+    },
   });
 
   let checked = 0;
-  let activated = 0;
-  let reported = 0;
+  let corrected = 0;
+  let diverged = 0;
   let failed = 0;
-  const now = new Date();
 
   for (const sub of subs) {
     checked += 1;
+
+    let remote: Awaited<ReturnType<typeof getInterPixSubscription>>;
     try {
-      const charges = await listAsaasPaymentsOfSubscription(sub.asaasSubscriptionId as string);
-      const decision = decideReconcile({
-        localStatus: sub.status,
-        cycle: sub.cycle,
-        charges,
-        now,
-      });
-
-      if (decision.action === "activate") {
-        await db.subscription.update({
-          where: { id: sub.id },
-          data: { status: "ACTIVE", graceUntil: null },
-        });
-        activated += 1;
-        console.log(`ativada ${sub.id}: ${sub.status} -> ACTIVE (${decision.reason})`);
-        continue;
-      }
-
-      if (decision.action === "report") {
-        reported += 1;
-        console.log(`divergencia em ${sub.id}: ${decision.reason}`);
-      }
+      remote = await getInterPixSubscription(sub.interpixSubscriptionId as string);
     } catch (e) {
       failed += 1;
       console.error(`falha ao consultar ${sub.id}:`, e instanceof Error ? e.message : e);
+      continue;
+    }
+
+    try {
+      const statusDecision = decideReconcile({ local: sub.status, remote: remote.status });
+      const effectiveStatus =
+        statusDecision.action === "apply" ? statusDecision.status : sub.status;
+      const periodDecision = decidePeriodEndCorrection({
+        localPeriodEnd: sub.currentPeriodEnd,
+        remoteNextDueDate: remote.nextDueDate,
+        priorLocalStatus: sub.status,
+        effectiveStatus,
+      });
+
+      const data: {
+        status?: SubscriptionStatus;
+        currentPeriodEnd?: Date;
+        lastPaidAt?: Date;
+        paidThroughAt?: Date;
+      } = {};
+
+      if (statusDecision.action === "apply") {
+        data.status = statusDecision.status;
+        if (statusDecision.lastPaidAt) {
+          data.lastPaidAt = statusDecision.lastPaidAt;
+        }
+      }
+
+      if (periodDecision.action === "apply") {
+        data.currentPeriodEnd = periodDecision.currentPeriodEnd;
+        if (periodDecision.recordPaidThroughAt) {
+          data.paidThroughAt = periodDecision.currentPeriodEnd;
+        }
+      }
+
+      if (Object.keys(data).length > 0) {
+        await db.subscription.update({ where: { id: sub.id }, data });
+        corrected += 1;
+        console.log(
+          `corrigida ${sub.id}: ${
+            statusDecision.action === "apply" ? statusDecision.reason : "sem mudança de status"
+          }${periodDecision.action === "apply" ? `; ${periodDecision.reason}` : ""}`,
+        );
+      }
+
+      if (statusDecision.action === "report") {
+        diverged += 1;
+        console.log(`divergência em ${sub.id}: ${statusDecision.reason}`);
+      }
+    } catch (e) {
+      failed += 1;
+      console.error(`falha ao gravar ${sub.id}:`, e instanceof Error ? e.message : e);
     }
   }
 
   console.log(
-    `verificadas: ${checked}, ativadas: ${activated}, divergencias: ${reported}, falhas: ${failed}`,
+    `verificadas: ${checked}, corrigidas: ${corrected}, divergentes: ${diverged}, falhas: ${failed}`,
   );
+  console.log(
+    "limitação conhecida: esta rotina parte das linhas do nosso banco, então uma assinatura " +
+      "criada na InterPix que nunca foi gravada aqui — cobrando alguém sem nenhum registro " +
+      "nosso — é invisível para ela. Só um endpoint de listagem no gateway resolveria isso, e " +
+      "o cliente HTTP atual (src/server/tenant/interpix.ts) não expõe um.",
+  );
+
+  if (failed > 0) {
+    process.exitCode = 1;
+  }
 }
 
 main()

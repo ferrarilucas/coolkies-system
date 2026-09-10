@@ -49,7 +49,11 @@
     "lucide-react": "^0.468.0",
     "next": "15.1.11",
     "next-themes": "^0.4.4",
+<<<<<<< HEAD
     "pdf-lib": "^1.17.1",
+=======
+    "qrcode": "^1.5.4",
+>>>>>>> worktree-checkout-interpix
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.0",
@@ -63,6 +67,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
     "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",

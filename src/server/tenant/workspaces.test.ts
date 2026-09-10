@@ -38,7 +38,7 @@ describe("createWorkspaceForUser", () => {
 
     const sub = await testDb.subscription.findUnique({ where: { userId: "u-first" } });
     expect(sub?.status).toBe("TRIALING");
-    expect(sub?.plan).toBe("solo");
+    expect(sub?.plan).toBe("corre");
 
     const ws = await testDb.workspace.findUnique({ where: { id } });
     expect(ws).not.toBeNull();
@@ -67,7 +67,7 @@ describe("createWorkspaceForUser", () => {
   it("recusa workspace acima do limite fora do trial com mensagem de upgrade", async () => {
     const user = await seedUserWithSession("u-active", "active@example.com");
     await testDb.subscription.create({
-      data: { userId: user.id, plan: "solo", source: "MANUAL", status: "ACTIVE" },
+      data: { userId: user.id, plan: "corre", status: "ACTIVE" },
     });
     const ws = await testDb.workspace.create({ data: { name: "WS", slug: "ws-active-limit" } });
     await testDb.member.create({
@@ -88,8 +88,7 @@ describe("createWorkspaceForUser", () => {
     await testDb.subscription.create({
       data: {
         userId: user.id,
-        plan: "solo",
-        source: "MANUAL",
+        plan: "corre",
         status: "TRIALING",
         trialEndsAt: antiga,
       },

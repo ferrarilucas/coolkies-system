@@ -1,10 +1,25 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import QRCode from "qrcode";
+import { AlertTriangle, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { PLANS, planLabel, planPriceCents, type PlanCycle } from "@/lib/plans";
+import { checkoutViewState } from "@/lib/checkout-state";
+import { isCurrentPlanCard } from "@/lib/plan-card-state";
+import {
+  PENDING_AUTH_BADGE_LABEL,
+  PENDING_AUTH_BUTTON_LABEL,
+  planCheckoutCardCopy,
+} from "@/lib/plan-checkout-card-copy";
+import {
+  PLANS,
+  monthlyPriceCents,
+  planLabel,
+  planWorkspacesLabel,
+  type PlanCycle,
+} from "@/lib/plans";
 import { formatBRL } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,19 +40,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { resumeCheckout, subscribe } from "@/server/actions/subscription";
+import { subscribe, type CheckoutResult } from "@/server/actions/subscription";
 
 const STATUS_LABEL: Record<string, string> = {
   TRIALING: "Em teste",
   ACTIVE: "Ativo",
   PAST_DUE: "Pagamento pendente",
   CANCELED: "Cancelado",
+  PENDING_AUTH: "Autorização pendente",
+  AUTH_DENIED: "Autorização recusada",
+  SUSPENDED: "Suspenso",
 };
 
-const CYCLE_LABEL: Record<PlanCycle, string> = {
-  MONTHLY: "mensal",
-  YEARLY: "anual",
-};
+const WARNING_STATUSES = new Set(["PAST_DUE", "CANCELED", "AUTH_DENIED", "SUSPENDED"]);
 
 const CONTACT_EMAIL = "contato@coolkies.com.br";
 
@@ -60,48 +75,175 @@ function planThatCovers(count: number) {
   return PLANS.find((p) => p.maxWorkspaces >= count) ?? PLANS[PLANS.length - 1];
 }
 
+function formatDueDate(isoDate: string): string {
+  if (!isoDate) return "";
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function cycleLabel(cycle: PlanCycle | null): string {
+  if (cycle === "YEARLY") return "ciclo anual";
+  if (cycle === "MONTHLY") return "ciclo mensal";
+  return "ciclo não identificado";
+}
+
+const QR_IMAGE_SIZE = 320;
+
+function PixQrImage({ pixCopyPaste }: { pixCopyPaste: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDataUrl(null);
+    QRCode.toDataURL(pixCopyPaste, { width: QR_IMAGE_SIZE, margin: 2 })
+      .then((url) => {
+        if (!cancelled) setDataUrl(url);
+      })
+      .catch((e) => {
+        console.error("PixQrImage: falha ao gerar o QR do Pix", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pixCopyPaste]);
+
+  if (!dataUrl) return null;
+
+  return (
+    <div className="flex justify-center">
+      <Image
+        src={dataUrl}
+        alt="QR code do Pix para autorizar o débito recorrente"
+        width={QR_IMAGE_SIZE}
+        height={QR_IMAGE_SIZE}
+        unoptimized
+        className="size-64 rounded-lg border bg-white p-2"
+      />
+    </div>
+  );
+}
+
+function PixCheckoutContent({
+  pixCopyPaste,
+  nextDueDate,
+  previousPendingCharge,
+}: {
+  pixCopyPaste: string;
+  nextDueDate: string | null;
+  previousPendingCharge?: { cycleSeq: number; dueDate: string } | null;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function onCopy() {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard API indisponível");
+      await navigator.clipboard.writeText(pixCopyPaste);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("PixCheckoutContent: falha ao copiar o código Pix", e);
+      toast.error(
+        "Não foi possível copiar automaticamente. Selecione o código acima e copie manualmente.",
+      );
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {previousPendingCharge && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <p className="text-warning">
+            Uma cobrança da sua assinatura anterior já foi enviada ao banco e
+            será debitada em {formatDueDate(previousPendingCharge.dueDate)}{" "}
+            mesmo com o cancelamento — regra do Banco Central, cancelamento não
+            impede a cobrança já em andamento.
+          </p>
+        </div>
+      )}
+      <p className="text-sm text-muted-foreground">
+        Abra o app do seu banco, escolha pagar com Pix e escaneie o QR ou cole o
+        código abaixo. Isso autoriza um débito recorrente — você não está
+        pagando nada agora.
+      </p>
+      <PixQrImage pixCopyPaste={pixCopyPaste} />
+      <div className="rounded-lg border bg-muted/40 p-3">
+        <p className="select-all break-all font-mono text-xs">{pixCopyPaste}</p>
+      </div>
+      <Button className="w-full" onClick={onCopy} variant="outline">
+        {copied ? (
+          <>
+            <Check className="size-4" /> Copiado
+          </>
+        ) : (
+          <>
+            <Copy className="size-4" /> Copiar código Pix
+          </>
+        )}
+      </Button>
+      {nextDueDate && (
+        <p className="text-xs text-muted-foreground">
+          Depois de autorizado, a primeira cobrança é debitada em{" "}
+          {formatDueDate(nextDueDate)}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PlanPanel({
   currentPlan,
   currentCycle,
   status,
   trialExpired,
-  source,
-  hasAsaasSubscriptionId,
+  provider,
+  hasSubscriptionId,
   ownedCount,
   activeCount,
+  pixCopyPaste,
+  nextDueDate,
+  authorizedAt,
+  graceUntil,
+  pendingChargeDueAt,
 }: {
   currentPlan: string | null;
   currentCycle: PlanCycle | null;
   status: string | null;
   trialExpired: boolean;
-  source: string | null;
-  hasAsaasSubscriptionId: boolean;
+  provider: string | null;
+  hasSubscriptionId: boolean;
   ownedCount: number;
   activeCount: number;
+  pixCopyPaste: string | null;
+  nextDueDate: string | null;
+  authorizedAt: string | null;
+  graceUntil: string | null;
+  pendingChargeDueAt: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
-  const [switchConfirmed, setSwitchConfirmed] = useState(false);
-  const [awaitingInvoice, setAwaitingInvoice] = useState(false);
+  const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
-  const isSwitchingPlan =
-    hasAsaasSubscriptionId &&
-    checkoutPlan !== null &&
-    (checkoutPlan !== currentPlan || cycle !== currentCycle);
+  const checkoutState = checkoutViewState(
+    status,
+    pixCopyPaste,
+    nextDueDate,
+    authorizedAt,
+    graceUntil,
+  );
 
   function openCheckout(planId: string) {
-    setSwitchConfirmed(false);
+    setPixResult(null);
     setCheckoutPlan(planId);
   }
 
   function closeCheckout() {
     setCheckoutPlan(null);
-    setSwitchConfirmed(false);
-    setAwaitingInvoice(false);
+    setPixResult(null);
   }
 
   function onSubscribe(formData: FormData) {
@@ -112,24 +254,7 @@ export function PlanPanel({
         return;
       }
       router.refresh();
-      if (result.data?.invoiceUrl) {
-        window.location.href = result.data.invoiceUrl;
-        return;
-      }
-      setAwaitingInvoice(true);
-    });
-  }
-
-  function onResumeCheckout() {
-    startTransition(async () => {
-      const result = await resumeCheckout();
-      if (!result.ok) {
-        toast.error(result.error ?? "Não foi possível abrir o pagamento.");
-        return;
-      }
-      if (result.data?.invoiceUrl) {
-        window.location.href = result.data.invoiceUrl;
-      }
+      if (result.data) setPixResult(result.data);
     });
   }
 
@@ -144,12 +269,16 @@ export function PlanPanel({
                 variant={
                   status === "ACTIVE"
                     ? "success"
-                    : status === "PAST_DUE" || status === "CANCELED" || trialExpired
+                    : WARNING_STATUSES.has(status) || trialExpired
                       ? "warning"
                       : "secondary"
                 }
               >
-                {trialExpired ? "Teste encerrado" : (STATUS_LABEL[status] ?? status)}
+                {trialExpired
+                  ? "Teste encerrado"
+                  : status === "PENDING_AUTH"
+                    ? (PENDING_AUTH_BADGE_LABEL[checkoutState.kind] ?? STATUS_LABEL[status])
+                    : (STATUS_LABEL[status] ?? status)}
               </Badge>
             )}
           </CardTitle>
@@ -169,6 +298,18 @@ export function PlanPanel({
         )}
       </Card>
 
+      {pendingChargeDueAt !== null && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <p className="text-warning">
+            Uma cobrança da sua assinatura anterior já foi enviada ao banco e
+            será debitada em {formatDueDate(pendingChargeDueAt)} mesmo com o
+            cancelamento — regra do Banco Central, cancelamento não impede a
+            cobrança já em andamento.
+          </p>
+        </div>
+      )}
+
       {overLimit > 0 && suggestedPlan && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
@@ -182,7 +323,18 @@ export function PlanPanel({
         </div>
       )}
 
-      {source === "MANUAL" ? (
+      {(status === "AUTH_DENIED" || status === "SUSPENDED") && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <p className="text-destructive">
+            {status === "AUTH_DENIED"
+              ? "Seu banco recusou a autorização do débito recorrente. Escolha um plano abaixo para gerar uma nova autorização."
+              : "Sua assinatura foi suspensa. Escolha um plano abaixo para gerar uma nova autorização ou fale com a gente."}
+          </p>
+        </div>
+      )}
+
+      {provider === "MANUAL" ? (
         <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>
@@ -196,6 +348,74 @@ export function PlanPanel({
         </div>
       ) : (
         <div className="space-y-4">
+          {checkoutState.kind !== "none" && currentPlan && (
+            <Card className="border-primary">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {planCheckoutCardCopy(checkoutState.kind).title} —{" "}
+                  {planLabel(currentPlan)} ({cycleLabel(currentCycle)})
+                </CardTitle>
+                <CardDescription>
+                  {planCheckoutCardCopy(checkoutState.kind).description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {checkoutState.kind === "authorize" && (
+                  <PixCheckoutContent
+                    pixCopyPaste={checkoutState.pixCopyPaste}
+                    nextDueDate={checkoutState.nextDueDate}
+                  />
+                )}
+                {checkoutState.kind === "waiting" && (
+                  <p className="text-sm text-muted-foreground">
+                    O plano ativa quando a primeira cobrança for debitada
+                    {checkoutState.nextDueDate
+                      ? ` em ${formatDueDate(checkoutState.nextDueDate)}`
+                      : ""}
+                    . Isso pode levar alguns dias — nenhuma ação é necessária da sua
+                    parte até lá.
+                  </p>
+                )}
+                {checkoutState.kind === "expired" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      O prazo desta autorização passou sem confirmação de pagamento e
+                      o acesso foi encerrado. Gere uma nova autorização para
+                      recomeçar.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        setCycle(currentCycle ?? "MONTHLY");
+                        openCheckout(currentPlan);
+                      }}
+                    >
+                      Recomeçar
+                    </Button>
+                  </>
+                )}
+                {checkoutState.kind === "failed" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      A cobrança Pix deste plano não chegou a ser gerada. Nenhuma
+                      autorização foi recebida — tente novamente para gerar um novo
+                      código Pix.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        setCycle(currentCycle ?? "MONTHLY");
+                        openCheckout(currentPlan);
+                      }}
+                    >
+                      Tentar novamente
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs value={cycle} onValueChange={(v) => setCycle(v as PlanCycle)}>
             <TabsList>
               <TabsTrigger value="MONTHLY">Mensal</TabsTrigger>
@@ -205,12 +425,30 @@ export function PlanPanel({
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {PLANS.map((plan) => {
-              const priceCents = planPriceCents(plan.id, cycle);
-              const isCurrent =
-                hasAsaasSubscriptionId && currentPlan === plan.id && currentCycle === cycle;
+              const priceCents = monthlyPriceCents(plan.id, cycle, "PIX");
+              const isExpiredThisPlan =
+                checkoutState.kind === "expired" &&
+                currentPlan === plan.id &&
+                currentCycle === cycle;
+              const isCurrent = isCurrentPlanCard({
+                hasSubscriptionId,
+                currentPlan,
+                currentCycle,
+                planId: plan.id,
+                cycle,
+                status,
+                isExpiredThisPlan,
+              });
+              const isPendingThisPlan =
+                checkoutState.kind !== "none" &&
+                checkoutState.kind !== "expired" &&
+                currentPlan === plan.id;
 
               return (
-                <Card key={plan.id} className={isCurrent ? "border-primary" : undefined}>
+                <Card
+                  key={plan.id}
+                  className={isCurrent || isPendingThisPlan ? "border-primary" : undefined}
+                >
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between gap-2 text-base">
                       {plan.label}
@@ -224,37 +462,33 @@ export function PlanPanel({
                           }`}
                     </CardDescription>
                   </CardHeader>
-                  {priceCents !== null && (
-                    <CardContent>
+                  <CardContent className="space-y-1">
+                    <p className="text-xs font-medium">{planWorkspacesLabel(plan.id)}</p>
+                    {priceCents !== null && (
                       <p className="text-xs text-muted-foreground">
                         {cycle === "YEARLY"
                           ? `Total de ${formatBRL(priceCents * 12)} por ano, cobrado à vista.`
                           : "Cobrado todo mês."}
                       </p>
-                    </CardContent>
-                  )}
+                    )}
+                  </CardContent>
                   <CardFooter>
-                    {isCurrent ? (
-                      status === "ACTIVE" ? (
-                        <Button className="w-full" variant="outline" disabled>
-                          Plano atual
-                        </Button>
-                      ) : (
-                        <Button
-                          className="w-full"
-                          onClick={onResumeCheckout}
-                          disabled={pending}
-                        >
-                          {pending ? "Abrindo..." : "Concluir pagamento"}
-                        </Button>
-                      )
+                    {isPendingThisPlan ? (
+                      <Button className="w-full" variant="outline" disabled>
+                        {PENDING_AUTH_BUTTON_LABEL[checkoutState.kind] ??
+                          "Autorização pendente acima"}
+                      </Button>
+                    ) : isCurrent ? (
+                      <Button className="w-full" variant="outline" disabled>
+                        Plano atual
+                      </Button>
                     ) : priceCents === null ? (
                       <Button asChild variant="outline" className="w-full">
                         <a href={`mailto:${CONTACT_EMAIL}`}>Fale com a gente</a>
                       </Button>
                     ) : (
                       <Button className="w-full" onClick={() => openCheckout(plan.id)}>
-                        Contratar
+                        {isExpiredThisPlan ? "Recontratar" : "Contratar"}
                       </Button>
                     )}
                   </CardFooter>
@@ -269,79 +503,43 @@ export function PlanPanel({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Contratar {checkoutPlan ? planLabel(checkoutPlan) : ""}
+              {pixResult
+                ? "Autorize o débito recorrente"
+                : `Contratar ${checkoutPlan ? planLabel(checkoutPlan) : ""}`}
             </DialogTitle>
           </DialogHeader>
 
-          {awaitingInvoice ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Sua assinatura foi criada, mas ainda não conseguimos abrir a
-                página de pagamento. Isso costuma ser só um instante — tente de
-                novo.
-              </p>
-              <Button className="w-full" onClick={onResumeCheckout} disabled={pending}>
-                {pending ? "Abrindo..." : "Tentar novamente"}
-              </Button>
-            </div>
+          {pixResult ? (
+            <PixCheckoutContent
+              pixCopyPaste={pixResult.pixCopyPaste}
+              nextDueDate={pixResult.nextDueDate}
+              previousPendingCharge={pixResult.previousPendingCharge}
+            />
           ) : (
             <form action={onSubscribe} className="space-y-4">
-            <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
-            <input type="hidden" name="cycle" value={cycle} />
-            <input type="hidden" name="confirmSwitch" value={switchConfirmed ? "true" : "false"} />
+              <input type="hidden" name="plan" value={checkoutPlan ?? ""} />
+              <input type="hidden" name="cycle" value={cycle} />
 
-            {isSwitchingPlan && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-                <div className="space-y-2 text-warning">
-                  <p>
-                    Você já tem uma assinatura{" "}
-                    {currentPlan ? planLabel(currentPlan) : ""}
-                    {currentCycle ? ` (${CYCLE_LABEL[currentCycle]})` : ""} ativa no
-                    Asaas. Ela <strong>continua sendo cobrada</strong> até ser
-                    cancelada manualmente pela nossa equipe — trocar de plano por
-                    aqui não cancela a anterior.
-                  </p>
-                  <label className="flex items-start gap-2 font-normal text-foreground">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={switchConfirmed}
-                      onChange={(e) => setSwitchConfirmed(e.target.checked)}
-                    />
-                    Entendo e quero contratar{" "}
-                    {checkoutPlan ? planLabel(checkoutPlan) : ""} ({CYCLE_LABEL[cycle]})
-                    mesmo assim.
-                  </label>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
+                <Input
+                  id="cpfCnpj"
+                  name="cpfCnpj"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  onChange={(e) => {
+                    e.currentTarget.value = applyCpfCnpjMask(e.currentTarget.value);
+                  }}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Usado para gerar a cobrança Pix em seu nome.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
-              <Input
-                id="cpfCnpj"
-                name="cpfCnpj"
-                inputMode="numeric"
-                placeholder="000.000.000-00"
-                onChange={(e) => {
-                  e.currentTarget.value = applyCpfCnpjMask(e.currentTarget.value);
-                }}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Usado para identificar você no Asaas. Na próxima tela você
-                escolhe entre Pix, boleto ou cartão.
-              </p>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={pending || (isSwitchingPlan && !switchConfirmed)}
-              className="w-full"
-            >
-              {pending ? "Continuando..." : "Continuar para pagamento"}
-            </Button>
+              <Button type="submit" disabled={pending} className="w-full">
+                {pending ? "Gerando o Pix..." : "Gerar código Pix"}
+              </Button>
             </form>
           )}
         </DialogContent>

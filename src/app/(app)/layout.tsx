@@ -21,7 +21,8 @@ export default async function AppLayout({
 
   const { workspaceId, canWrite } = await getWorkspaceContext();
   const active = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0];
-  const { status, isOverLimit, trialEndsAt } = await getWorkspacePlanState(active.id);
+  const { status, isOverLimit, trialEndsAt, hasAuthorized, lastFailureReason } =
+    await getWorkspacePlanState(active.id);
   const trial = trialState(status, trialEndsAt);
 
   const u = session.user as typeof session.user & { role?: string };
@@ -40,6 +41,8 @@ export default async function AppLayout({
       planStatus={status}
       isOverLimit={isOverLimit}
       isReadOnly={!canWrite}
+      hasAuthorized={hasAuthorized}
+      lastFailureReason={lastFailureReason}
       trial={trial}
     >
       {children}

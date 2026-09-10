@@ -119,10 +119,13 @@ enum SubscriptionStatus {
   ACTIVE
   PAST_DUE
   CANCELED
+  PENDING_AUTH
+  SUSPENDED
+  AUTH_DENIED
 }
 
-enum SubscriptionSource {
-  ASAAS
+enum SubscriptionProvider {
+  INTERPIX
   MANUAL
 }
 
@@ -136,17 +139,26 @@ model Subscription {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  plan   String             @default("solo")
-  status SubscriptionStatus @default(TRIALING)
-  source SubscriptionSource @default(ASAAS)
-  cycle  SubscriptionCycle  @default(MONTHLY)
+  plan     String               @default("corre")
+  status   SubscriptionStatus   @default(TRIALING)
+  provider SubscriptionProvider @default(INTERPIX)
+  cycle    SubscriptionCycle    @default(MONTHLY)
 
-  asaasCustomerId     String?
-  asaasSubscriptionId String?
+  interpixSubscriptionId String? @unique
+  interpixPixCopyPaste   String?
+  lastAppliedEventId     BigInt?
 
   trialEndsAt      DateTime?
   graceUntil       DateTime?
+  graceGrantedAt   DateTime?
+  authorizedAt     DateTime?
   currentPeriodEnd DateTime?
+
+  pendingCycleSeq     Int?
+  pendingChargeDueAt  DateTime?
+  lastFailureReason   String?
+  lastPaidAt          DateTime?
+  paidThroughAt       DateTime?
 
   notes String?
 
