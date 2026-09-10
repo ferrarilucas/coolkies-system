@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ShoppingCart, Mail, Phone, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { ShoppingCart, Mail, Phone, AlertTriangle, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { RowActions } from "@/components/shared/row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { CustomerCollectDialog } from "@/components/customers/customer-collect-dialog";
 import { updateCustomer, deleteCustomer } from "@/server/actions/customers";
 import { formatBRL } from "@/lib/money";
@@ -100,6 +102,14 @@ function CustomerCard({
 
         <div className="order-2 shrink-0 sm:order-3">
           <RowActions
+            extraItems={
+              <DropdownMenuItem asChild>
+                <Link href={`/customers/${customer.id}/report`}>
+                  <FileText />
+                  Relatório
+                </Link>
+              </DropdownMenuItem>
+            }
             onEdit={() => setEditOpen(true)}
             deleteTitle="Excluir cliente"
             deleteDescription={

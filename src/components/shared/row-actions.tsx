@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 
 type RowActionsProps = {
+  extraItems?: React.ReactNode;
   editHref?: string;
   onEdit?: () => void;
   deleteTitle: string;
@@ -30,6 +31,7 @@ type RowActionsProps = {
 };
 
 export function RowActions({
+  extraItems,
   editHref,
   onEdit,
   deleteTitle,
@@ -66,6 +68,7 @@ export function RowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {extraItems}
           {editHref ? (
             <DropdownMenuItem asChild>
               <Link href={editHref}>

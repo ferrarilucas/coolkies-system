@@ -177,3 +177,65 @@ export async function getCustomerSectors(): Promise<string[]> {
   });
   return rows.map((r) => r.sector).filter((s): s is string => Boolean(s?.trim()));
 }
+
+export type CustomerReportSale = {
+  id: string;
+  soldAt: Date;
+  status: "PAID" | "PENDING";
+  totalCents: number;
+  items: {
+    id: string;
+    quantity: number;
+    unitPriceSnapshot: number;
+    productNameSnapshot: string;
+    flavorNameSnapshot: string | null;
+  }[];
+};
+
+export type CustomerReport = {
+  customer: { id: string; name: string; email: string | null; phone: string | null; sector: string | null };
+  sales: CustomerReportSale[];
+  totalCents: number;
+  paidCents: number;
+  pendingCents: number;
+};
+
+export async function getCustomerReport(
+  customerId: string,
+  from: Date,
+  to: Date,
+): Promise<CustomerReport | null> {
+  const db = await getWorkspaceDb();
+  const customer = await db.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, name: true, email: true, phone: true, sector: true },
+  });
+  if (!customer) return null;
+
+  const sales = await db.sale.findMany({
+    where: { customerId, soldAt: { gte: from, lte: to } },
+    orderBy: { soldAt: "asc" },
+    select: {
+      id: true,
+      soldAt: true,
+      status: true,
+      totalCents: true,
+      items: {
+        select: {
+          id: true,
+          quantity: true,
+          unitPriceSnapshot: true,
+          productNameSnapshot: true,
+          flavorNameSnapshot: true,
+        },
+      },
+    },
+  });
+
+  const totalCents = sales.reduce((sum, s) => sum + s.totalCents, 0);
+  const paidCents = sales
+    .filter((s) => s.status === "PAID")
+    .reduce((sum, s) => sum + s.totalCents, 0);
+
+  return { customer, sales, totalCents, paidCents, pendingCents: totalCents - paidCents };
+}
