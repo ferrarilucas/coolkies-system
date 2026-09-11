@@ -10,12 +10,14 @@ import {
 } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { isValidIsoCalendarDate } from "@/lib/date-validation";
+import { isPeriodPaid } from "@/lib/period";
 import type { Subscription } from "@prisma/client";
 import {
   getBillingUser,
   getSubscription,
   recordInterPixSubscription,
   recordPendingChargeWarning,
+  recordStripeSubscription,
   recordUserCpf,
 } from "@/server/tenant/subscription";
 import {
@@ -24,6 +26,13 @@ import {
   InterPixApiError,
   type InterPixSubscription,
 } from "@/server/tenant/interpix";
+import {
+  createStripeSubscription,
+  getOrCreateStripeCustomer,
+  priceIdFor,
+  StripeConfigError,
+  type StripeSubscriptionMode,
+} from "@/server/tenant/stripe";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -212,6 +221,148 @@ export async function subscribe(
         e instanceof Error ? e.name : "erro desconhecido",
       );
     }
+    return { ok: false, error: GENERIC_ERROR };
+  }
+}
+
+export type CardCheckoutResult = {
+  clientSecret: string;
+  mode: StripeSubscriptionMode;
+  previousPendingCharge: PendingChargeWarning | null;
+};
+
+const STRIPE_TRIAL_MIN_MS = 48 * 60 * 60 * 1000;
+
+function stripeTrialEndSeconds(
+  existing: Subscription | null,
+  now: Date,
+): number | undefined {
+  const candidates: number[] = [];
+  if (existing?.status === "TRIALING" && existing.trialEndsAt) {
+    candidates.push(existing.trialEndsAt.getTime());
+  }
+  if (existing && isPeriodPaid(existing) && existing.currentPeriodEnd) {
+    candidates.push(existing.currentPeriodEnd.getTime());
+  }
+  if (candidates.length === 0) return undefined;
+  const furthest = Math.max(...candidates);
+  if (furthest - now.getTime() < STRIPE_TRIAL_MIN_MS) return undefined;
+  return Math.floor(furthest / 1000);
+}
+
+async function cancelExistingInterPixMandate(
+  userId: string,
+  existing: Subscription,
+): Promise<PendingChargeWarning | null> {
+  if (!existing.interpixSubscriptionId) return null;
+
+  const cancelResult = await cancelInterPixSubscription(
+    existing.interpixSubscriptionId,
+  );
+  if (!cancelResult.pendingCycle) return null;
+
+  if (!isValidIsoCalendarDate(cancelResult.pendingCycle.dueDate)) {
+    console.error(
+      "subscribeWithCard: vencimento da cobrança pendente inválido",
+      cancelResult.pendingCycle.dueDate,
+    );
+    return null;
+  }
+
+  await recordPendingChargeWarning(
+    userId,
+    new Date(`${cancelResult.pendingCycle.dueDate}T00:00:00.000Z`),
+  );
+  return {
+    cycleSeq: cancelResult.pendingCycle.cycleSeq,
+    dueDate: cancelResult.pendingCycle.dueDate,
+  };
+}
+
+export async function subscribeWithCard(
+  formData: FormData,
+): Promise<ActionResult<CardCheckoutResult>> {
+  const plan = String(formData.get("plan") ?? "");
+  const rawCycle = String(formData.get("cycle") ?? "MONTHLY");
+
+  if (!isKnownPlan(plan)) return { ok: false, error: "Plano inválido." };
+  if (!isKnownCycle(rawCycle)) {
+    return { ok: false, error: "Ciclo de cobrança inválido." };
+  }
+  const cycle: PlanCycle = rawCycle;
+
+  if (chargeAmountCents(plan, cycle, "CARD") === null) {
+    return { ok: false, error: "Este plano é contratado por atendimento." };
+  }
+
+  try {
+    const { userId } = await getWorkspaceContext();
+    const existing = await getSubscription(userId);
+
+    if (existing?.provider === "MANUAL") {
+      return { ok: false, error: MANUAL_ERROR };
+    }
+
+    const user = await getBillingUser(userId);
+    if (!user) return { ok: false, error: "Usuário não encontrado." };
+
+    let previousPendingCharge: PendingChargeWarning | null = null;
+    if (existing?.interpixSubscriptionId) {
+      try {
+        previousPendingCharge = await cancelExistingInterPixMandate(userId, existing);
+      } catch (e) {
+        console.error(
+          "subscribeWithCard: falha ao cancelar mandato InterPix",
+          existing.interpixSubscriptionId,
+          e instanceof InterPixApiError ? e.code : "erro desconhecido",
+        );
+        return { ok: false, error: GENERIC_ERROR };
+      }
+    }
+
+    const now = new Date();
+    const trialEnd = stripeTrialEndSeconds(existing, now);
+    const mode: StripeSubscriptionMode = trialEnd ? "setup" : "payment";
+
+    const customerId = await getOrCreateStripeCustomer({
+      userId,
+      email: user.email,
+      name: user.name,
+      existingCustomerId: existing?.stripeCustomerId ?? null,
+    });
+
+    const created = await createStripeSubscription({
+      customerId,
+      priceId: priceIdFor(plan, cycle),
+      mode,
+      trialEnd,
+      idempotencyKey: `stripe-sub:${userId}:${plan}:${cycle}`,
+      metadata: { userId, plan, cycle },
+    });
+
+    await recordStripeSubscription({
+      userId,
+      plan,
+      cycle,
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: created.subscriptionId,
+    });
+
+    revalidatePath("/", "layout");
+
+    return {
+      ok: true,
+      data: { clientSecret: created.clientSecret, mode: created.mode, previousPendingCharge },
+    };
+  } catch (e) {
+    if (e instanceof StripeConfigError) {
+      console.error("subscribeWithCard: configuração Stripe ausente", e.message);
+      return { ok: false, error: GENERIC_ERROR };
+    }
+    console.error(
+      "subscribeWithCard: falha ao contratar",
+      e instanceof Error ? e.name : "erro desconhecido",
+    );
     return { ok: false, error: GENERIC_ERROR };
   }
 }

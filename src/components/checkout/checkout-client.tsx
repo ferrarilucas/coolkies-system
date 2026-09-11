@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PixCheckoutContent } from "@/components/checkout/pix-checkout-content";
+import { CardCheckoutContent } from "@/components/checkout/card-checkout-content";
 import { subscribe, type CheckoutResult } from "@/server/actions/subscription";
 
 const CYCLE_NOTE: Record<PlanCycle, string> = {
@@ -33,12 +34,14 @@ export function CheckoutClient({
   planName,
   workspacesLabel,
   defaultCpf,
+  stripeEnabled,
 }: {
   plan: string;
   cycle: PlanCycle;
   planName: string;
   workspacesLabel: string;
   defaultCpf: string | null;
+  stripeEnabled: boolean;
 }) {
   const router = useRouter();
   const [method, setMethod] = useState<CheckoutMethod>("pix");
@@ -126,9 +129,11 @@ export function CheckoutClient({
               </TabsTrigger>
               <TabsTrigger value="card" className="gap-1.5">
                 Cartão de crédito
-                <Badge variant="secondary" className="hidden sm:inline-flex">
-                  Em breve
-                </Badge>
+                {!stripeEnabled && (
+                  <Badge variant="secondary" className="hidden sm:inline-flex">
+                    Em breve
+                  </Badge>
+                )}
               </TabsTrigger>
             </TabsList>
 
@@ -177,17 +182,29 @@ export function CheckoutClient({
             </TabsContent>
 
             <TabsContent value="card">
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed bg-card px-5 py-12 text-center">
-                <span className="flex size-11 items-center justify-center rounded-full bg-muted">
-                  <CreditCard className="size-5 text-muted-foreground" />
-                </span>
-                <p className="font-medium">Em breve</p>
-                <p className="max-w-xs text-sm text-muted-foreground">
-                  O pagamento com cartão de crédito ainda está em
-                  desenvolvimento. Ele não tem o desconto do Pix recorrente — por
-                  enquanto, assine pelo Pix.
-                </p>
-              </div>
+              {stripeEnabled ? (
+                <div className="rounded-xl border bg-card p-5">
+                  {method === "card" && (
+                    <CardCheckoutContent
+                      plan={plan}
+                      cycle={cycle}
+                      monthlyCents={cardMonthly}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed bg-card px-5 py-12 text-center">
+                  <span className="flex size-11 items-center justify-center rounded-full bg-muted">
+                    <CreditCard className="size-5 text-muted-foreground" />
+                  </span>
+                  <p className="font-medium">Em breve</p>
+                  <p className="max-w-xs text-sm text-muted-foreground">
+                    O pagamento com cartão de crédito ainda está em
+                    desenvolvimento. Ele não tem o desconto do Pix recorrente —
+                    por enquanto, assine pelo Pix.
+                  </p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </section>
@@ -251,7 +268,9 @@ export function CheckoutClient({
           <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
             {method === "pix"
               ? `${CYCLE_NOTE[cycle]} via Pix recorrente. Você pode cancelar quando quiser, direto na página do plano.`
-              : "O pagamento com cartão ainda não está disponível. O valor acima é sem o desconto do Pix."}
+              : stripeEnabled
+                ? `${CYCLE_NOTE[cycle]} no cartão de crédito. O valor não tem o desconto do Pix recorrente. Cancele quando quiser na página do plano.`
+                : "O pagamento com cartão ainda não está disponível. O valor acima é sem o desconto do Pix."}
           </p>
           {method === "pix" && (
             <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">

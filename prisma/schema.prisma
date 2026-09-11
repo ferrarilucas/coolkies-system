@@ -128,6 +128,7 @@ enum SubscriptionStatus {
 enum SubscriptionProvider {
   INTERPIX
   MANUAL
+  STRIPE
 }
 
 enum SubscriptionCycle {
@@ -148,6 +149,12 @@ model Subscription {
   interpixSubscriptionId String? @unique
   interpixPixCopyPaste   String?
   lastAppliedEventId     BigInt?
+
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  stripeSyncedAt       DateTime?
+  cardBrand            String?
+  cardLast4            String?
 
   trialEndsAt      DateTime?
   graceUntil       DateTime?

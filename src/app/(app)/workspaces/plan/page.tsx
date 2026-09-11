@@ -30,6 +30,8 @@ export default async function PlanPage() {
         trialExpired={isTrialExpired(sub?.status ?? "NONE", sub?.trialEndsAt ?? null)}
         provider={sub?.provider ?? null}
         hasSubscriptionId={Boolean(sub?.interpixSubscriptionId)}
+        cardBrand={sub?.cardBrand ?? null}
+        cardLast4={sub?.cardLast4 ?? null}
         ownedCount={owned}
         activeCount={active.size}
         pixCopyPaste={sub?.interpixPixCopyPaste ?? null}

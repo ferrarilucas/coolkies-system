@@ -11,6 +11,7 @@ import {
 } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { getBillingUser, getSubscription } from "@/server/tenant/subscription";
+import { isStripeEnabled } from "@/server/tenant/stripe";
 import { CheckoutClient } from "@/components/checkout/checkout-client";
 
 export const metadata = {
@@ -47,6 +48,7 @@ export default async function CheckoutPage({
       planName={planLabel(plan)}
       workspacesLabel={planWorkspacesLabel(plan)}
       defaultCpf={user?.cpf ?? null}
+      stripeEnabled={isStripeEnabled()}
     />
   );
 }

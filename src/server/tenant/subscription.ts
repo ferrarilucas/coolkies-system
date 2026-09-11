@@ -75,6 +75,41 @@ export async function recordInterPixSubscription(input: {
   });
 }
 
+export async function recordStripeSubscription(input: {
+  userId: string;
+  plan: string;
+  cycle: SubscriptionCycle;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+}): Promise<void> {
+  await db.subscription.upsert({
+    where: { userId: input.userId },
+    create: {
+      userId: input.userId,
+      plan: input.plan,
+      cycle: input.cycle,
+      provider: "STRIPE",
+      status: "PENDING_AUTH",
+      stripeCustomerId: input.stripeCustomerId,
+      stripeSubscriptionId: input.stripeSubscriptionId,
+    },
+    update: {
+      plan: input.plan,
+      cycle: input.cycle,
+      provider: "STRIPE",
+      status: "PENDING_AUTH",
+      stripeCustomerId: input.stripeCustomerId,
+      stripeSubscriptionId: input.stripeSubscriptionId,
+      stripeSyncedAt: null,
+      interpixPixCopyPaste: null,
+      authorizedAt: null,
+      graceUntil: null,
+      graceGrantedAt: null,
+      lastFailureReason: null,
+    },
+  });
+}
+
 export async function ensureTrialSubscription(userId: string): Promise<void> {
   const existing = await db.subscription.findUnique({ where: { userId } });
   if (existing) return;

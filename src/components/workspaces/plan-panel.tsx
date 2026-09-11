@@ -123,6 +123,8 @@ export function PlanPanel({
   trialExpired,
   provider,
   hasSubscriptionId,
+  cardBrand,
+  cardLast4,
   ownedCount,
   activeCount,
   pixCopyPaste,
@@ -137,6 +139,8 @@ export function PlanPanel({
   trialExpired: boolean;
   provider: string | null;
   hasSubscriptionId: boolean;
+  cardBrand: string | null;
+  cardLast4: string | null;
   ownedCount: number;
   activeCount: number;
   pixCopyPaste: string | null;
@@ -151,6 +155,7 @@ export function PlanPanel({
   const overLimit = ownedCount - activeCount;
   const suggestedPlan = overLimit > 0 ? planThatCovers(ownedCount) : null;
   const checkoutState = checkoutViewState(
+    provider,
     status,
     pixCopyPaste,
     nextDueDate,
@@ -197,6 +202,21 @@ export function PlanPanel({
               leitura — dá para ver tudo, mas não registrar vendas nem alterar
               dados. Assinar um plano aqui embaixo destrava a escrita assim que o
               pagamento for confirmado.
+            </p>
+          </CardContent>
+        )}
+        {provider === "STRIPE" && cardBrand && cardLast4 && (
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Pagamento no cartão {cardBrand} •••• {cardLast4}. Para trocar o
+              cartão, fale com a gente em{" "}
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                className="font-medium underline underline-offset-4"
+              >
+                {CONTACT_EMAIL}
+              </a>
+              .
             </p>
           </CardContent>
         )}

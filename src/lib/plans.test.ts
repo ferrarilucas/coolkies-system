@@ -111,3 +111,18 @@ describe("limite do plano concorda com a regra de acesso", () => {
     expect(effectiveLimit("cresce", "CANCELED", paid)).toBe(4);
   });
 });
+
+describe("catálogo de cartão x Stripe", () => {
+  it("todo plano/ciclo cobrável tem uma env var de Price mapeada", async () => {
+    const { priceEnvVar } = await import("@/server/tenant/stripe");
+    const cycles = ["MONTHLY", "YEARLY"] as const;
+
+    for (const cycle of cycles) {
+      for (const plan of ["corre", "cresce", "escala"]) {
+        const cobravel = chargeAmountCents(plan, cycle, "CARD") !== null;
+        const mapeado = priceEnvVar(plan, cycle) !== null;
+        expect(mapeado).toBe(cobravel);
+      }
+    }
+  });
+});

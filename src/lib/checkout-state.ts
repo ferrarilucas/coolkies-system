@@ -6,6 +6,7 @@ export type CheckoutViewState =
   | { kind: "none" };
 
 export function checkoutViewState(
+  provider: string | null,
   status: string | null,
   pixCopyPaste: string | null,
   nextDueDate: string | null,
@@ -13,6 +14,7 @@ export function checkoutViewState(
   graceUntil: string | null,
   now: Date = new Date(),
 ): CheckoutViewState {
+  if (provider === "STRIPE") return { kind: "none" };
   if (status !== "PENDING_AUTH") return { kind: "none" };
   if (!authorizedAt) {
     if (pixCopyPaste) return { kind: "authorize", pixCopyPaste, nextDueDate };
