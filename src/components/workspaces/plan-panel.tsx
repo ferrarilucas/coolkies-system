@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { checkoutViewState } from "@/lib/checkout-state";
 import { isCurrentPlanCard } from "@/lib/plan-card-state";
@@ -29,11 +30,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PixCheckoutContent,
   formatDueDate,
 } from "@/components/checkout/pix-checkout-content";
+import { cancelSubscription } from "@/server/actions/subscription";
 
 const STATUS_LABEL: Record<string, string> = {
   TRIALING: "Em teste",
@@ -150,6 +160,8 @@ export function PlanPanel({
   pendingChargeDueAt: string | null;
 }) {
   const [cycle, setCycle] = useState<PlanCycle>("MONTHLY");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const router = useRouter();
 
   const overLimit = ownedCount - activeCount;
@@ -162,9 +174,24 @@ export function PlanPanel({
     authorizedAt,
     graceUntil,
   );
+  const canCancel =
+    currentPlan !== null && status !== null && status !== "CANCELED" && provider !== "MANUAL";
 
   function goToCheckout(planId: string, planCycle: PlanCycle = cycle) {
     router.push(`/checkout?plan=${planId}&cycle=${planCycle}`);
+  }
+
+  async function onConfirmCancel() {
+    setCanceling(true);
+    const res = await cancelSubscription();
+    setCanceling(false);
+    if (!res.ok) {
+      toast.error(res.error ?? "Não foi possível cancelar a assinatura.");
+      return;
+    }
+    setCancelOpen(false);
+    toast.success("Assinatura cancelada.");
+    router.refresh();
   }
 
   return (
@@ -220,7 +247,44 @@ export function PlanPanel({
             </p>
           </CardContent>
         )}
+        {canCancel && (
+          <CardFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setCancelOpen(true)}
+            >
+              Cancelar assinatura
+            </Button>
+          </CardFooter>
+        )}
       </Card>
+
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar assinatura</DialogTitle>
+            <DialogDescription>
+              {nextDueDate
+                ? `Você continua com acesso normal até ${formatDueDate(nextDueDate)} — o período já pago não é perdido. Depois disso, nenhuma cobrança nova entra e o acesso vira somente leitura.`
+                : "Nenhuma cobrança nova entra a partir de agora. Se restar período já pago, o acesso continua até ele acabar; depois disso vira somente leitura."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirmCancel}
+              disabled={canceling}
+            >
+              {canceling ? "Cancelando..." : "Cancelar assinatura"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {pendingChargeDueAt !== null && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">

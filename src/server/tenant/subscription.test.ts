@@ -290,6 +290,26 @@ describe("assinatura utilizavel", () => {
     expect(isSubscriptionUsable(sub, now)).toBe(false);
   });
 
+  it("CANCELED durante o trial ainda em curso continua utilizável até o trial acabar — cancelar não deve chutar do sistema no meio do teste grátis", () => {
+    const sub = buildSubscription({
+      status: "CANCELED",
+      trialEndsAt: new Date("2026-09-25"),
+      paidThroughAt: null,
+      currentPeriodEnd: null,
+    });
+    expect(isSubscriptionUsable(sub, now)).toBe(true);
+  });
+
+  it("CANCELED com trial já vencido volta a exigir período pago", () => {
+    const sub = buildSubscription({
+      status: "CANCELED",
+      trialEndsAt: new Date("2026-09-10"),
+      paidThroughAt: null,
+      currentPeriodEnd: null,
+    });
+    expect(isSubscriptionUsable(sub, now)).toBe(false);
+  });
+
   it("CANCELED cujo período em aberto não é coberto pelo último pagamento não dá acesso — recontratação avançou o vencimento sem novo pagamento", () => {
     const sub = buildSubscription({
       status: "CANCELED",

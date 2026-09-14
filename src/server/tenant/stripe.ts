@@ -214,6 +214,14 @@ export async function createStripeSubscription(
   }
 }
 
+export async function cancelStripeSubscription(subscriptionId: string): Promise<void> {
+  try {
+    await stripe().subscriptions.cancel(subscriptionId);
+  } catch (error) {
+    throw asStripeApiError(error);
+  }
+}
+
 export async function retrieveStripeSubscription(
   subscriptionId: string,
 ): Promise<Stripe.Subscription> {

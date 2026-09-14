@@ -110,6 +110,13 @@ export async function recordStripeSubscription(input: {
   });
 }
 
+export async function markSubscriptionCanceled(userId: string): Promise<void> {
+  await db.subscription.updateMany({
+    where: { userId },
+    data: { status: "CANCELED" },
+  });
+}
+
 export async function ensureTrialSubscription(userId: string): Promise<void> {
   const existing = await db.subscription.findUnique({ where: { userId } });
   if (existing) return;
@@ -148,6 +155,7 @@ export function isSubscriptionUsable(
     return graceValid || trialActive;
   }
   if (sub.status === "CANCELED") {
+    if (sub.trialEndsAt !== null && sub.trialEndsAt > now) return true;
     if (!hasPaidAccess(sub)) return false;
     return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }

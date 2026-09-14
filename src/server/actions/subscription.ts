@@ -15,6 +15,7 @@ import type { Subscription } from "@prisma/client";
 import {
   getBillingUser,
   getSubscription,
+  markSubscriptionCanceled,
   recordInterPixSubscription,
   recordPendingChargeWarning,
   recordStripeSubscription,
@@ -27,6 +28,7 @@ import {
   type InterPixSubscription,
 } from "@/server/tenant/interpix";
 import {
+  cancelStripeSubscription,
   createHostedCheckoutSession,
   createStripeSubscription,
   getOrCreateStripeCustomer,
@@ -403,6 +405,73 @@ export async function getStripeHostedCheckoutUrl(
         e instanceof Error ? e.name : "erro desconhecido",
       );
     }
+    return { ok: false, error: GENERIC_ERROR };
+  }
+}
+
+const ALREADY_CANCELED_ERROR = "Sua assinatura já está cancelada.";
+
+export async function cancelSubscription(): Promise<ActionResult> {
+  try {
+    const { userId } = await getWorkspaceContext();
+    const existing = await getSubscription(userId);
+
+    if (!existing) return { ok: false, error: "Nenhuma assinatura encontrada." };
+    if (existing.provider === "MANUAL") return { ok: false, error: MANUAL_ERROR };
+    if (existing.status === "CANCELED") {
+      return { ok: false, error: ALREADY_CANCELED_ERROR };
+    }
+
+    if (existing.provider === "INTERPIX" && existing.interpixSubscriptionId) {
+      try {
+        const result = await cancelInterPixSubscription(existing.interpixSubscriptionId);
+        if (result.pendingCycle && isValidIsoCalendarDate(result.pendingCycle.dueDate)) {
+          await recordPendingChargeWarning(
+            userId,
+            new Date(`${result.pendingCycle.dueDate}T00:00:00.000Z`),
+          );
+        }
+      } catch (e) {
+        if (e instanceof InterPixApiError) {
+          console.error(
+            "cancelSubscription: falha ao cancelar mandato InterPix",
+            existing.interpixSubscriptionId,
+            e.code,
+            e.requestId,
+          );
+        } else {
+          console.error(
+            "cancelSubscription: falha ao cancelar mandato InterPix",
+            existing.interpixSubscriptionId,
+            e instanceof Error ? e.name : "erro desconhecido",
+          );
+        }
+        return { ok: false, error: GENERIC_ERROR };
+      }
+    }
+
+    if (existing.provider === "STRIPE" && existing.stripeSubscriptionId) {
+      try {
+        await cancelStripeSubscription(existing.stripeSubscriptionId);
+      } catch (e) {
+        console.error(
+          "cancelSubscription: falha ao cancelar assinatura Stripe",
+          existing.stripeSubscriptionId,
+          e instanceof Error ? e.name : "erro desconhecido",
+        );
+        return { ok: false, error: GENERIC_ERROR };
+      }
+    }
+
+    await markSubscriptionCanceled(userId);
+    revalidatePath("/", "layout");
+
+    return { ok: true };
+  } catch (e) {
+    console.error(
+      "cancelSubscription: falha inesperada",
+      e instanceof Error ? e.name : "erro desconhecido",
+    );
     return { ok: false, error: GENERIC_ERROR };
   }
 }
