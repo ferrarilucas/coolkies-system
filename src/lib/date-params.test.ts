@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDateParam } from "./route";
+import { parseDateParam } from "./date-params";
 
 describe("parseDateParam", () => {
   it("retorna undefined quando o parâmetro não foi informado", () => {
