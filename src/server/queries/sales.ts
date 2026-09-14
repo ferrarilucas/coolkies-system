@@ -205,3 +205,34 @@ export async function getCatalogForSale() {
     })),
   }));
 }
+
+// ─── Exportação em CSV ────────────────────────────────────────────────────────
+
+export type SaleExportRow = {
+  soldAt: string;
+  customerName: string;
+  status: string;
+  totalCents: number;
+  paymentForecastDate: string;
+};
+
+export async function getSalesForExport(filters: SalesFilters = {}): Promise<SaleExportRow[]> {
+  const db = await getWorkspaceDb();
+  const where = buildSalesWhere(filters);
+
+  const sales = await db.sale.findMany({
+    where,
+    orderBy: { soldAt: "asc" },
+    include: { customer: { select: { name: true } } },
+  });
+
+  return sales.map((sale) => ({
+    soldAt: sale.soldAt.toISOString().slice(0, 10),
+    customerName: sale.customer?.name ?? sale.customerName ?? "Sem cliente",
+    status: sale.status === "PAID" ? "Pago" : "Pendente",
+    totalCents: sale.totalCents,
+    paymentForecastDate: sale.paymentForecastDate
+      ? sale.paymentForecastDate.toISOString().slice(0, 10)
+      : "",
+  }));
+}
