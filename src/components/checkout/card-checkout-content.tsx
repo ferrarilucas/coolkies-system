@@ -40,7 +40,7 @@ const APPEARANCE_BY_THEME: Record<"light" | "dark", Appearance> = {
       colorTextSecondary: "hsl(25 12% 42%)",
       colorTextPlaceholder: "hsl(25 12% 42%)",
       colorDanger: "hsl(0 72% 48%)",
-      fontFamily: "inherit",
+      fontFamily: "'Inter', system-ui, sans-serif",
       borderRadius: "8px",
     },
     rules: {
@@ -63,7 +63,7 @@ const APPEARANCE_BY_THEME: Record<"light" | "dark", Appearance> = {
       colorTextSecondary: "hsl(33 12% 65%)",
       colorTextPlaceholder: "hsl(33 12% 65%)",
       colorDanger: "hsl(0 62% 45%)",
-      fontFamily: "inherit",
+      fontFamily: "'Inter', system-ui, sans-serif",
       borderRadius: "8px",
     },
     rules: {
@@ -234,6 +234,12 @@ export function CardCheckoutContent({
         amount: monthlyCents,
         currency: "brl",
         appearance,
+        fonts: [
+          {
+            cssSrc:
+              "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap",
+          },
+        ],
       }}
     >
       <CardForm plan={plan} cycle={cycle} />
