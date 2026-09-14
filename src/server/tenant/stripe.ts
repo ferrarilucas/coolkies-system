@@ -83,6 +83,33 @@ export function asStripeApiError(error: unknown): StripeApiError {
   return new StripeApiError(codeOf(error), message, requestIdOf(error));
 }
 
+export async function createHostedCheckoutSession(input: {
+  priceId: string;
+  customerEmail: string;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<string> {
+  try {
+    const session = await stripe().checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: input.priceId, quantity: 1 }],
+      customer_email: input.customerEmail,
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+    });
+    if (!session.url) {
+      throw new StripeApiError(
+        "MISSING_URL",
+        "Checkout Session criada sem url",
+        null,
+      );
+    }
+    return session.url;
+  } catch (error) {
+    throw asStripeApiError(error);
+  }
+}
+
 export type StripeSubscriptionMode = "payment" | "setup";
 
 export type CreateStripeSubscriptionInput = {

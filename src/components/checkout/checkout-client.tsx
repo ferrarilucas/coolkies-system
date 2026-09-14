@@ -19,7 +19,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PixCheckoutContent } from "@/components/checkout/pix-checkout-content";
 import { CardCheckoutContent } from "@/components/checkout/card-checkout-content";
-import { subscribe, type CheckoutResult } from "@/server/actions/subscription";
+import {
+  getStripeHostedCheckoutUrl,
+  subscribe,
+  type CheckoutResult,
+} from "@/server/actions/subscription";
 
 const CYCLE_NOTE: Record<PlanCycle, string> = {
   MONTHLY: "Cobrado todo mês",
@@ -48,6 +52,21 @@ export function CheckoutClient({
   const [cpf, setCpf] = useState(defaultCpf ? maskCpf(defaultCpf) : "");
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const [openingHosted, setOpeningHosted] = useState(false);
+
+  async function onOpenHostedCheckout() {
+    setOpeningHosted(true);
+    const formData = new FormData();
+    formData.set("plan", plan);
+    formData.set("cycle", cycle);
+    const res = await getStripeHostedCheckoutUrl(formData);
+    setOpeningHosted(false);
+    if (!res.ok || !res.data) {
+      toast.error(res.error ?? "Não foi possível abrir o checkout hospedado.");
+      return;
+    }
+    window.open(res.data.url, "_blank", "noopener,noreferrer");
+  }
 
   const pixMonthly = monthlyPriceCents(plan, cycle, "PIX") ?? 0;
   const cardMonthly = monthlyPriceCents(plan, cycle, "CARD") ?? 0;
@@ -183,14 +202,28 @@ export function CheckoutClient({
 
             <TabsContent value="card">
               {stripeEnabled ? (
-                <div className="rounded-xl border bg-card p-5">
-                  {method === "card" && (
-                    <CardCheckoutContent
-                      plan={plan}
-                      cycle={cycle}
-                      monthlyCents={cardMonthly}
-                    />
-                  )}
+                <div className="space-y-3">
+                  <div className="rounded-xl border bg-card p-5">
+                    {method === "card" && (
+                      <CardCheckoutContent
+                        plan={plan}
+                        cycle={cycle}
+                        monthlyCents={cardMonthly}
+                      />
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs text-muted-foreground"
+                    onClick={onOpenHostedCheckout}
+                    disabled={openingHosted}
+                  >
+                    {openingHosted
+                      ? "Abrindo checkout hospedado..."
+                      : "Comparar com o checkout hospedado da Stripe (abre em nova aba)"}
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed bg-card px-5 py-12 text-center">

@@ -27,6 +27,7 @@ import {
   type InterPixSubscription,
 } from "@/server/tenant/interpix";
 import {
+  createHostedCheckoutSession,
   createStripeSubscription,
   getOrCreateStripeCustomer,
   priceIdFor,
@@ -363,6 +364,45 @@ export async function subscribeWithCard(
       "subscribeWithCard: falha ao contratar",
       e instanceof Error ? e.name : "erro desconhecido",
     );
+    return { ok: false, error: GENERIC_ERROR };
+  }
+}
+
+export async function getStripeHostedCheckoutUrl(
+  formData: FormData,
+): Promise<ActionResult<{ url: string }>> {
+  const plan = String(formData.get("plan") ?? "");
+  const rawCycle = String(formData.get("cycle") ?? "MONTHLY");
+
+  if (!isKnownPlan(plan)) return { ok: false, error: "Plano inválido." };
+  if (!isKnownCycle(rawCycle)) {
+    return { ok: false, error: "Ciclo de cobrança inválido." };
+  }
+  const cycle: PlanCycle = rawCycle;
+
+  try {
+    const { userId } = await getWorkspaceContext();
+    const user = await getBillingUser(userId);
+    if (!user) return { ok: false, error: "Usuário não encontrado." };
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const url = await createHostedCheckoutSession({
+      priceId: priceIdFor(plan, cycle),
+      customerEmail: user.email,
+      successUrl: `${appUrl}/workspaces/plan?stripe_checkout=success`,
+      cancelUrl: `${appUrl}/checkout?plan=${plan}&cycle=${cycle}`,
+    });
+
+    return { ok: true, data: { url } };
+  } catch (e) {
+    if (e instanceof StripeConfigError) {
+      console.error("getStripeHostedCheckoutUrl: configuração Stripe ausente", e.message);
+    } else {
+      console.error(
+        "getStripeHostedCheckoutUrl: falha ao criar checkout hospedado",
+        e instanceof Error ? e.name : "erro desconhecido",
+      );
+    }
     return { ok: false, error: GENERIC_ERROR };
   }
 }
