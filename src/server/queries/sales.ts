@@ -206,8 +206,6 @@ export async function getCatalogForSale() {
   }));
 }
 
-// ─── Exportação em CSV ────────────────────────────────────────────────────────
-
 export type SaleExportRow = {
   soldAt: string;
   customerName: string;
