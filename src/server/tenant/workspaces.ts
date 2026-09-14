@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import type { MemberRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { effectiveLimit } from "@/lib/plans";
+import { effectiveLimit, planMemberLimit } from "@/lib/plans";
 import { hasPaidAccess } from "@/lib/period";
 import { normalizeName } from "@/lib/text";
 import { ensureTrialSubscription, getSubscription } from "./subscription";
@@ -72,6 +72,27 @@ async function uniqueSlug(name: string): Promise<string> {
     if (!taken) return candidate;
   }
   return `${base}-${Date.now()}`;
+}
+
+async function memberLimitForWorkspace(workspaceId: string): Promise<number> {
+  const owner = await db.member.findFirst({
+    where: { workspaceId, role: "OWNER" },
+    select: { userId: true },
+  });
+  if (!owner) return planMemberLimit("corre");
+
+  const sub = await getSubscription(owner.userId);
+  return planMemberLimit(sub?.plan ?? "corre");
+}
+
+async function seatsUsed(workspaceId: string): Promise<number> {
+  const [members, invites] = await Promise.all([
+    db.member.count({ where: { workspaceId } }),
+    db.invitation.count({
+      where: { workspaceId, status: "PENDING", expiresAt: { gt: new Date() } },
+    }),
+  ]);
+  return members + invites;
 }
 
 export async function requireUserId(): Promise<string> {
@@ -201,6 +222,14 @@ export async function createInvite(
   ]);
   if (!workspace) throw new Error("Workspace não encontrado.");
 
+  const limit = await memberLimitForWorkspace(workspaceId);
+  const seats = await seatsUsed(workspaceId);
+  if (seats >= limit) {
+    throw new Error(
+      "Seu plano atingiu o limite de usuários deste workspace. Cancele um convite pendente ou faça upgrade para convidar mais gente.",
+    );
+  }
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const code = randomCode();
     const taken = await db.invitation.findUnique({ where: { code } });
@@ -284,6 +313,12 @@ export async function joinWithCode(rawCode: string): Promise<JoinResult> {
   if (existing) {
     await setActiveWorkspace(invite.workspaceId);
     return { ok: true, workspaceName: invite.workspace.name };
+  }
+
+  const limit = await memberLimitForWorkspace(invite.workspaceId);
+  const currentMembers = await db.member.count({ where: { workspaceId: invite.workspaceId } });
+  if (currentMembers >= limit) {
+    return { ok: false, error: "Este workspace já atingiu o limite de usuários do plano." };
   }
 
   await db.$transaction(async (tx) => {
