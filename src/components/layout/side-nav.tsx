@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   LogOut,
   Users,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ type NavItem = {
 
 const items: NavItem[] = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
+  { href: "/dashboard/consolidated", label: "Consolidado", icon: Building2 },
   { href: "/sales", label: "Vendas", icon: ShoppingCart },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Produtos", icon: Cookie },
