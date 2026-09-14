@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { useTheme } from "next-themes";
+import { loadStripe, type Stripe, type Appearance } from "@stripe/stripe-js";
 import {
   Elements,
   PaymentElement,
@@ -27,6 +28,60 @@ function getStripe(): Promise<Stripe | null> {
   return stripePromise;
 }
 
+const APPEARANCE_BY_THEME: Record<"light" | "dark", Appearance> = {
+  light: {
+    theme: "stripe",
+    variables: {
+      colorPrimary: "hsl(25 45% 38%)",
+      colorBackground: "hsl(0 0% 100%)",
+      colorText: "hsl(25 30% 15%)",
+      colorTextSecondary: "hsl(25 12% 42%)",
+      colorTextPlaceholder: "hsl(25 12% 42%)",
+      colorDanger: "hsl(0 72% 48%)",
+      fontFamily: "inherit",
+      borderRadius: "8px",
+    },
+    rules: {
+      ".Input": { border: "1px solid hsl(30 20% 86%)", boxShadow: "none" },
+      ".Input:focus": { border: "1px solid hsl(25 45% 38%)", boxShadow: "none" },
+      ".Tab": { border: "1px solid hsl(30 20% 86%)" },
+      ".Tab:hover": { border: "1px solid hsl(25 45% 38%)" },
+      ".Tab--selected": {
+        border: "1px solid hsl(25 45% 38%)",
+        boxShadow: "none",
+      },
+    },
+  },
+  dark: {
+    theme: "night",
+    variables: {
+      colorPrimary: "hsl(25 50% 55%)",
+      colorBackground: "hsl(25 16% 13%)",
+      colorText: "hsl(36 30% 94%)",
+      colorTextSecondary: "hsl(33 12% 65%)",
+      colorTextPlaceholder: "hsl(33 12% 65%)",
+      colorDanger: "hsl(0 62% 45%)",
+      fontFamily: "inherit",
+      borderRadius: "8px",
+    },
+    rules: {
+      ".Input": { border: "1px solid hsl(25 12% 24%)", boxShadow: "none" },
+      ".Input:focus": { border: "1px solid hsl(25 50% 55%)", boxShadow: "none" },
+      ".Tab": { border: "1px solid hsl(25 12% 24%)" },
+      ".Tab:hover": { border: "1px solid hsl(25 50% 55%)" },
+      ".Tab--selected": {
+        border: "1px solid hsl(25 50% 55%)",
+        boxShadow: "none",
+      },
+    },
+  },
+};
+
+function useElementsAppearance(): Appearance {
+  const { resolvedTheme } = useTheme();
+  return APPEARANCE_BY_THEME[resolvedTheme === "dark" ? "dark" : "light"];
+}
+
 function PendingChargeNotice({ charge }: { charge: PendingChargeWarning }) {
   return (
     <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
@@ -44,10 +99,15 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
   const stripe = useStripe();
   const elements = useElements();
   const router = useRouter();
+  const appearance = useElementsAppearance();
   const [submitting, setSubmitting] = useState(false);
   const [pendingCharge, setPendingCharge] = useState<PendingChargeWarning | null>(
     null,
   );
+
+  useEffect(() => {
+    elements?.update({ appearance });
+  }, [elements, appearance]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -125,6 +185,7 @@ export function CardCheckoutContent({
   monthlyCents: number;
 }) {
   const stripe = useMemo(() => getStripe(), []);
+  const appearance = useElementsAppearance();
 
   if (!publishableKey) {
     return (
@@ -141,13 +202,7 @@ export function CardCheckoutContent({
         mode: "subscription",
         amount: monthlyCents,
         currency: "brl",
-        appearance: {
-          variables: {
-            colorPrimary: "#0f172a",
-            fontFamily: "inherit",
-            borderRadius: "8px",
-          },
-        },
+        appearance,
       }}
     >
       <CardForm plan={plan} cycle={cycle} />

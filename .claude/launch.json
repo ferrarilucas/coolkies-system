@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "cookies-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "pnpm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
