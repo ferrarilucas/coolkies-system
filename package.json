@@ -28,6 +28,7 @@
     "@blocknote/core": "^0.25.0",
     "@blocknote/mantine": "^0.25.0",
     "@blocknote/react": "^0.25.0",
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.1.0",
     "@radix-ui/react-avatar": "^1.1.2",
