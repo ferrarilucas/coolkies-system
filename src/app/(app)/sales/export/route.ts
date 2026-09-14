@@ -3,10 +3,23 @@ import { getSalesForExport } from "@/server/queries/sales";
 import { toCsv } from "@/lib/csv";
 import { formatBRL } from "@/lib/money";
 
+export function parseDateParam(value: string | null): Date | undefined | null {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const from = sp.get("from") ? new Date(sp.get("from")!) : undefined;
-  const to = sp.get("to") ? new Date(sp.get("to")!) : undefined;
+  const from = parseDateParam(sp.get("from"));
+  const to = parseDateParam(sp.get("to"));
+
+  if (from === null || to === null) {
+    return NextResponse.json(
+      { error: "Data inválida. Use o formato AAAA-MM-DD." },
+      { status: 400 },
+    );
+  }
 
   const rows = await getSalesForExport({ from, to });
   const csv = toCsv(
