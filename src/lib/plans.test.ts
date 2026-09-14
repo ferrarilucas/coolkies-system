@@ -6,6 +6,7 @@ import {
   monthlyPriceCents,
   planLabel,
   planLimit,
+  planMemberLimit,
 } from "./plans";
 import { isPeriodPaid } from "./period";
 
@@ -124,5 +125,16 @@ describe("catálogo de cartão x Stripe", () => {
         expect(mapeado).toBe(cobravel);
       }
     }
+  });
+});
+
+describe("limite de usuários por workspace", () => {
+  it("corre permite só 2 usuários por workspace", () => {
+    expect(planMemberLimit("corre")).toBe(2);
+  });
+
+  it("cresce e escala não limitam usuários", () => {
+    expect(planMemberLimit("cresce")).toBe(Number.POSITIVE_INFINITY);
+    expect(planMemberLimit("escala")).toBe(Number.POSITIVE_INFINITY);
   });
 });

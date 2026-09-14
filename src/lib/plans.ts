@@ -8,6 +8,7 @@ type PlanDefinition = {
   label: string;
   workspacesLabel: string;
   maxWorkspaces: number;
+  maxMembers: number;
   baseMonthlyCents: number | null;
   categoryLabel: string;
   tagline: string;
@@ -26,6 +27,7 @@ export const PLANS: PlanDefinition[] = [
     label: "Corre",
     workspacesLabel: "1 workspace",
     maxWorkspaces: 1,
+    maxMembers: 2,
     baseMonthlyCents: 3950,
     categoryLabel: "Vendedor individual",
     tagline: "Para quem toca tudo sozinho e quer sair do caderninho hoje.",
@@ -48,6 +50,7 @@ export const PLANS: PlanDefinition[] = [
     label: "Cresce",
     workspacesLabel: "Até 4 workspaces",
     maxWorkspaces: 4,
+    maxMembers: Number.POSITIVE_INFINITY,
     baseMonthlyCents: 9990,
     categoryLabel: "Negócio em crescimento",
     tagline:
@@ -72,6 +75,7 @@ export const PLANS: PlanDefinition[] = [
     label: "Escala",
     workspacesLabel: "Workspaces ilimitados",
     maxWorkspaces: Number.POSITIVE_INFINITY,
+    maxMembers: Number.POSITIVE_INFINITY,
     baseMonthlyCents: null,
     categoryLabel: "Operação multiunidade",
     tagline: "Para operações com várias unidades, franquias ou times grandes.",
@@ -141,4 +145,8 @@ export function planLabel(plan: string): string {
 
 export function planWorkspacesLabel(plan: string): string {
   return findPlan(plan).workspacesLabel;
+}
+
+export function planMemberLimit(plan: string): number {
+  return findPlan(plan).maxMembers;
 }
