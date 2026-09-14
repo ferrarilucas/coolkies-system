@@ -6,10 +6,12 @@ import { useTheme } from "next-themes";
 import { loadStripe, type Stripe, type Appearance } from "@stripe/stripe-js";
 import {
   Elements,
+  ExpressCheckoutElement,
   PaymentElement,
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
+import type { StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -104,22 +106,14 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
   const [pendingCharge, setPendingCharge] = useState<PendingChargeWarning | null>(
     null,
   );
+  const [hasWallets, setHasWallets] = useState(false);
 
   useEffect(() => {
     elements?.update({ appearance });
   }, [elements, appearance]);
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!stripe || !elements || submitting) return;
-    setSubmitting(true);
-
-    const submitResult = await elements.submit();
-    if (submitResult.error) {
-      toast.error(submitResult.error.message ?? "Confira os dados do cartão.");
-      setSubmitting(false);
-      return;
-    }
+  async function completeSubscription() {
+    if (!stripe || !elements) return;
 
     const formData = new FormData();
     formData.set("plan", plan);
@@ -127,7 +121,6 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     const res = await subscribeWithCard(formData);
     if (!res.ok || !res.data) {
       toast.error(res.error ?? "Não foi possível iniciar a assinatura.");
-      setSubmitting(false);
       return;
     }
 
@@ -151,7 +144,6 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     const { error } = await confirm;
     if (error) {
       toast.error(error.message ?? "Não foi possível confirmar o cartão.");
-      setSubmitting(false);
       return;
     }
 
@@ -160,9 +152,48 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     router.refresh();
   }
 
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!stripe || !elements || submitting) return;
+    setSubmitting(true);
+
+    const submitResult = await elements.submit();
+    if (submitResult.error) {
+      toast.error(submitResult.error.message ?? "Confira os dados do cartão.");
+      setSubmitting(false);
+      return;
+    }
+
+    await completeSubscription();
+    setSubmitting(false);
+  }
+
+  async function onExpressConfirm(event: StripeExpressCheckoutElementConfirmEvent) {
+    void event;
+    if (!stripe || !elements || submitting) return;
+    setSubmitting(true);
+    await completeSubscription();
+    setSubmitting(false);
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {pendingCharge && <PendingChargeNotice charge={pendingCharge} />}
+      <div hidden={!hasWallets}>
+        <ExpressCheckoutElement
+          options={{ paymentMethods: { applePay: "always", googlePay: "auto" } }}
+          onConfirm={onExpressConfirm}
+          onReady={(event) => {
+            const methods = event.availablePaymentMethods;
+            setHasWallets(Boolean(methods?.applePay || methods?.googlePay));
+          }}
+        />
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="h-px flex-1 bg-border" />
+          ou
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      </div>
       <PaymentElement options={{ layout: "tabs" }} />
       <Button type="submit" className="w-full" disabled={!stripe || submitting}>
         {submitting ? "Confirmando..." : "Confirmar assinatura"}
