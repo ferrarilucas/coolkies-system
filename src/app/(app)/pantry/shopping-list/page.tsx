@@ -2,12 +2,16 @@ import { ListChecks, ShoppingBasket } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { getPantryStock } from "@/server/queries/production";
+import { getShoppingListItems } from "@/server/queries/shopping-list";
+import { GenerateShoppingListButton } from "@/components/pantry/shopping-list-actions";
+import { ShoppingListItemRow } from "@/components/pantry/shopping-list-item-row";
 import { formatQty, baseUnitLabel } from "@/lib/units";
 import { formatBRL } from "@/lib/money";
 import { BaseUnit } from "@prisma/client";
 
 export default async function ShoppingListPage() {
   const stock = await getPantryStock();
+  const persisted = await getShoppingListItems();
 
   const toBuy = stock
     .filter((s) => s.belowMin && s.minStock != null)
@@ -23,11 +27,14 @@ export default async function ShoppingListPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Lista de compras"
-        description="Ingredientes abaixo do estoque mínimo."
-        backHref="/pantry"
-      />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader
+          title="Lista de compras"
+          description="Ingredientes abaixo do estoque mínimo."
+          backHref="/pantry"
+        />
+        <GenerateShoppingListButton />
+      </div>
 
       {toBuy.length === 0 ? (
         <EmptyState
@@ -81,6 +88,21 @@ export default async function ShoppingListPage() {
           <p className="text-xs text-muted-foreground">
             Estimativa baseada no último preço pago de cada ingrediente.
           </p>
+        </div>
+      )}
+
+      {persisted.length > 0 && (
+        <div className="mt-6 space-y-2">
+          <h2 className="text-sm font-medium text-muted-foreground">Sua lista</h2>
+          {persisted.map((item) => (
+            <ShoppingListItemRow
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              quantity={item.quantity}
+              unit={item.unit}
+            />
+          ))}
         </div>
       )}
     </div>
