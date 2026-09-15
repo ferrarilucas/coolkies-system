@@ -1,4 +1,7 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -7,6 +10,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AddAllowedEmailForm } from "@/components/admin/add-allowed-email-form";
 
 export default async function AccessPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const isPlatformAdmin =
+    (session?.user as { role?: string } | undefined)?.role === "ADMIN";
+  if (!isPlatformAdmin) redirect("/admin");
+
   const allowed = await db.allowedEmail.findMany({
     orderBy: { createdAt: "asc" },
   });

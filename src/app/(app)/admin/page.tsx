@@ -1,36 +1,46 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { ChefHat, Carrot, Tags, UserCheck, ChevronRight } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 
-const sections = [
-  {
-    href: "/admin/recipes",
-    label: "Receitas",
-    description: "Passo a passo, ingredientes e custo estimado.",
-    icon: ChefHat,
-  },
-  {
-    href: "/admin/ingredients",
-    label: "Ingredientes",
-    description: "Itens usados nas receitas e estoque mínimo.",
-    icon: Carrot,
-  },
-  {
-    href: "/admin/catalog",
-    label: "Catálogo",
-    description: "Produtos, sabores e preços de venda.",
-    icon: Tags,
-  },
-  {
-    href: "/admin/access",
-    label: "Pré-cadastro",
-    description: "E-mails autorizados a acessar o app.",
-    icon: UserCheck,
-  },
-];
+export default async function AdminPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const isPlatformAdmin =
+    (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
-export default function AdminPage() {
+  const sections = [
+    {
+      href: "/admin/recipes",
+      label: "Receitas",
+      description: "Passo a passo, ingredientes e custo estimado.",
+      icon: ChefHat,
+    },
+    {
+      href: "/admin/ingredients",
+      label: "Ingredientes",
+      description: "Itens usados nas receitas e estoque mínimo.",
+      icon: Carrot,
+    },
+    {
+      href: "/admin/catalog",
+      label: "Catálogo",
+      description: "Produtos, sabores e preços de venda.",
+      icon: Tags,
+    },
+    ...(isPlatformAdmin
+      ? [
+          {
+            href: "/admin/access",
+            label: "Pré-cadastro",
+            description: "E-mails autorizados a acessar o app.",
+            icon: UserCheck,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div>
       <PageHeader title="Cadastros" description="Área administrativa." />
