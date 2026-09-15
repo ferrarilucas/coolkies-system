@@ -22,6 +22,7 @@ export default async function PlanPage() {
       <PageHeader
         title="Assinatura"
         description="Seu plano define quantos workspaces você pode ter."
+        backHref="/admin"
       />
       <PlanPanel
         currentPlan={sub?.plan ?? null}

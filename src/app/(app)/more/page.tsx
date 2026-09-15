@@ -5,10 +5,8 @@ import {
   Building2,
   ChevronRight,
   Cookie,
-  CreditCard,
   Palette,
   Settings,
-  Share2,
   Store,
   UtensilsCrossed,
   type LucideIcon,
@@ -48,22 +46,10 @@ export default async function MorePage() {
 
   const links: MoreLink[] = [
     {
-      href: "/workspaces/plan",
-      label: "Plano",
-      description: "Sua assinatura e forma de pagamento",
-      icon: CreditCard,
-    },
-    {
       href: "/dashboard/consolidated",
       label: "Consolidado",
       description: "Faturamento somado de todos os seus workspaces",
       icon: Building2,
-    },
-    {
-      href: "/workspaces/public-link",
-      label: "Link público",
-      description: "Compartilhe o faturamento do mês sem login",
-      icon: Share2,
     },
     {
       href: "/products",
@@ -87,8 +73,8 @@ export default async function MorePage() {
       ? [
           {
             href: "/admin",
-            label: "Cadastros",
-            description: "Produtos, sabores, receitas e acesso",
+            label: "Configurações",
+            description: "Plano, produtos, sabores e receitas",
             icon: Settings,
           },
         ]

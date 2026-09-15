@@ -1,6 +1,13 @@
 import { headers } from "next/headers";
 import Link from "next/link";
-import { ChefHat, Carrot, Tags, UserCheck, ChevronRight } from "lucide-react";
+import {
+  ChefHat,
+  Carrot,
+  Tags,
+  UserCheck,
+  CreditCard,
+  ChevronRight,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +18,12 @@ export default async function AdminPage() {
     (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
   const sections = [
+    {
+      href: "/workspaces/plan",
+      label: "Plano",
+      description: "Sua assinatura e forma de pagamento.",
+      icon: CreditCard,
+    },
     {
       href: "/admin/recipes",
       label: "Receitas",
@@ -43,7 +56,10 @@ export default async function AdminPage() {
 
   return (
     <div>
-      <PageHeader title="Cadastros" description="Área administrativa." />
+      <PageHeader
+        title="Configurações"
+        description="Plano da assinatura e área administrativa."
+      />
       <div className="space-y-3">
         {sections.map(({ href, label, description, icon: Icon }) => (
           <Link key={href} href={href}>

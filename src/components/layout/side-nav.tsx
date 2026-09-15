@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Cookie,
-  CreditCard,
   UtensilsCrossed,
   Store,
   Settings,
@@ -16,7 +15,6 @@ import {
   LogOut,
   Users,
   Building2,
-  Share2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,14 +42,12 @@ type NavItem = {
 const items: NavItem[] = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/dashboard/consolidated", label: "Consolidado", icon: Building2 },
-  { href: "/workspaces/public-link", label: "Link público", icon: Share2 },
   { href: "/sales", label: "Vendas", icon: ShoppingCart },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Produtos", icon: Cookie },
   { href: "/pantry", label: "Despensa", icon: UtensilsCrossed },
   { href: "/markets", label: "Mercados e preços", icon: Store },
-  { href: "/admin", label: "Cadastros", icon: Settings, adminOnly: true },
-  { href: "/workspaces/plan", label: "Plano", icon: CreditCard },
+  { href: "/admin", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
 const STORAGE_KEY = "sidebar:collapsed";
