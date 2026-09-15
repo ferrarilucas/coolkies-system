@@ -6,6 +6,7 @@ import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,8 @@ interface Ingredient {
   name: string;
   baseUnit: string;
   minStock: number | null;
+  isRawMaterial: boolean;
+  forResale: boolean;
 }
 
 interface Props {
@@ -46,9 +49,13 @@ export function IngredientDialog({ mode, ingredient }: Props) {
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
   const [baseUnit, setBaseUnit] = useState(ingredient?.baseUnit ?? "G");
+  const [isRawMaterial, setIsRawMaterial] = useState(ingredient?.isRawMaterial ?? true);
+  const [forResale, setForResale] = useState(ingredient?.forResale ?? false);
 
   function handleSubmit(formData: FormData) {
     formData.set("baseUnit", baseUnit);
+    formData.set("isRawMaterial", isRawMaterial ? "on" : "off");
+    formData.set("forResale", forResale ? "on" : "off");
     startTransition(async () => {
       const res =
         mode === "create"
@@ -142,11 +149,31 @@ export function IngredientDialog({ mode, ingredient }: Props) {
             />
           </div>
 
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label htmlFor="ing-raw">Matéria-prima</Label>
+                <p className="text-xs text-muted-foreground">Entra em receitas e produção.</p>
+              </div>
+              <Switch id="ing-raw" checked={isRawMaterial} onCheckedChange={setIsRawMaterial} />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label htmlFor="ing-resale">Revenda</Label>
+                <p className="text-xs text-muted-foreground">Vira um produto vendável no Catálogo.</p>
+              </div>
+              <Switch id="ing-resale" checked={forResale} onCheckedChange={setForResale} />
+            </div>
+            {!isRawMaterial && !forResale && (
+              <p className="text-xs text-destructive">Marque ao menos uma das duas opções.</p>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || (!isRawMaterial && !forResale)}>
               {pending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>

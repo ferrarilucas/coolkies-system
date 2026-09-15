@@ -45,6 +45,11 @@ export default async function IngredientsPage() {
                     <Badge variant="secondary" className="text-xs">
                       {abbr}
                     </Badge>
+                    {ing.forResale && (
+                      <Badge variant="secondary" className="text-xs">
+                        Revenda
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
@@ -75,6 +80,8 @@ export default async function IngredientsPage() {
                       name: ing.name,
                       baseUnit: ing.baseUnit,
                       minStock: ing.minStock,
+                      isRawMaterial: ing.isRawMaterial,
+                      forResale: ing.forResale,
                     }}
                   />
                   <DeleteIngredientButton id={ing.id} name={ing.name} />
