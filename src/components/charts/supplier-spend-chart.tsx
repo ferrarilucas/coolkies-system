@@ -27,7 +27,7 @@ const COLORS = [
   "hsl(15 45% 45%)",
 ];
 
-export function MarketSpendChart({ data }: { data: Datum[] }) {
+export function SupplierSpendChart({ data }: { data: Datum[] }) {
   return (
     <ResponsiveContainer width="100%" height={Math.max(160, data.length * 44)}>
       <BarChart

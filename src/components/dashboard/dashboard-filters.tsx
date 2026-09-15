@@ -23,7 +23,7 @@ type ProductOption = Option & { flavors: Option[] };
 export type DashboardFilterOptions = {
   products: ProductOption[];
   customers: Option[];
-  markets: Option[];
+  suppliers: Option[];
 };
 
 const fmt = (d: Date) => format(d, "yyyy-MM-dd");
@@ -48,7 +48,7 @@ export function DashboardFilters({
     productId?: string;
     flavorId?: string;
     customerId?: string;
-    marketId?: string;
+    supplierId?: string;
   };
 }) {
   const router = useRouter();
@@ -79,7 +79,7 @@ export function DashboardFilters({
     setOrDel("productId", merged.productId);
     setOrDel("flavorId", merged.flavorId);
     setOrDel("customerId", merged.customerId);
-    setOrDel("marketId", merged.marketId);
+    setOrDel("supplierId", merged.supplierId);
 
     startTransition(() => {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -110,7 +110,7 @@ export function DashboardFilters({
     current.productId,
     current.flavorId,
     current.customerId,
-    current.marketId,
+    current.supplierId,
   ].filter(Boolean).length;
 
   const rangeLabel = useMemo(() => {
@@ -237,13 +237,13 @@ export function DashboardFilters({
               items={options.customers}
             />
 
-            {/* Mercado */}
+            {/* Fornecedor */}
             <FilterSelect
-              label="Mercado"
-              value={current.marketId || ALL}
-              onChange={(v) => apply({ marketId: v === ALL ? undefined : v })}
+              label="Fornecedor"
+              value={current.supplierId || ALL}
+              onChange={(v) => apply({ supplierId: v === ALL ? undefined : v })}
               placeholder="Todos"
-              items={options.markets}
+              items={options.suppliers}
             />
           </div>
 

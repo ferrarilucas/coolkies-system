@@ -29,7 +29,7 @@ import {
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
 import { FlavorMixChart } from "@/components/charts/flavor-mix-chart";
-import { MarketSpendChart } from "@/components/charts/market-spend-chart";
+import { SupplierSpendChart } from "@/components/charts/supplier-spend-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +64,7 @@ export default async function DashboardPage({
     productId: s("productId"),
     flavorId: s("flavorId"),
     customerId: s("customerId"),
-    marketId: s("marketId"),
+    supplierId: s("supplierId"),
   } as const;
 
   // Sequencial de propósito: com connection_limit=1 (serverless), rodar em
@@ -72,7 +72,7 @@ export default async function DashboardPage({
   const data = await getDashboardData(filters);
   const options = await getFilterOptions();
 
-  const { kpis, trend, mix, topCustomers, lowStock, market } = data;
+  const { kpis, trend, mix, topCustomers, lowStock, supplier } = data;
 
   return (
     <div>
@@ -98,7 +98,7 @@ export default async function DashboardPage({
           productId: filters.productId,
           flavorId: filters.flavorId,
           customerId: filters.customerId,
-          marketId: filters.marketId,
+          supplierId: filters.supplierId,
         }}
       />
 
@@ -166,7 +166,7 @@ export default async function DashboardPage({
         />
         <Kpi
           label="Gasto em compras"
-          value={formatBRL(market.totalSpendCents)}
+          value={formatBRL(supplier.totalSpendCents)}
           hint="ingredientes no período"
           icon={Store}
         />
@@ -295,18 +295,18 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {/* ─── Mercado: gasto + comparativo de preços ─── */}
+      {/* ─── Fornecedor: gasto + comparativo de preços ─── */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Store className="size-4 text-muted-foreground" />
-              Gasto por mercado
+              Gasto por fornecedor
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {market.spendByMarket.length > 0 ? (
-              <MarketSpendChart data={market.spendByMarket} />
+            {supplier.spendBySupplier.length > 0 ? (
+              <SupplierSpendChart data={supplier.spendBySupplier} />
             ) : (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Nenhuma compra registrada no período.
@@ -323,13 +323,13 @@ export default async function DashboardPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {market.priceComparison.length === 0 ? (
+            {supplier.priceComparison.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Registre o mesmo ingrediente em 2+ mercados para comparar.
+                Registre o mesmo ingrediente em 2+ fornecedores para comparar.
               </p>
             ) : (
               <ul className="divide-y">
-                {market.priceComparison.slice(0, 6).map((p) => (
+                {supplier.priceComparison.slice(0, 6).map((p) => (
                   <li
                     key={p.name}
                     className="flex items-center justify-between gap-3 py-2.5"
@@ -337,13 +337,13 @@ export default async function DashboardPage({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{p.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {p.cheapestMarket} ·{" "}
+                        {p.cheapestSupplier} ·{" "}
                         {formatBRL(Math.round(p.cheapestUnitCents))}/
                         {p.baseUnit.toLowerCase()}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-md bg-success/10 px-2 py-1 text-xs font-medium text-success">
-                      −{p.savingsPct.toFixed(0)}% vs {p.dearestMarket}
+                      −{p.savingsPct.toFixed(0)}% vs {p.dearestSupplier}
                     </span>
                   </li>
                 ))}
