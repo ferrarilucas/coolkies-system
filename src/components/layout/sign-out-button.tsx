@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth-client";
+import { clearAppCache } from "@/lib/clear-app-cache";
 
 export function SignOutButton() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export function SignOutButton() {
 
   async function handleClick() {
     setPending(true);
+    await clearAppCache();
     await signOut();
     router.push("/sign-in");
     router.refresh();

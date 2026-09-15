@@ -1,10 +1,11 @@
 export type CsvColumn<T> = { key: keyof T; label: string };
 
 function escapeCsvField(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  if (/[",\r\n]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
-  return value;
+  return guarded;
 }
 
 export function toCsv<T>(rows: T[], columns: CsvColumn<T>[]): string {

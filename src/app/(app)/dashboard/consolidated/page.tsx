@@ -36,7 +36,7 @@ export default async function ConsolidatedDashboardPage() {
         <EmptyState
           icon={Building2}
           title="Nenhum workspace para consolidar"
-          description="Você precisa ser dono de mais de um workspace ativo para ver o consolidado."
+          description="Você precisa ser dono de pelo menos um workspace ativo para ver o consolidado."
         />
       ) : (
         <div className="space-y-4">

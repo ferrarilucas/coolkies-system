@@ -2,11 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import {
+  Building2,
   ChevronRight,
   Cookie,
   CreditCard,
   Palette,
   Settings,
+  Share2,
   Store,
   UtensilsCrossed,
   type LucideIcon,
@@ -50,6 +52,18 @@ export default async function MorePage() {
       label: "Plano",
       description: "Sua assinatura e forma de pagamento",
       icon: CreditCard,
+    },
+    {
+      href: "/dashboard/consolidated",
+      label: "Consolidado",
+      description: "Faturamento somado de todos os seus workspaces",
+      icon: Building2,
+    },
+    {
+      href: "/workspaces/public-link",
+      label: "Link público",
+      description: "Compartilhe o faturamento do mês sem login",
+      icon: Share2,
     },
     {
       href: "/products",

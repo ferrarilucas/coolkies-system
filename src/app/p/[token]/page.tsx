@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveWorkspaceByPublicToken } from "@/server/tenant/public-link";
 import { getWorkspaceRevenueSummary } from "@/server/queries/consolidated-dashboard";
 import { formatBRL } from "@/lib/money";
+import { canWriteInWorkspace } from "@/server/tenant/subscription";
 
 function monthRange(): { from: Date; to: Date } {
   const now = new Date();
@@ -18,6 +19,9 @@ export default async function PublicWorkspacePage({
   const { token } = await params;
   const workspace = await resolveWorkspaceByPublicToken(token);
   if (!workspace) notFound();
+
+  const active = await canWriteInWorkspace(workspace.id);
+  if (!active) notFound();
 
   const { from, to } = monthRange();
   const summary = await getWorkspaceRevenueSummary(workspace.id, workspace.name, { from, to });

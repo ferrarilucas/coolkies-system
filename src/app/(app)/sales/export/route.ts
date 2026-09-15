@@ -24,11 +24,12 @@ export async function GET(request: NextRequest) {
       { key: "customerName", label: "Cliente" },
       { key: "status", label: "Status" },
       { key: "totalReais", label: "Total" },
+      { key: "totalCents", label: "Total (centavos)" },
       { key: "paymentForecastDate", label: "Previsão de recebimento" },
     ],
   );
 
-  return new NextResponse(csv, {
+  return new NextResponse(`﻿${csv}`, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": 'attachment; filename="vendas.csv"',

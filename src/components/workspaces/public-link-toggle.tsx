@@ -43,7 +43,7 @@ export function PublicLinkToggle({
             : "Só o dono do workspace pode ativar ou desativar o link."}
         </CardDescription>
       </CardHeader>
-      {publicUrl && (
+      {canManage && publicUrl && (
         <CardContent>
           <p className="break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{publicUrl}</p>
         </CardContent>

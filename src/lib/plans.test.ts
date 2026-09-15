@@ -128,7 +128,7 @@ describe("catálogo de cartão x Stripe", () => {
   });
 });
 
-describe("limite de usuários por workspace", () => {
+describe("limite de usuários por plano", () => {
   it("corre permite só 2 usuários por workspace", () => {
     expect(planMemberLimit("corre")).toBe(2);
   });

@@ -24,4 +24,17 @@ describe("toCsv", () => {
   it("lista vazia gera só o cabeçalho", () => {
     expect(toCsv([], [{ key: "name", label: "Nome" }])).toBe("Nome");
   });
+
+  it("neutraliza um campo que começa com = (proteção contra injeção de fórmula)", () => {
+    const csv = toCsv(
+      [{ name: '=HYPERLINK("https://evil","clique")' }],
+      [{ key: "name", label: "Nome" }],
+    );
+    expect(csv).toBe('Nome\r\n"\'=HYPERLINK(""https://evil"",""clique"")"');
+  });
+
+  it("escapa um \\r sozinho no meio do campo", () => {
+    const csv = toCsv([{ name: "Ana\rSilva" }], [{ key: "name", label: "Nome" }]);
+    expect(csv).toBe('Nome\r\n"Ana\rSilva"');
+  });
 });

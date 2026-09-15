@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
+import { clearAppCache } from "@/lib/clear-app-cache";
 import { isAdmin, type SessionUser } from "@/lib/session-user";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -82,6 +83,10 @@ export function SideNav({
 
   const visibleItems = items.filter((i) => !i.adminOnly || isAdmin(user));
 
+  const activeHref = visibleItems
+    .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <aside
       className={cn(
@@ -126,12 +131,10 @@ export function SideNav({
         </div>
       )}
 
-      {/* Navegação */}
       <nav className="flex-1 p-2">
         <ul className="space-y-1">
           {visibleItems.map(({ href, label, icon: Icon }) => {
-            const active =
-              pathname === href || pathname.startsWith(`${href}/`);
+            const active = href === activeHref;
             return (
               <li key={href}>
                 <Link
@@ -171,6 +174,7 @@ function UserFooter({
   const router = useRouter();
 
   async function handleLogout() {
+    await clearAppCache();
     await signOut();
     router.push("/sign-in");
     router.refresh();
