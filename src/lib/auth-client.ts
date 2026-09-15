@@ -12,7 +12,28 @@ export async function signInWithGoogle() {
   await signIn.social({
     provider: "google",
     callbackURL: "/dashboard",
-    // Se o e-mail não estiver no pré-cadastro, o hook bloqueia e cai aqui.
     errorCallbackURL: "/not-authorized",
+  });
+}
+
+export async function signUpWithEmail(input: {
+  name: string;
+  email: string;
+  password: string;
+}) {
+  return authClient.signUp.email({
+    name: input.name,
+    email: input.email,
+    password: input.password,
+  });
+}
+
+export async function signInWithEmail(input: {
+  email: string;
+  password: string;
+}) {
+  return authClient.signIn.email({
+    email: input.email,
+    password: input.password,
   });
 }

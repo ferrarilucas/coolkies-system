@@ -1,11 +1,51 @@
 "use client";
 
-import { Cookie } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Cookie, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { signInWithGoogle } from "@/lib/auth-client";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  signInWithGoogle,
+  signInWithEmail,
+  signUpWithEmail,
+} from "@/lib/auth-client";
+
+type Mode = "signin" | "signup";
 
 export default function SignInPage() {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+
+    const result =
+      mode === "signup"
+        ? await signUpWithEmail({ name, email, password })
+        : await signInWithEmail({ email, password });
+
+    setPending(false);
+
+    if (result.error) {
+      setError(result.error.message ?? "Não foi possível continuar.");
+      return;
+    }
+
+    router.push("/dashboard");
+    router.refresh();
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6">
       <div className="mb-8 flex flex-col items-center text-center">
@@ -19,7 +59,7 @@ export default function SignInPage() {
       </div>
 
       <Card className="w-full max-w-sm">
-        <CardContent className="pt-6">
+        <CardContent className="space-y-4 pt-6">
           <Button
             size="lg"
             variant="outline"
@@ -29,8 +69,82 @@ export default function SignInPage() {
             <GoogleIcon />
             Entrar com Google
           </Button>
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            Usamos apenas sua conta Google para acessar o app.
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">ou</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Tabs
+            value={mode}
+            onValueChange={(v) => {
+              setMode(v as Mode);
+              setError(null);
+            }}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="signin">Entrar</TabsTrigger>
+              <TabsTrigger value="signup">Criar conta</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <form className="space-y-3" onSubmit={onSubmit}>
+            {mode === "signup" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="name">Nome</Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoComplete="name"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+              />
+            </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <Button type="submit" className="w-full" disabled={pending}>
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : mode === "signup" ? (
+                "Criar conta"
+              ) : (
+                "Entrar"
+              )}
+            </Button>
+          </form>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Usamos seus dados só para acessar o app.
           </p>
         </CardContent>
       </Card>

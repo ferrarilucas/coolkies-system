@@ -7,9 +7,8 @@ export const auth = betterAuth({
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),
-  // Login social: APENAS Google (sem email/senha próprio).
   emailAndPassword: {
-    enabled: false,
+    enabled: true,
   },
   socialProviders: {
     google: {
