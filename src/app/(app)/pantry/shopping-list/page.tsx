@@ -55,8 +55,8 @@ export default async function ShoppingListPage() {
                       <p className="text-xs text-muted-foreground">
                         Atual {formatQty(Math.max(0, item.current), unit)} · mín{" "}
                         {formatQty(item.minStock ?? 0, unit)}
-                        {item.latestMarket && item.latestPriceCents != null &&
-                          ` · ${formatBRL(item.latestPriceCents)}/${baseUnitLabel(unit)} em ${item.latestMarket}`}
+                        {item.latestSupplier && item.latestPriceCents != null &&
+                          ` · ${formatBRL(item.latestPriceCents)}/${baseUnitLabel(unit)} em ${item.latestSupplier}`}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">

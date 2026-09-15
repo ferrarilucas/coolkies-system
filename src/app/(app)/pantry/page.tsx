@@ -49,7 +49,7 @@ export default async function PantryPage() {
         <EmptyState
           icon={PackageOpen}
           title="Despensa vazia"
-          description="Registre compras de ingredientes em Mercados e preços para ver o estoque aqui."
+          description="Registre compras em Compras para ver o estoque aqui."
         />
       ) : (
         <div className="space-y-2">
@@ -111,16 +111,22 @@ function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>
       )}
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <span>↑ {purchasedFormatted} comprado</span>
-          <span>↓ {consumedFormatted} usado</span>
+          {entry.consumed > 0 && <span>↓ {consumedFormatted} usado</span>}
+          {entry.forResale && entry.resaleSold != null && entry.resaleSold > 0 && (
+            <span>↓ {formatQty(entry.resaleSold, unit)} revendido</span>
+          )}
         </div>
-        {entry.latestPriceCents !== null && entry.latestMarket && (
+        {entry.latestPriceCents !== null && entry.latestSupplier && (
           <span>
-            R$ {(entry.latestPriceCents / 100).toFixed(2)}/{unitLabel} · {entry.latestMarket}
+            R$ {(entry.latestPriceCents / 100).toFixed(2)}/{unitLabel} · {entry.latestSupplier}
           </span>
         )}
       </div>
+      {entry.forResale && (
+        <Badge variant="secondary" className="text-xs">Revenda</Badge>
+      )}
 
       {entry.minStock != null && entry.minStock > 0 && (
         <p className="text-xs text-muted-foreground">

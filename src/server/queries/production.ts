@@ -5,6 +5,7 @@ import { getWorkspaceDb } from "@/server/tenant/context";
 import { formatBRL } from "@/lib/money";
 import { formatQty } from "@/lib/units";
 import { isLowStock } from "@/lib/stock";
+import { unitCostFromLastPurchase } from "./purchase-cost";
 
 // ─── Histórico de produções ───────────────────────────────────────────────────
 
@@ -124,8 +125,10 @@ export type PantryEntry = {
   current: number;
   minStock: number | null;
   belowMin: boolean;
-  latestPriceCents: number | null;    // preço por unidade base (centavos)
-  latestMarket: string | null;
+  latestPriceCents: number | null; // preço por unidade base (centavos)
+  latestSupplier: string | null;
+  forResale: boolean;
+  resaleSold: number | null; // quantidade vendida do produto vinculado (null se não é revenda)
 };
 
 export async function getPantryStock(): Promise<PantryEntry[]> {
@@ -133,16 +136,16 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
   const ingredients = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {
-      purchases: {
-        orderBy: { purchasedAt: "desc" },
+      purchaseItems: {
+        orderBy: { purchase: { purchasedAt: "desc" } },
         take: 1,
-        include: { market: { select: { name: true } } },
+        include: { purchase: { select: { supplier: { select: { name: true } } } } },
       },
     },
   });
 
   // Total comprado por ingrediente
-  const purchaseSums = await db.ingredientPurchase.groupBy({
+  const purchaseSums = await db.purchaseItem.groupBy({
     by: ["ingredientId"],
     _sum: { quantity: true },
   });
@@ -150,19 +153,34 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
     purchaseSums.map((r) => [r.ingredientId, r._sum.quantity ?? 0]),
   );
 
-  // Total consumido em produções (via IngredientConsumption — calculado abaixo)
-  // Para calcular o consumo real precisamos percorrer as produções com receita
+  // Total consumido em produções (matéria-prima)
   const consumptionMap = await buildConsumptionMap(db);
+
+  // Total vendido diretamente (insumos de revenda), via o mesmo ledger de StockMovement
+  // usado por produto acabado: soma apenas os movimentos de venda (tipo SALE).
+  const resaleIds = ingredients
+    .filter((ing) => ing.forResale && ing.resaleProductId)
+    .map((ing) => ing.resaleProductId!);
+  const soldMovements = resaleIds.length > 0
+    ? await db.stockMovement.groupBy({
+        by: ["productId"],
+        where: { productId: { in: resaleIds }, type: "SALE" },
+        _sum: { quantity: true },
+      })
+    : [];
+  const soldByProductId = new Map(
+    soldMovements.map((r) => [r.productId, Math.abs(r._sum.quantity ?? 0)]),
+  );
 
   return ingredients.map((ing) => {
     const purchased = purchaseMap.get(ing.id) ?? 0;
     const consumed = consumptionMap.get(ing.id) ?? 0;
-    const current = purchased - consumed;
-    const lastPurchase = ing.purchases[0];
-    const pricePerUnit =
-      lastPurchase && lastPurchase.quantity > 0
-        ? lastPurchase.pricePaidCents / lastPurchase.quantity
-        : null;
+    const resaleSold = ing.forResale && ing.resaleProductId
+      ? soldByProductId.get(ing.resaleProductId) ?? 0
+      : null;
+    const current = purchased - consumed - (resaleSold ?? 0);
+    const lastPurchase = ing.purchaseItems[0];
+    const pricePerUnit = unitCostFromLastPurchase(lastPurchase ?? null);
 
     return {
       ingredientId: ing.id,
@@ -174,7 +192,9 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
       minStock: ing.minStock ?? null,
       belowMin: isLowStock(current, ing.minStock),
       latestPriceCents: pricePerUnit !== null ? Math.round(pricePerUnit) : null,
-      latestMarket: lastPurchase?.market.name ?? null,
+      latestSupplier: lastPurchase?.purchase.supplier?.name ?? null,
+      forResale: ing.forResale,
+      resaleSold,
     };
   });
 }
