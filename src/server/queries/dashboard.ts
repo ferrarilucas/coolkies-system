@@ -237,7 +237,10 @@ export async function getDashboardData(filters: DashboardFilters) {
 
   for (const sale of sales) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
-    const saleQty = matchedItems.reduce((s, i) => s + i.quantity, 0);
+    const saleQty = matchedItems.reduce(
+      (s, i) => s + (resaleUnitCostByProductId.has(i.productId) ? 0 : i.quantity),
+      0,
+    );
 
     // Receita: usa totalCents (já com desconto) quando não há filtro de item.
     // Com filtro de item, aplica proporção do desconto sobre os itens filtrados.
