@@ -13,7 +13,8 @@ const TABLES = [
   "production_batch",
   "shopping_list_item",
   "recipe_ingredient",
-  "ingredient_purchase",
+  "purchase_item",
+  "purchase",
   "sale_item",
   "sale",
   "price_history",
@@ -22,7 +23,7 @@ const TABLES = [
   "product",
   "recipe",
   "ingredient",
-  "market",
+  "supplier",
   "customer",
 ];
 

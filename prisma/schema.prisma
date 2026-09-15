@@ -37,7 +37,7 @@ model User {
   accounts         Account[]
   sales            Sale[]
   productionBatches ProductionBatch[]
-  ingredientPurchases IngredientPurchase[]
+  purchases         Purchase[]
   members          Member[]
   subscription     Subscription?
 
@@ -203,8 +203,9 @@ model Workspace {
   sales              Sale[]
   saleItems          SaleItem[]
   ingredients        Ingredient[]
-  markets            Market[]
-  ingredientPurchases IngredientPurchase[]
+  suppliers          Supplier[]
+  purchases          Purchase[]
+  purchaseItems      PurchaseItem[]
   recipes            Recipe[]
   recipeIngredients  RecipeIngredient[]
   productionBatches  ProductionBatch[]
@@ -260,6 +261,7 @@ model Product {
   saleItems      SaleItem[]
   stockMovements StockMovement[]
   productionBatches ProductionBatch[]
+  resaleIngredient Ingredient?
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -449,10 +451,17 @@ model Ingredient {
   name      String // ex.: "Açúcar"
   baseUnit  BaseUnit @default(G)
   minStock  Float?   @default(0) // estoque mínimo na unidade base (para alertas)
+
+  isRawMaterial Boolean @default(true) // entra em receita/produção
+  forResale     Boolean @default(false) // vira produto vendável
+
+  resaleProductId String?  @unique
+  resaleProduct   Product? @relation(fields: [resaleProductId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  purchases         IngredientPurchase[]
+  purchaseItems     PurchaseItem[]
   recipeIngredients RecipeIngredient[]
   shoppingItems     ShoppingListItem[]
 
@@ -463,42 +472,60 @@ model Ingredient {
   @@map("ingredient")
 }
 
-model Market {
+model Supplier {
   id        String   @id @default(cuid())
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  purchases IngredientPurchase[]
+  purchases Purchase[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, name])
-  @@map("market")
+  @@map("supplier")
 }
 
-// Compra de ingrediente: base para custo por unidade.
-model IngredientPurchase {
-  id           String     @id @default(cuid())
-  marketId     String
-  market       Market     @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  userId       String?
-  user         User?      @relation(fields: [userId], references: [id])
+// Cabeçalho de uma compra: um fornecedor (opcional), vários itens.
+model Purchase {
+  id         String    @id @default(cuid())
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
 
-  quantity   Float // quantidade comprada na unidade abaixo
-  unit       BaseUnit // unidade da compra (ex.: comprei em KG -> normalizar p/ base)
-  pricePaidCents Int // valor pago em centavos
   purchasedAt DateTime @default(now())
-  createdAt  DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  items PurchaseItem[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, ingredientId, purchasedAt])
-  @@map("ingredient_purchase")
+  @@index([workspaceId, purchasedAt])
+  @@map("purchase")
+}
+
+// Linha de uma compra: um insumo, quantidade e preço pago. Base para custo por unidade.
+model PurchaseItem {
+  id           String     @id @default(cuid())
+  purchaseId   String
+  purchase     Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  quantity       Float // quantidade comprada na unidade base do ingrediente
+  unit           BaseUnit
+  pricePaidCents Int // valor pago em centavos por esta linha
+  createdAt      DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, ingredientId])
+  @@map("purchase_item")
 }
 
 // ─────────────────────────────────────────────
@@ -594,6 +621,7 @@ enum StockMovementType {
   PRODUCTION // +
   SALE // -
   ADJUSTMENT // ±
+  PURCHASE // + (compra de insumo marcado para revenda)
 }
 
 model StockMovement {
