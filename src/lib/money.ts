@@ -24,12 +24,3 @@ export function parseBRL(input: string): number {
   return Math.round(value * 100);
 }
 
-/**
- * Custo por unidade base a partir de uma compra.
- * Ex.: paguei 250 centavos por 1000g -> 0.25 centavos/g.
- * Retorna centavos por unidade (pode ser fracionário).
- */
-export function unitCost(pricePaidCents: number, quantity: number): number {
-  if (quantity <= 0) return 0;
-  return pricePaidCents / quantity;
-}
