@@ -11,19 +11,27 @@ import {
 import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { getWorkspaceContext } from "@/server/tenant/context";
 
 export default async function AdminPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const [session, { role }] = await Promise.all([
+    auth.api.getSession({ headers: await headers() }),
+    getWorkspaceContext(),
+  ]);
   const isPlatformAdmin =
     (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
   const sections = [
-    {
-      href: "/workspaces/plan",
-      label: "Plano",
-      description: "Sua assinatura e forma de pagamento.",
-      icon: CreditCard,
-    },
+    ...(role === "OWNER"
+      ? [
+          {
+            href: "/workspaces/plan",
+            label: "Plano",
+            description: "Sua assinatura e forma de pagamento.",
+            icon: CreditCard,
+          },
+        ]
+      : []),
     {
       href: "/admin/recipes",
       label: "Receitas",

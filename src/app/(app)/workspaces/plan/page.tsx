@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { PlanPanel } from "@/components/workspaces/plan-panel";
 import { isPendingChargeWarningActive } from "@/lib/pending-charge";
@@ -10,7 +11,9 @@ import {
 } from "@/server/tenant/subscription";
 
 export default async function PlanPage() {
-  const { userId } = await getWorkspaceContext();
+  const { userId, role } = await getWorkspaceContext();
+  if (role !== "OWNER") redirect("/admin");
+
   const [sub, owned, active] = await Promise.all([
     getSubscription(userId),
     countOwnedWorkspaces(userId),
