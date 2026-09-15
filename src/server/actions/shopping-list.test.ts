@@ -35,13 +35,16 @@ describe("generateAutoShoppingList", () => {
     const ingredient = await testDb.ingredient.create({
       data: { name: "Açúcar", baseUnit: "G", minStock: 1000, workspaceId: workspace.id },
     });
-    const market = await testDb.market.create({
+    const supplier = await testDb.supplier.create({
       data: { name: "Atacadão", workspaceId: workspace.id },
     });
-    await testDb.ingredientPurchase.create({
+    const purchase = await testDb.purchase.create({
+      data: { supplierId: supplier.id, workspaceId: workspace.id },
+    });
+    await testDb.purchaseItem.create({
       data: {
         ingredientId: ingredient.id,
-        marketId: market.id,
+        purchaseId: purchase.id,
         workspaceId: workspace.id,
         quantity: 400,
         unit: "G",
@@ -71,12 +74,15 @@ describe("generateAutoShoppingList", () => {
     const ingredient = await testDb.ingredient.create({
       data: { name: "Farinha", baseUnit: "G", minStock: 1000, workspaceId: workspace.id },
     });
-    const market = await testDb.market.create({
+    const supplier = await testDb.supplier.create({
       data: { name: "Atacadão", workspaceId: workspace.id },
     });
-    await testDb.ingredientPurchase.create({
+    const purchase = await testDb.purchase.create({
+      data: { supplierId: supplier.id, workspaceId: workspace.id },
+    });
+    await testDb.purchaseItem.create({
       data: {
-        ingredientId: ingredient.id, marketId: market.id, workspaceId: workspace.id,
+        ingredientId: ingredient.id, purchaseId: purchase.id, workspaceId: workspace.id,
         quantity: 200, unit: "G", pricePaidCents: 400,
       },
     });
