@@ -263,6 +263,28 @@ export async function cancelInvite(workspaceId: string, inviteId: string): Promi
   });
 }
 
+export async function updateMemberRole(
+  workspaceId: string,
+  memberId: string,
+  role: MemberRole,
+  actingUserId: string,
+): Promise<void> {
+  if (role === "OWNER") {
+    throw new Error("Não é possível definir alguém como proprietário por aqui.");
+  }
+
+  const target = await db.member.findFirst({ where: { id: memberId, workspaceId } });
+  if (!target) throw new Error("Membro não encontrado.");
+  if (target.role === "OWNER") {
+    throw new Error("Não é possível alterar o papel do proprietário.");
+  }
+  if (target.userId === actingUserId) {
+    throw new Error("Você não pode alterar seu próprio papel.");
+  }
+
+  await db.member.update({ where: { id: memberId }, data: { role } });
+}
+
 const ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
 const attemptsByUser = new Map<string, { count: number; resetAt: number }>();
 

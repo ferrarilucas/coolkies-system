@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { InvitePanel } from "@/components/workspaces/invite-panel";
+import { MemberRoleSelect } from "@/components/workspaces/member-role-select";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { listMembers, listPendingInvites } from "@/server/tenant/workspaces";
 import { roleLabel } from "@/lib/roles";
@@ -43,9 +44,13 @@ export default async function MembersPage() {
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{m.email}</p>
               </div>
-              <Badge variant={m.role === "OWNER" ? "default" : "secondary"}>
-                {roleLabel(m.role)}
-              </Badge>
+              {canManage && !m.isSelf && m.role !== "OWNER" ? (
+                <MemberRoleSelect memberId={m.id} role={m.role} />
+              ) : (
+                <Badge variant={m.role === "OWNER" ? "default" : "secondary"}>
+                  {roleLabel(m.role)}
+                </Badge>
+              )}
             </li>
           ))}
         </ul>

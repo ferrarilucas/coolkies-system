@@ -8,6 +8,7 @@ import {
   createWorkspaceForUser,
   joinWithCode,
   setActiveWorkspace,
+  updateMemberRole as updateMemberRoleRecord,
 } from "@/server/tenant/workspaces";
 import { formatInviteCode } from "@/server/tenant/workspaces";
 import { getWorkspaceContext, requireRole } from "@/server/tenant/context";
@@ -93,6 +94,22 @@ export async function cancelInvite(inviteId: string): Promise<ActionResult> {
   try {
     const { workspaceId } = await requireRole("OWNER", "ADMIN");
     await cancelInviteRecord(workspaceId, inviteId);
+  } catch (e) {
+    return { ok: false, error: messageOf(e) };
+  }
+  revalidatePath("/workspaces/members");
+  return { ok: true };
+}
+
+export async function updateMemberRole(
+  memberId: string,
+  role: string,
+): Promise<ActionResult> {
+  const cleanRole = (role === "ADMIN" ? "ADMIN" : "MEMBER") as MemberRole;
+
+  try {
+    const { workspaceId, userId } = await requireRole("OWNER", "ADMIN");
+    await updateMemberRoleRecord(workspaceId, memberId, cleanRole, userId);
   } catch (e) {
     return { ok: false, error: messageOf(e) };
   }
