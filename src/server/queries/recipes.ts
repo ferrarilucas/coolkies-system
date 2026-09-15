@@ -1,4 +1,5 @@
 import { getWorkspaceDb } from "@/server/tenant/context";
+import { unitCostFromLastPurchase } from "./purchase-cost";
 
 // ─── Lista com custo estimado ────────────────────────────────────────────────
 
@@ -13,8 +14,8 @@ export async function getRecipesWithCost() {
         include: {
           ingredient: {
             include: {
-              purchases: {
-                orderBy: { purchasedAt: "desc" },
+              purchaseItems: {
+                orderBy: { purchase: { purchasedAt: "desc" } },
                 take: 1,
                 select: { quantity: true, pricePaidCents: true },
               },
@@ -30,12 +31,12 @@ export async function getRecipesWithCost() {
     let hasAllCosts = recipe.ingredients.length > 0;
 
     for (const ri of recipe.ingredients) {
-      const lastPurchase = ri.ingredient.purchases[0] ?? null;
-      if (!lastPurchase || lastPurchase.quantity <= 0) {
+      const lastPurchase = ri.ingredient.purchaseItems[0] ?? null;
+      const unitCost = unitCostFromLastPurchase(lastPurchase);
+      if (unitCost === null) {
         hasAllCosts = false;
         continue;
       }
-      const unitCost = lastPurchase.pricePaidCents / lastPurchase.quantity;
       totalCostCents += unitCost * ri.quantity;
     }
 
@@ -66,8 +67,8 @@ export async function getRecipeById(id: string) {
         include: {
           ingredient: {
             include: {
-              purchases: {
-                orderBy: { purchasedAt: "desc" },
+              purchaseItems: {
+                orderBy: { purchase: { purchasedAt: "desc" } },
                 take: 1,
                 select: { quantity: true, pricePaidCents: true },
               },
@@ -84,15 +85,13 @@ export async function getRecipeById(id: string) {
   return {
     ...recipe,
     ingredients: recipe.ingredients.map((ri) => {
-      const last = ri.ingredient.purchases[0] ?? null;
-      const unitCostCents =
-        last && last.quantity > 0 ? last.pricePaidCents / last.quantity : null;
+      const last = ri.ingredient.purchaseItems[0] ?? null;
       return {
         ingredientId: ri.ingredientId,
         ingredientName: ri.ingredient.name,
         baseUnit: ri.ingredient.baseUnit,
         quantity: ri.quantity,
-        unitCostCents,
+        unitCostCents: unitCostFromLastPurchase(last),
       };
     }),
   };
@@ -107,23 +106,18 @@ export async function getIngredientOptions() {
   const ings = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {
-      purchases: {
-        orderBy: { purchasedAt: "desc" },
+      purchaseItems: {
+        orderBy: { purchase: { purchasedAt: "desc" } },
         take: 1,
         select: { quantity: true, pricePaidCents: true },
       },
     },
   });
 
-  return ings.map((ing) => {
-    const last = ing.purchases[0] ?? null;
-    const unitCostCents =
-      last && last.quantity > 0 ? last.pricePaidCents / last.quantity : null;
-    return {
-      id: ing.id,
-      name: ing.name,
-      baseUnit: ing.baseUnit as string,
-      unitCostCents,
-    };
-  });
+  return ings.map((ing) => ({
+    id: ing.id,
+    name: ing.name,
+    baseUnit: ing.baseUnit as string,
+    unitCostCents: unitCostFromLastPurchase(ing.purchaseItems[0] ?? null),
+  }));
 }
