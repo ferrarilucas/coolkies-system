@@ -63,11 +63,7 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
   if (!isRawMaterial && !forResale) return { ok: false, error: "Marque matéria-prima e/ou revenda." };
 
   try {
-    let resaleProductId: string | null = null;
-    if (forResale) {
-      const product = await db.product.create({ data: { name, workspaceId } });
-      resaleProductId = product.id;
-    }
+    const resaleProductId = await syncResaleProduct(db, workspaceId, null, forResale, name);
     await db.ingredient.create({
       data: { name, baseUnit, minStock, isRawMaterial, forResale, resaleProductId, workspaceId },
     });
@@ -148,11 +144,7 @@ export async function createIngredientForPurchase(
   if (!isRawMaterial && !forResale) return { ok: false, error: "Marque matéria-prima e/ou revenda." };
 
   try {
-    let resaleProductId: string | null = null;
-    if (forResale) {
-      const product = await db.product.create({ data: { name, workspaceId } });
-      resaleProductId = product.id;
-    }
+    const resaleProductId = await syncResaleProduct(db, workspaceId, null, forResale, name);
     const ingredient = await db.ingredient.create({
       data: { name, baseUnit, isRawMaterial, forResale, resaleProductId, workspaceId },
     });
