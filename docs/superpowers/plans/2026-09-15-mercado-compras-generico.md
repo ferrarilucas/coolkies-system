@@ -2069,6 +2069,23 @@ por:
 
 (`resaleUnitCostByProductId` só tem entrada para produtos vinculados a um insumo `forResale`, então `matched` items de produtos "normais" simplesmente não incrementam `resaleCogs`.)
 
+**Correção obrigatória, achada em revisão:** mais acima nesta mesma função, na seção "KPIs + mix + clientes" (antes deste Step 3, já existente no arquivo hoje), `soldCookies` é somado a partir de `saleQty`:
+
+```ts
+    const saleQty = matchedItems.reduce((s, i) => s + i.quantity, 0);
+```
+
+Esse cálculo soma a quantidade de **todos** os itens vendidos, inclusive os ligados a insumo de revenda — e `productionCogs = unitCost * soldCookies` (Step 3, acima) assume que toda unidade em `soldCookies` é um cookie custeado pela produção. Sem ajuste, uma venda que misture cookie e item de revenda cobra o item de revenda duas vezes: uma via `productionCogs` e outra via `resaleCogs` (que já está correto). Trocar essa linha por:
+
+```ts
+    const saleQty = matchedItems.reduce(
+      (s, i) => s + (resaleUnitCostByProductId.has(i.productId) ? 0 : i.quantity),
+      0,
+    );
+```
+
+Isso também corrige de quebra o significado do KPI `soldCookies`/"cookies vendidos": um refrigerante revendido nunca foi um cookie, não deveria contar nesse número. Nada mais no loop depende de `saleQty` além dessa soma (o `mixMap`, logo abaixo, usa `i.quantity` direto por item e continua contando itens de revenda normalmente no detalhamento por produto — não mexer nele).
+
 - [ ] **Step 4: Editar a seção final (`Mercado` → `Fornecedor`)**
 
 Trocar:
