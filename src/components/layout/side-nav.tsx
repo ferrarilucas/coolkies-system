@@ -6,9 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
+  ShoppingBag,
   Cookie,
   UtensilsCrossed,
-  Store,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -46,7 +46,7 @@ const items: NavItem[] = [
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Produtos", icon: Cookie },
   { href: "/pantry", label: "Despensa", icon: UtensilsCrossed },
-  { href: "/markets", label: "Mercados e preços", icon: Store },
+  { href: "/purchases", label: "Compras", icon: ShoppingBag },
   { href: "/admin", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 

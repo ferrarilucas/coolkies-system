@@ -68,7 +68,7 @@ async function main() {
   }
 
   // Mercado exemplo
-  await db.market.upsert({
+  await db.supplier.upsert({
     where: {
       workspaceId_name: { workspaceId: workspace.id, name: "Mercado Central" },
     },

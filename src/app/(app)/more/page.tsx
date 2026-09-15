@@ -7,6 +7,7 @@ import {
   Cookie,
   Palette,
   Settings,
+  ShoppingBag,
   Store,
   UtensilsCrossed,
   type LucideIcon,
@@ -64,10 +65,10 @@ export default async function MorePage() {
       icon: UtensilsCrossed,
     },
     {
-      href: "/markets",
-      label: "Mercados e preços",
-      description: "Compras e custo de ingredientes",
-      icon: Store,
+      href: "/purchases",
+      label: "Compras",
+      description: "Compras de matéria-prima e itens de revenda",
+      icon: ShoppingBag,
     },
     ...(isAdmin(user)
       ? [
