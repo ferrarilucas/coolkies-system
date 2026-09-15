@@ -1,4 +1,5 @@
 import { getWorkspaceDb } from "@/server/tenant/context";
+import { unitCostFromLastPurchase } from "./purchase-cost";
 
 export type IngredientWithCost = Awaited<
   ReturnType<typeof getIngredientsWithLastCost>
@@ -9,26 +10,18 @@ export async function getIngredientsWithLastCost() {
   const ingredients = await db.ingredient.findMany({
     orderBy: { name: "asc" },
     include: {
-      purchases: {
-        orderBy: { purchasedAt: "desc" },
+      purchaseItems: {
+        orderBy: { purchase: { purchasedAt: "desc" } },
         take: 1,
-        select: {
-          quantity: true,
-          unit: true,
-          pricePaidCents: true,
-          purchasedAt: true,
-        },
+        select: { quantity: true, pricePaidCents: true },
       },
     },
   });
 
   return ingredients.map((ing) => {
-    const last = ing.purchases[0] ?? null;
-    // custo por unidade base = pricePaidCents / quantity (já em unidade base)
-    const unitCostCents = last && last.quantity > 0
-      ? last.pricePaidCents / last.quantity
-      : null;
-
-    return { ...ing, lastPurchase: last, unitCostCents };
+    const last = ing.purchaseItems[0] ?? null;
+    const unitCostCents = unitCostFromLastPurchase(last);
+    const { purchaseItems, ...rest } = ing;
+    return { ...rest, lastPurchase: last, unitCostCents };
   });
 }
