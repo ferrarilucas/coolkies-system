@@ -20,7 +20,7 @@ vi.mock("@/server/tenant/context", () => ({
   },
 }));
 
-const { createItem, updateItem, createItemForPurchase } = await import("./items");
+const { createItem, updateItem, createItemForPurchase, deleteItem } = await import("./items");
 
 function fd(fields: Record<string, string>): FormData {
   const f = new FormData();
@@ -144,5 +144,54 @@ describe("createItemForPurchase", () => {
       fd({ name: "Farinha granel", unit: "G", sellable: "on" }),
     );
     expect(res.ok).toBe(false);
+  });
+});
+
+describe("deleteItem", () => {
+  beforeEach(async () => {
+    await resetDb();
+    const workspace = await createWorkspace("Confeitaria 4");
+    context.workspaceId = workspace.id;
+    context.canWrite = true;
+  });
+
+  it("deleta item com sucesso", async () => {
+    await createItem(fd({ name: "Farinha", unit: "G", productionInput: "on" }));
+    const item = await testDb.item.findFirstOrThrow({ where: { name: "Farinha" } });
+
+    const res = await deleteItem(item.id);
+    expect(res.ok).toBe(true);
+
+    const deletedItem = await testDb.item.findUnique({ where: { id: item.id } });
+    expect(deletedItem).toBeNull();
+  });
+
+  it("rejeita exclusão quando item está vinculado a uma receita", async () => {
+    await createItem(fd({ name: "Açúcar", unit: "G", productionInput: "on" }));
+    const item = await testDb.item.findFirstOrThrow({ where: { name: "Açúcar" } });
+
+    await testDb.recipe.create({
+      data: {
+        name: "Bolo de Chocolate",
+        workspaceId: context.workspaceId,
+      },
+    });
+    const recipe = await testDb.recipe.findFirstOrThrow({ where: { name: "Bolo de Chocolate" } });
+
+    await testDb.recipeItem.create({
+      data: {
+        recipeId: recipe.id,
+        itemId: item.id,
+        quantity: 100,
+        workspaceId: context.workspaceId,
+      },
+    });
+
+    const res = await deleteItem(item.id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toBeDefined();
+
+    const stillExists = await testDb.item.findUnique({ where: { id: item.id } });
+    expect(stillExists).not.toBeNull();
   });
 });
