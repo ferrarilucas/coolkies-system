@@ -195,23 +195,22 @@ model Workspace {
   members     Member[]
   invitations Invitation[]
 
-  products           Product[]
-  flavors            Flavor[]
-  priceListItems     PriceListItem[]
-  priceHistories     PriceHistory[]
-  customers          Customer[]
-  sales              Sale[]
-  saleItems          SaleItem[]
-  ingredients        Ingredient[]
-  suppliers          Supplier[]
-  purchases          Purchase[]
-  purchaseItems      PurchaseItem[]
-  recipes            Recipe[]
-  recipeIngredients  RecipeIngredient[]
-  productionBatches  ProductionBatch[]
-  productionFillings ProductionFilling[]
-  stockMovements     StockMovement[]
-  shoppingListItems  ShoppingListItem[]
+  items                  Item[]
+  variants               Variant[]
+  priceListItems         PriceListItem[]
+  priceHistories         PriceHistory[]
+  customers              Customer[]
+  sales                  Sale[]
+  saleItems              SaleItem[]
+  suppliers              Supplier[]
+  purchases              Purchase[]
+  purchaseItems          PurchaseItem[]
+  recipes                Recipe[]
+  recipeItems            RecipeItem[]
+  productionBatches      ProductionBatch[]
+  productionVariantLines ProductionVariantLine[]
+  stockMovements         StockMovement[]
+  shoppingListItems      ShoppingListItem[]
 
   @@map("workspace")
 }
@@ -249,37 +248,42 @@ model Invitation {
 // CATÁLOGO ("Valores"): produtos, sabores, preços
 // ─────────────────────────────────────────────
 
-model Product {
+model Item {
   id        String   @id @default(cuid())
-  name      String // ex.: "Cookie"
+  name      String
   active    Boolean  @default(true)
+  unit      BaseUnit @default(UN)
+  sellable        Boolean @default(true)
+  productionInput Boolean @default(false)
+  minStock  Float?   @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  flavors        Flavor[]
+  variants       Variant[]
   priceListItems PriceListItem[]
   saleItems      SaleItem[]
   stockMovements StockMovement[]
   productionBatches ProductionBatch[]
-  resaleIngredient Ingredient?
+  purchaseItems     PurchaseItem[]
+  recipeItems       RecipeItem[]
+  shoppingItems     ShoppingListItem[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, name])
-  @@map("product")
+  @@map("item")
 }
 
-model Flavor {
+model Variant {
   id        String   @id @default(cuid())
-  name      String // ex.: "Chocolate"
+  name      String
   active    Boolean  @default(true)
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  // Receita de recheio (ingredientes por unidade deste sabor)
-  fillingRecipeId String?
-  fillingRecipe   Recipe? @relation("FlavorFillingRecipe", fields: [fillingRecipeId], references: [id], onDelete: SetNull)
+  recipeId  String?
+  recipe    Recipe? @relation("VariantRecipe", fields: [recipeId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -288,23 +292,23 @@ model Flavor {
   saleItems      SaleItem[]
   stockMovements StockMovement[]
   productionBatches ProductionBatch[]
-  productionFillings ProductionFilling[]
+  productionVariantLines ProductionVariantLine[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, name])
+  @@unique([itemId, name])
   @@index([workspaceId])
-  @@map("flavor")
+  @@map("variant")
 }
 
 // Preço de venda ATUAL por produto+sabor.
 model PriceListItem {
   id         String   @id @default(cuid())
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  flavorId   String?
-  flavor     Flavor?  @relation(fields: [flavorId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    Variant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
   priceCents Int // preço unitário atual em centavos
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
@@ -315,7 +319,7 @@ model PriceListItem {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, flavorId])
+  @@unique([itemId, variantId])
   @@index([workspaceId])
   @@map("price_list_item")
 }
@@ -417,10 +421,10 @@ model SaleItem {
   id       String  @id @default(cuid())
   saleId   String
   sale     Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  flavorId  String?
-  flavor    Flavor? @relation(fields: [flavorId], references: [id])
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id])
+  variantId String?
+  variant   Variant? @relation(fields: [variantId], references: [id])
 
   quantity Int
 
@@ -444,32 +448,6 @@ enum BaseUnit {
   G // grama
   ML // mililitro
   UN // unidade
-}
-
-model Ingredient {
-  id        String   @id @default(cuid())
-  name      String // ex.: "Açúcar"
-  baseUnit  BaseUnit @default(G)
-  minStock  Float?   @default(0) // estoque mínimo na unidade base (para alertas)
-
-  isRawMaterial Boolean @default(true) // entra em receita/produção
-  forResale     Boolean @default(false) // vira produto vendável
-
-  resaleProductId String?  @unique
-  resaleProduct   Product? @relation(fields: [resaleProductId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  purchaseItems     PurchaseItem[]
-  recipeIngredients RecipeIngredient[]
-  shoppingItems     ShoppingListItem[]
-
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@unique([workspaceId, name])
-  @@map("ingredient")
 }
 
 model Supplier {
@@ -513,8 +491,8 @@ model PurchaseItem {
   id           String     @id @default(cuid())
   purchaseId   String
   purchase     Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   quantity       Float // quantidade comprada na unidade base do ingrediente
   unit           BaseUnit
@@ -524,7 +502,7 @@ model PurchaseItem {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, ingredientId])
+  @@index([workspaceId, itemId])
   @@map("purchase_item")
 }
 
@@ -541,10 +519,9 @@ model Recipe {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ingredients RecipeIngredient[]
+  items RecipeItem[]
   productionBatches ProductionBatch[]
-  // Sabores que usam esta receita como recheio
-  flavorFillings Flavor[] @relation("FlavorFillingRecipe")
+  variantRecipes Variant[] @relation("VariantRecipe")
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -553,20 +530,20 @@ model Recipe {
   @@map("recipe")
 }
 
-model RecipeIngredient {
-  id           String     @id @default(cuid())
-  recipeId     String
-  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  quantity     Float // quantidade na unidade base do ingrediente
+model RecipeItem {
+  id       String @id @default(cuid())
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  itemId   String
+  item     Item   @relation(fields: [itemId], references: [id])
+  quantity Float
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([recipeId, ingredientId])
+  @@unique([recipeId, itemId])
   @@index([workspaceId])
-  @@map("recipe_ingredient")
+  @@map("recipe_item")
 }
 
 // ─────────────────────────────────────────────
@@ -575,10 +552,10 @@ model RecipeIngredient {
 
 model ProductionBatch {
   id        String   @id @default(cuid())
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  flavorId  String?
-  flavor    Flavor?  @relation(fields: [flavorId], references: [id])
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id])
+  variantId String?
+  variant   Variant? @relation(fields: [variantId], references: [id])
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
 
@@ -591,8 +568,8 @@ model ProductionBatch {
   producedAt DateTime @default(now())
   createdAt DateTime @default(now())
 
-  movements StockMovement[]
-  fillings  ProductionFilling[] // recheios aplicados neste lote
+  movements    StockMovement[]
+  variantLines ProductionVariantLine[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -601,35 +578,35 @@ model ProductionBatch {
   @@map("production_batch")
 }
 
-// Recheios aplicados dentro de um lote de produção
-model ProductionFilling {
+model ProductionVariantLine {
   id                String          @id @default(cuid())
   productionBatchId String
   productionBatch   ProductionBatch @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
-  flavorId          String
-  flavor            Flavor          @relation(fields: [flavorId], references: [id])
-  quantity          Int             // quantos cookies deste lote receberam este recheio
+  variantId         String
+  variant           Variant         @relation(fields: [variantId], references: [id])
+  quantity          Int
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
-  @@map("production_filling")
+  @@map("production_variant_line")
 }
 
 enum StockMovementType {
-  PRODUCTION // +
-  SALE // -
-  ADJUSTMENT // ±
-  PURCHASE // + (compra de insumo marcado para revenda)
+  PRODUCTION
+  CONSUMPTION
+  SALE
+  ADJUSTMENT
+  PURCHASE
 }
 
 model StockMovement {
   id        String            @id @default(cuid())
-  productId String
-  product   Product           @relation(fields: [productId], references: [id])
-  flavorId  String?
-  flavor    Flavor?           @relation(fields: [flavorId], references: [id])
+  itemId    String
+  item      Item              @relation(fields: [itemId], references: [id])
+  variantId String?
+  variant   Variant?          @relation(fields: [variantId], references: [id])
   type      StockMovementType
   quantity  Int // positivo ou negativo
   reason    String?
@@ -645,21 +622,20 @@ model StockMovement {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, productId, flavorId])
+  @@index([workspaceId, itemId, variantId])
   @@map("stock_movement")
 }
 
 model ShoppingListItem {
-  id           String      @id @default(cuid())
-  ingredientId String?
-  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
-  label        String // texto livre caso não seja um ingrediente cadastrado
-  quantity     Float?
-  unit         BaseUnit?
-  done         Boolean     @default(false)
-  autoGenerated Boolean    @default(false) // gerado por estoque baixo
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id        String    @id @default(cuid())
+  itemId    String?
+  item      Item?     @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  label     String // texto livre caso não seja um item cadastrado
+  quantity  Float?
+  unit      BaseUnit?
+  done      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
