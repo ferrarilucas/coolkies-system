@@ -24,7 +24,7 @@
 
 **Files:**
 - Modify: `prisma/schema.prisma`
-- Create: `prisma/manual-migrations/2026-09-16-item-unification.sql`
+- Create: `prisma/migrations/20260916000000_item_unification/migration.sql`
 - Test: verificação manual via query (não há suite automatizada para a migração em si — a Task 2 cobre a parte automatizável)
 
 **Interfaces:**
@@ -43,7 +43,7 @@ WHERE NOT (i."forResale" = true AND i."resaleProductId" = p.id); -- exclui o par
 
 - [ ] **Step 2: Escrever a migração SQL completa**
 
-Crie `prisma/manual-migrations/2026-09-16-item-unification.sql`:
+Crie `prisma/migrations/20260916000000_item_unification/migration.sql`:
 
 ```sql
 BEGIN;
@@ -124,7 +124,7 @@ COMMIT;
 - [ ] **Step 3: Aplicar em `cookies_test` primeiro**
 
 ```bash
-docker exec -i <container_postgres> psql -U <user> -d cookies_test < prisma/manual-migrations/2026-09-16-item-unification.sql
+docker exec -i <container_postgres> psql -U <user> -d cookies_test < prisma/migrations/20260916000000_item_unification/migration.sql
 ```
 
 (troque `<container_postgres>`/`<user>` pelos valores reais do projeto — confira em `docker ps` / `.env` se não souber de cor.)
@@ -282,7 +282,7 @@ Compare visualmente `/tmp/introspected.prisma` com `prisma/schema.prisma` — de
 - [ ] **Step 9: Commit**
 
 ```bash
-git add prisma/schema.prisma prisma/manual-migrations/2026-09-16-item-unification.sql
+git add prisma/schema.prisma prisma/migrations/20260916000000_item_unification/migration.sql
 git commit -m "$(cat <<'EOF'
 feat(schema): unifica Product+Ingredient em Item, StockMovement vira fonte única de estoque
 
