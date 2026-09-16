@@ -93,41 +93,50 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
   });
   const ingredientMap = new Map(ingredients.map((i) => [i.id, i]));
 
-  const purchase = await db.purchase.create({
-    data: {
-      supplierId,
-      userId,
-      purchasedAt,
-      workspaceId,
-      items: {
-        create: items.map((item) => {
-          const ing = ingredientMap.get(item.ingredientId);
-          const { quantity, unit } = toBaseUnit(item.quantity, item.unit, ing?.baseUnit);
-          return {
-            ingredientId: item.ingredientId,
-            quantity,
-            unit,
-            pricePaidCents: item.pricePaidCents,
-            workspaceId,
-          };
-        }),
-      },
-    },
-    include: { items: true },
-  });
-
-  for (const created of purchase.items) {
-    const ing = ingredientMap.get(created.ingredientId);
-    if (ing?.forResale && ing.resaleProductId) {
-      await db.stockMovement.create({
+  try {
+    await db.$transaction(async (tx) => {
+      const created = await tx.purchase.create({
         data: {
-          productId: ing.resaleProductId,
-          type: StockMovementType.PURCHASE,
-          quantity: created.quantity,
+          supplierId,
+          userId,
+          purchasedAt,
           workspaceId,
+          items: {
+            create: items.map((item) => {
+              const ing = ingredientMap.get(item.ingredientId);
+              const { quantity, unit } = toBaseUnit(item.quantity, item.unit, ing?.baseUnit);
+              return {
+                ingredientId: item.ingredientId,
+                quantity,
+                unit,
+                pricePaidCents: item.pricePaidCents,
+                workspaceId,
+              };
+            }),
+          },
         },
+        include: { items: true },
       });
-    }
+
+      for (const item of created.items) {
+        const ing = ingredientMap.get(item.ingredientId);
+        if (ing?.forResale && ing.resaleProductId) {
+          await tx.stockMovement.create({
+            data: {
+              productId: ing.resaleProductId,
+              type: StockMovementType.PURCHASE,
+              quantity: Math.round(item.quantity),
+              purchaseId: created.id,
+              workspaceId,
+            },
+          });
+        }
+      }
+
+      return created;
+    });
+  } catch {
+    return { ok: false, error: "Não foi possível registrar a compra." };
   }
 
   revalidatePath("/purchases");
@@ -139,6 +148,7 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
 export async function deletePurchase(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
   await assertCanWrite();
+  await db.stockMovement.deleteMany({ where: { purchaseId: id } });
   await db.purchase.delete({ where: { id } });
   revalidatePath("/purchases");
   revalidatePath("/pantry");
