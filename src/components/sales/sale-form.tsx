@@ -46,9 +46,9 @@ export type CatalogProduct = {
 
 type SaleItemLine = {
   key: string;
-  productId: string;
+  itemId: string;
   productName: string;
-  flavorId: string | null;
+  variantId: string | null;
   flavorName: string | null;
   quantity: number;
   unitPriceCents: number;
@@ -66,9 +66,9 @@ function blankLine(catalog: CatalogProduct[]): SaleItemLine {
   const flavor = defaultFlavor(only);
   return {
     key: crypto.randomUUID(),
-    productId: only?.id ?? "",
+    itemId: only?.id ?? "",
     productName: only?.name ?? "",
-    flavorId: flavor?.id ?? null,
+    variantId: flavor?.id ?? null,
     flavorName: flavor?.name ?? null,
     quantity: 1,
     unitPriceCents: flavor?.priceCents ?? only?.genericPriceCents ?? 0,
@@ -149,16 +149,16 @@ function ItemRow({
   onRemove: () => void;
   showTotal: boolean;
 }) {
-  const product = catalog.find((p) => p.id === line.productId);
+  const product = catalog.find((p) => p.id === line.itemId);
   const flavors = product?.flavors ?? [];
 
   function handleProductChange(pid: string) {
     const p = catalog.find((x) => x.id === pid);
     const flavor = defaultFlavor(p);
     onChange({
-      productId: pid,
+      itemId: pid,
       productName: p?.name ?? "",
-      flavorId: flavor?.id ?? null,
+      variantId: flavor?.id ?? null,
       flavorName: flavor?.name ?? null,
       unitPriceCents: flavor?.priceCents ?? p?.genericPriceCents ?? 0,
     });
@@ -167,7 +167,7 @@ function ItemRow({
   function handleFlavorChange(fid: string) {
     const flavor = product?.flavors.find((f) => f.id === fid);
     onChange({
-      flavorId: fid,
+      variantId: fid,
       flavorName: flavor?.name ?? null,
       unitPriceCents:
         flavor?.priceCents ?? product?.genericPriceCents ?? line.unitPriceCents,
@@ -179,8 +179,8 @@ function ItemRow({
   return (
     <div className="rounded-lg border bg-card p-3 space-y-2">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Select value={line.productId || ""} onValueChange={handleProductChange}>
-          <SelectTrigger className={cn(!line.productId && "text-muted-foreground")}>
+        <Select value={line.itemId || ""} onValueChange={handleProductChange}>
+          <SelectTrigger className={cn(!line.itemId && "text-muted-foreground")}>
             <SelectValue placeholder="Produto…" />
           </SelectTrigger>
           <SelectContent>
@@ -191,8 +191,8 @@ function ItemRow({
         </Select>
 
         {flavors.length > 0 && (
-          <Select value={line.flavorId ?? ""} onValueChange={handleFlavorChange}>
-            <SelectTrigger className={cn(!line.flavorId && "text-muted-foreground")}>
+          <Select value={line.variantId ?? ""} onValueChange={handleFlavorChange}>
+            <SelectTrigger className={cn(!line.variantId && "text-muted-foreground")}>
               <SelectValue placeholder="Sabor…" />
             </SelectTrigger>
             <SelectContent>
@@ -213,7 +213,7 @@ function ItemRow({
         <MoneyInput
           valueCents={line.unitPriceCents}
           onChangeCents={(c) => onChange({ unitPriceCents: c })}
-          disabled={!line.productId}
+          disabled={!line.itemId}
           className="flex-1 min-w-0"
         />
         {showTotal && (
@@ -271,7 +271,7 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     customDate,
     discountType,
     discountValue,
-    lines: lines.map((l) => [l.productId, l.flavorId, l.quantity, l.unitPriceCents]),
+    lines: lines.map((l) => [l.itemId, l.variantId, l.quantity, l.unitPriceCents]),
   });
   const firstSnapshot = useRef<string | null>(null);
   if (firstSnapshot.current === null) firstSnapshot.current = currentSnapshot;
@@ -307,7 +307,7 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     setLines((prev) => [...prev, blankLine(catalog)]);
   }
 
-  const filledLines = lines.filter((l) => l.productId !== "");
+  const filledLines = lines.filter((l) => l.itemId !== "");
   const subtotalCents = filledLines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0);
   const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
   const totalCents = subtotalCents - discountCents;
@@ -327,8 +327,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     }
 
     const missingFlavor = filledLines.find((l) => {
-      const p = catalog.find((x) => x.id === l.productId);
-      return (p?.flavors.length ?? 0) > 0 && !l.flavorId;
+      const p = catalog.find((x) => x.id === l.itemId);
+      return (p?.flavors.length ?? 0) > 0 && !l.variantId;
     });
     if (missingFlavor) {
       toast.error(`Escolha o sabor de ${missingFlavor.productName}.`);
@@ -348,8 +348,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     fd.set(
       "items",
       JSON.stringify(
-        filledLines.map(({ productId, productName, flavorId, flavorName, quantity, unitPriceCents }) => ({
-          productId, productName, flavorId, flavorName, quantity, unitPriceCents,
+        filledLines.map(({ itemId, productName, variantId, flavorName, quantity, unitPriceCents }) => ({
+          itemId, productName, variantId, flavorName, quantity, unitPriceCents,
         })),
       ),
     );

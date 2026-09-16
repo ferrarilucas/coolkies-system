@@ -357,7 +357,7 @@ export async function getDashboardData(filters: DashboardFilters) {
   // ─── Estoque baixo ───────────────────────────────────────────────────────────
   const itemStock = await getItemStock();
   const lowStock = itemStock
-    .filter((s) => s.belowMin && s.productionInput)
+    .filter((s) => s.belowMin && s.productionInput && s.variantId == null)
     .map((s) => ({
       id: s.itemId,
       name: s.itemName,
