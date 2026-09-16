@@ -13,13 +13,13 @@ export default async function EditProductionPage({
   const { id } = await params;
   const db = await getWorkspaceDb();
 
-  const [batch, products, flavors, recipes] = await Promise.all([
+  const [batch, items, variants, recipes] = await Promise.all([
     getProductionBatchById(id),
-    db.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    db.flavor.findMany({
+    db.item.findMany({ where: { active: true, sellable: true }, orderBy: { name: "asc" } }),
+    db.variant.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, productId: true, fillingRecipeId: true },
+      select: { id: true, name: true, itemId: true, recipeId: true },
     }),
     db.recipe.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, yieldQty: true } }),
   ]);
@@ -27,12 +27,12 @@ export default async function EditProductionPage({
   if (!batch) notFound();
 
   const initial = {
-    productId: batch.productId,
+    itemId: batch.itemId,
     recipeId: batch.recipeId,
     quantity: batch.quantity,
     notes: batch.notes ?? "",
     producedAt: format(batch.producedAt, "yyyy-MM-dd"),
-    fillings: batch.fillings.map((f) => ({ flavorId: f.flavorId, quantity: f.quantity })),
+    fillings: batch.variantLines.map((f) => ({ variantId: f.variantId, quantity: f.quantity })),
   };
 
   return (
@@ -40,8 +40,8 @@ export default async function EditProductionPage({
       <PageHeader title="Editar produção" backHref="/products" />
       <ProductionForm
         batchId={id}
-        products={products}
-        flavors={flavors}
+        items={items}
+        variants={variants}
         recipes={recipes}
         initial={initial}
       />

@@ -34,9 +34,9 @@ export default async function EditSalePage({
     discountType: (sale.discountType ?? null) as "PERCENTAGE" | "FIXED" | null,
     discountValue: sale.discountValue,
     items: sale.items.map((i) => ({
-      productId: i.productId,
+      itemId: i.itemId,
       productName: i.productNameSnapshot,
-      flavorId: i.flavorId,
+      variantId: i.variantId,
       flavorName: i.flavorNameSnapshot,
       quantity: i.quantity,
       unitPriceCents: i.unitPriceSnapshot,

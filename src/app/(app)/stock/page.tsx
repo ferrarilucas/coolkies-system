@@ -4,23 +4,23 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getPantryStock } from "@/server/queries/production";
+import { getItemStock } from "@/server/queries/production";
 import { formatQty, baseUnitLabel } from "@/lib/units";
 import { BaseUnit } from "@prisma/client";
 
-export default async function PantryPage() {
-  const stock = await getPantryStock();
+export default async function StockPage() {
+  const stock = await getItemStock();
 
   const alerts = stock.filter((s) => s.belowMin);
 
   return (
     <div>
       <PageHeader
-        title="Despensa"
-        description="Estoque atual de ingredientes calculado a partir das compras e produções."
+        title="Estoque"
+        description="Estoque atual de itens calculado a partir das compras e produções."
         action={
           <Button asChild size="sm" variant="outline">
-            <Link href="/pantry/shopping-list">
+            <Link href="/stock/shopping-list">
               <ListChecks />
               Lista de compras
             </Link>
@@ -34,13 +34,11 @@ export default async function PantryPage() {
             <AlertTriangle className="size-4 text-warning-text shrink-0" />
             <span>
               <span className="font-semibold">{alerts.length}</span>{" "}
-              {alerts.length === 1
-                ? "ingrediente abaixo do mínimo"
-                : "ingredientes abaixo do mínimo"}
+              {alerts.length === 1 ? "item abaixo do mínimo" : "itens abaixo do mínimo"}
             </span>
           </div>
           <Button asChild size="sm" variant="outline" className="shrink-0">
-            <Link href="/pantry/shopping-list">Ver lista</Link>
+            <Link href="/stock/shopping-list">Ver lista</Link>
           </Button>
         </div>
       )}
@@ -48,13 +46,13 @@ export default async function PantryPage() {
       {stock.length === 0 ? (
         <EmptyState
           icon={PackageOpen}
-          title="Despensa vazia"
+          title="Estoque vazio"
           description="Registre compras em Compras para ver o estoque aqui."
         />
       ) : (
         <div className="space-y-2">
           {stock.map((entry) => (
-            <PantryRow key={entry.ingredientId} entry={entry} />
+            <StockRow key={`${entry.itemId}-${entry.variantId ?? ""}`} entry={entry} />
           ))}
         </div>
       )}
@@ -62,23 +60,19 @@ export default async function PantryPage() {
   );
 }
 
-function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>>[number] }) {
-  const unit = entry.baseUnit as BaseUnit;
+function StockRow({ entry }: { entry: Awaited<ReturnType<typeof getItemStock>>[number] }) {
+  const unit = entry.unit as BaseUnit;
   const currentFormatted = formatQty(Math.max(0, entry.current), unit);
-  const purchasedFormatted = formatQty(entry.purchased, unit);
-  const consumedFormatted = formatQty(entry.consumed, unit);
   const unitLabel = baseUnitLabel(unit);
-
-  const pct =
-    entry.purchased > 0
-      ? Math.min(100, Math.max(0, (entry.current / entry.purchased) * 100))
-      : 0;
+  const displayName = entry.variantName
+    ? `${entry.itemName} — ${entry.variantName}`
+    : entry.itemName;
 
   return (
     <div className={`rounded-lg border bg-card px-4 py-3 space-y-2 ${entry.belowMin ? "border-warning/60" : ""}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="font-medium">{entry.ingredientName}</span>
+          <span className="font-medium">{displayName}</span>
           {entry.belowMin && (
             <Badge className="text-xs bg-warning/15 text-warning-text border-warning/30 gap-1">
               <AlertTriangle className="size-3" />
@@ -101,22 +95,10 @@ function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>
         </span>
       </div>
 
-      {entry.purchased > 0 && (
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${entry.belowMin ? "bg-warning" : "bg-primary"}`}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      )}
-
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex flex-wrap gap-3">
-          <span>↑ {purchasedFormatted} comprado</span>
-          {entry.consumed > 0 && <span>↓ {consumedFormatted} usado</span>}
-          {entry.forResale && entry.resaleSold != null && entry.resaleSold > 0 && (
-            <span>↓ {formatQty(entry.resaleSold, unit)} revendido</span>
-          )}
+        <div className="flex flex-wrap gap-1.5">
+          {entry.sellable && <Badge variant="secondary" className="text-xs">Venda</Badge>}
+          {entry.productionInput && <Badge variant="secondary" className="text-xs">Insumo</Badge>}
         </div>
         {entry.latestPriceCents !== null && entry.latestSupplier && (
           <span>
@@ -124,9 +106,6 @@ function PantryRow({ entry }: { entry: Awaited<ReturnType<typeof getPantryStock>
           </span>
         )}
       </div>
-      {entry.forResale && (
-        <Badge variant="secondary" className="text-xs">Revenda</Badge>
-      )}
 
       {entry.minStock != null && entry.minStock > 0 && (
         <p className="text-xs text-muted-foreground">

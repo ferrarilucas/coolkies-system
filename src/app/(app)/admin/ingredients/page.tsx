@@ -2,67 +2,67 @@ import { Carrot } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { getIngredientsWithLastCost } from "@/server/queries/ingredients";
-import { IngredientDialog } from "@/components/ingredients/ingredient-dialog";
-import { DeleteIngredientButton } from "@/components/ingredients/delete-ingredient-button";
+import { getItemsWithLastCost } from "@/server/queries/items";
+import { ItemDialog } from "@/components/ingredients/item-dialog";
+import { DeleteItemButton } from "@/components/ingredients/delete-item-button";
 import { formatBRL } from "@/lib/money";
 
 const UNIT_ABBR: Record<string, string> = { G: "g", ML: "ml", UN: "un" };
 
 export default async function IngredientsPage() {
-  const ingredients = await getIngredientsWithLastCost();
+  const items = await getItemsWithLastCost();
 
   return (
     <div>
       <PageHeader
-        title="Ingredientes"
-        description="Itens usados nas receitas."
+        title="Insumos"
+        description="Itens usados nas receitas ou comprados para revenda."
         backHref="/admin"
-        action={<IngredientDialog mode="create" />}
+        action={<ItemDialog mode="create" />}
       />
 
-      {ingredients.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           icon={Carrot}
-          title="Nenhum ingrediente"
-          description="Cadastre os ingredientes que você usa nas receitas."
-          action={<IngredientDialog mode="create" />}
+          title="Nenhum insumo"
+          description="Cadastre os insumos que você usa nas receitas."
+          action={<ItemDialog mode="create" />}
         />
       ) : (
         <div className="space-y-2">
-          {ingredients.map((ing) => {
-            const abbr = UNIT_ABBR[ing.baseUnit] ?? ing.baseUnit.toLowerCase();
+          {items.map((item) => {
+            const abbr = UNIT_ABBR[item.unit] ?? item.unit.toLowerCase();
 
             return (
               <div
-                key={ing.id}
+                key={item.id}
                 className="flex items-center justify-between rounded-lg border bg-card p-4 gap-3"
               >
                 {/* Info principal */}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{ing.name}</span>
+                    <span className="font-medium">{item.name}</span>
                     <Badge variant="secondary" className="text-xs">
                       {abbr}
                     </Badge>
-                    {ing.forResale && (
+                    {item.sellable && (
                       <Badge variant="secondary" className="text-xs">
-                        Revenda
+                        Venda
                       </Badge>
                     )}
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                    {ing.minStock != null && ing.minStock > 0 && (
+                    {item.minStock != null && item.minStock > 0 && (
                       <span>
-                        Mínimo: {ing.minStock} {abbr}
+                        Mínimo: {item.minStock} {abbr}
                       </span>
                     )}
-                    {ing.unitCostCents != null ? (
+                    {item.unitCostCents != null ? (
                       <span>
                         Custo atual:{" "}
                         <span className="tabular-nums font-medium text-foreground">
-                          {formatBRL(ing.unitCostCents)}/{abbr}
+                          {formatBRL(item.unitCostCents)}/{abbr}
                         </span>
                       </span>
                     ) : (
@@ -73,18 +73,18 @@ export default async function IngredientsPage() {
 
                 {/* Ações */}
                 <div className="flex shrink-0 items-center gap-1">
-                  <IngredientDialog
+                  <ItemDialog
                     mode="edit"
-                    ingredient={{
-                      id: ing.id,
-                      name: ing.name,
-                      baseUnit: ing.baseUnit,
-                      minStock: ing.minStock,
-                      isRawMaterial: ing.isRawMaterial,
-                      forResale: ing.forResale,
+                    item={{
+                      id: item.id,
+                      name: item.name,
+                      unit: item.unit,
+                      minStock: item.minStock,
+                      productionInput: item.productionInput,
+                      sellable: item.sellable,
                     }}
                   />
-                  <DeleteIngredientButton id={ing.id} name={ing.name} />
+                  <DeleteItemButton id={item.id} name={item.name} />
                 </div>
               </div>
             );

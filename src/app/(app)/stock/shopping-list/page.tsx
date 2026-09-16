@@ -31,7 +31,7 @@ export default async function ShoppingListPage() {
         <PageHeader
           title="Lista de compras"
           description="Ingredientes abaixo do estoque mínimo."
-          backHref="/pantry"
+          backHref="/stock"
         />
         <GenerateShoppingListButton />
       </div>
