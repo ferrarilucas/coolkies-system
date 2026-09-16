@@ -52,6 +52,11 @@ export function IngredientDialog({ mode, ingredient }: Props) {
   const [isRawMaterial, setIsRawMaterial] = useState(ingredient?.isRawMaterial ?? true);
   const [forResale, setForResale] = useState(ingredient?.forResale ?? false);
 
+  function handleBaseUnitChange(value: string) {
+    setBaseUnit(value);
+    if (value !== "UN" && forResale) setForResale(false);
+  }
+
   function handleSubmit(formData: FormData) {
     formData.set("baseUnit", baseUnit);
     formData.set("isRawMaterial", isRawMaterial ? "on" : "off");
@@ -112,7 +117,7 @@ export function IngredientDialog({ mode, ingredient }: Props) {
             <Label>Unidade base</Label>
             <Select
               value={baseUnit}
-              onValueChange={setBaseUnit}
+              onValueChange={handleBaseUnitChange}
               disabled={mode === "edit"}
             >
               <SelectTrigger>
@@ -162,8 +167,18 @@ export function IngredientDialog({ mode, ingredient }: Props) {
                 <Label htmlFor="ing-resale">Revenda</Label>
                 <p className="text-xs text-muted-foreground">Vira um produto vendável no Catálogo.</p>
               </div>
-              <Switch id="ing-resale" checked={forResale} onCheckedChange={setForResale} />
+              <Switch
+                id="ing-resale"
+                checked={forResale}
+                onCheckedChange={setForResale}
+                disabled={baseUnit !== "UN"}
+              />
             </div>
+            {baseUnit !== "UN" && (
+              <p className="text-xs text-muted-foreground">
+                Revenda só é permitida para insumos com unidade &quot;Unidade (un)&quot;.
+              </p>
+            )}
             {!isRawMaterial && !forResale && (
               <p className="text-xs text-destructive">Marque ao menos uma das duas opções.</p>
             )}

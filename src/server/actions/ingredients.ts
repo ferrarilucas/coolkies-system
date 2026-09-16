@@ -20,7 +20,7 @@ function parseResaleFlags(formData: FormData): { isRawMaterial: boolean; forResa
   };
 }
 
-type ScopedClient = Awaited<ReturnType<typeof getScopedDb>>["db"];
+type ProductClient = Pick<PrismaClient, "product">;
 
 /**
  * Garante que o Product vinculado a um insumo reflita a finalidade "revenda":
@@ -28,7 +28,7 @@ type ScopedClient = Awaited<ReturnType<typeof getScopedDb>>["db"];
  * o insumo deixa de ser revenda.
  */
 async function syncResaleProduct(
-  db: ScopedClient | PrismaClient,
+  db: ProductClient,
   workspaceId: string,
   existingProductId: string | null,
   forResale: boolean,
@@ -61,11 +61,16 @@ export async function createIngredient(formData: FormData): Promise<ActionResult
   if (!name) return { ok: false, error: "Nome obrigatório." };
   if (minStock !== null && isNaN(minStock)) return { ok: false, error: "Estoque mínimo inválido." };
   if (!isRawMaterial && !forResale) return { ok: false, error: "Marque matéria-prima e/ou revenda." };
+  if (forResale && baseUnit !== BaseUnit.UN) {
+    return { ok: false, error: "Revenda só é permitida para insumos com unidade \"Unidade (un)\"." };
+  }
 
   try {
-    const resaleProductId = await syncResaleProduct(db, workspaceId, null, forResale, name);
-    await db.ingredient.create({
-      data: { name, baseUnit, minStock, isRawMaterial, forResale, resaleProductId, workspaceId },
+    await db.$transaction(async (tx) => {
+      const resaleProductId = await syncResaleProduct(tx, workspaceId, null, forResale, name);
+      await tx.ingredient.create({
+        data: { name, baseUnit, minStock, isRawMaterial, forResale, resaleProductId, workspaceId },
+      });
     });
   } catch {
     return { ok: false, error: "Já existe um ingrediente ou produto com esse nome." };
@@ -88,6 +93,9 @@ export async function updateIngredient(id: string, formData: FormData): Promise<
   if (!name) return { ok: false, error: "Nome obrigatório." };
   if (minStock !== null && isNaN(minStock)) return { ok: false, error: "Estoque mínimo inválido." };
   if (!isRawMaterial && !forResale) return { ok: false, error: "Marque matéria-prima e/ou revenda." };
+  if (forResale && baseUnit !== BaseUnit.UN) {
+    return { ok: false, error: "Revenda só é permitida para insumos com unidade \"Unidade (un)\"." };
+  }
 
   try {
     const existing = await db.ingredient.findUniqueOrThrow({
@@ -142,11 +150,16 @@ export async function createIngredientForPurchase(
 
   if (!name) return { ok: false, error: "Nome obrigatório." };
   if (!isRawMaterial && !forResale) return { ok: false, error: "Marque matéria-prima e/ou revenda." };
+  if (forResale && baseUnit !== BaseUnit.UN) {
+    return { ok: false, error: "Revenda só é permitida para insumos com unidade \"Unidade (un)\"." };
+  }
 
   try {
-    const resaleProductId = await syncResaleProduct(db, workspaceId, null, forResale, name);
-    const ingredient = await db.ingredient.create({
-      data: { name, baseUnit, isRawMaterial, forResale, resaleProductId, workspaceId },
+    const ingredient = await db.$transaction(async (tx) => {
+      const resaleProductId = await syncResaleProduct(tx, workspaceId, null, forResale, name);
+      return tx.ingredient.create({
+        data: { name, baseUnit, isRawMaterial, forResale, resaleProductId, workspaceId },
+      });
     });
     revalidatePath("/admin/ingredients");
     return {

@@ -36,6 +36,11 @@ function QuickCreateForm({
   const [forResale, setForResale] = useState(false);
   const [saving, startSave] = useTransition();
 
+  function handleUnitChange(value: string) {
+    setUnit(value);
+    if (value !== "UN" && forResale) setForResale(false);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || (!isRawMaterial && !forResale)) return;
@@ -78,7 +83,7 @@ function QuickCreateForm({
         </div>
         <div>
           <Label className="text-xs">Unidade base</Label>
-          <Select value={unit} onValueChange={setUnit}>
+          <Select value={unit} onValueChange={handleUnitChange}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
             </SelectTrigger>
@@ -95,8 +100,13 @@ function QuickCreateForm({
         </div>
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs">Revenda</Label>
-          <Switch checked={forResale} onCheckedChange={setForResale} />
+          <Switch checked={forResale} onCheckedChange={setForResale} disabled={unit !== "UN"} />
         </div>
+        {unit !== "UN" && (
+          <p className="text-xs text-muted-foreground">
+            Revenda só é permitida para insumos com unidade &quot;Unidade (un)&quot;.
+          </p>
+        )}
         {!isRawMaterial && !forResale && (
           <p className="text-xs text-destructive">Marque ao menos uma das duas opções.</p>
         )}
