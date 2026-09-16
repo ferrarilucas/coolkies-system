@@ -19,7 +19,7 @@ export async function getPurchases() {
     include: {
       supplier: { select: { id: true, name: true } },
       items: {
-        include: { ingredient: { select: { id: true, name: true, baseUnit: true } } },
+        include: { item: { select: { id: true, name: true, unit: true } } },
       },
     },
   });

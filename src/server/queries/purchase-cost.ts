@@ -15,12 +15,12 @@ export type LastPurchaseInfo = PurchasePrice & {
 
 export async function getLastPurchase(
   db: PrismaClient,
-  ingredientId: string,
+  itemId: string,
   supplierId?: string,
 ): Promise<LastPurchaseInfo | null> {
   const item = await db.purchaseItem.findFirst({
     where: {
-      ingredientId,
+      itemId,
       ...(supplierId ? { purchase: { supplierId } } : {}),
     },
     orderBy: { purchase: { purchasedAt: "desc" } },
