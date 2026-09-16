@@ -120,8 +120,31 @@ export async function getDashboardData(filters: DashboardFilters) {
 
   // ── Query 2: ingredientes ────────────────────────────────────────────────────
   const ingredients = await db.ingredient.findMany({
-    select: { id: true, name: true, baseUnit: true, minStock: true },
+    select: { id: true, name: true, baseUnit: true, minStock: true, forResale: true, resaleProductId: true },
   });
+
+  const resaleProductIds = new Set(
+    ingredients
+      .filter((ing) => ing.forResale && ing.resaleProductId)
+      .map((ing) => ing.resaleProductId as string),
+  );
+
+  const resaleSoldByIngredientId = new Map<string, number>();
+  if (resaleProductIds.size > 0) {
+    const soldMovements = await db.stockMovement.groupBy({
+      by: ["productId"],
+      where: { productId: { in: Array.from(resaleProductIds) }, type: "SALE" },
+      _sum: { quantity: true },
+    });
+    const soldByProductId = new Map(
+      soldMovements.map((r) => [r.productId, Math.abs(r._sum.quantity ?? 0)]),
+    );
+    for (const ing of ingredients) {
+      if (ing.forResale && ing.resaleProductId) {
+        resaleSoldByIngredientId.set(ing.id, soldByProductId.get(ing.resaleProductId) ?? 0);
+      }
+    }
+  }
 
   // ── Query 3: lotes de produção ──────────────────────────────────────────────
   const batches = await db.productionBatch.findMany({
@@ -238,7 +261,7 @@ export async function getDashboardData(filters: DashboardFilters) {
   for (const sale of sales) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
     const saleQty = matchedItems.reduce(
-      (s, i) => s + (resaleUnitCostByProductId.has(i.productId) ? 0 : i.quantity),
+      (s, i) => s + (resaleProductIds.has(i.productId) ? 0 : i.quantity),
       0,
     );
 
@@ -374,7 +397,8 @@ export async function getDashboardData(filters: DashboardFilters) {
     .map((ing) => {
       const purchased = purchasedTotal.get(ing.id) ?? 0;
       const used = consumed.get(ing.id) ?? 0;
-      const current = purchased - used;
+      const resaleSold = resaleSoldByIngredientId.get(ing.id) ?? 0;
+      const current = purchased - used - resaleSold;
       const min = ing.minStock ?? 0;
       return { id: ing.id, name: ing.name, baseUnit: ing.baseUnit as string, current, minStock: min, deficit: min - current };
     })
