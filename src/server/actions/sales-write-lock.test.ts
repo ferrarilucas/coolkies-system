@@ -37,9 +37,9 @@ describe("createSale bloqueada por assinatura inutilizável", () => {
       "items",
       JSON.stringify([
         {
-          productId: "p1",
+          itemId: "p1",
           productName: "Cookie",
-          flavorId: null,
+          variantId: null,
           flavorName: null,
           quantity: 1,
           unitPriceCents: 500,
