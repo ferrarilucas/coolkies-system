@@ -143,6 +143,9 @@ describe("deletePurchase", () => {
     const workspace = await createWorkspace("Confeitaria 3");
     context.workspaceId = workspace.id;
     context.canWrite = true;
+    await testDb.user.create({
+      data: { id: context.userId, name: "Usuário Teste", email: "u1@example.com" },
+    });
   });
 
   it("exclui a compra e todos os seus itens", async () => {
@@ -158,6 +161,35 @@ describe("deletePurchase", () => {
     expect(res.ok).toBe(true);
     expect(await testDb.purchase.count()).toBe(0);
     expect(await testDb.purchaseItem.count()).toBe(0);
+  });
+
+  it("exclui também os StockMovement(PURCHASE) que a compra gerou", async () => {
+    const product = await testDb.product.create({
+      data: { name: "Suco de laranja", workspaceId: context.workspaceId },
+    });
+    const suco = await testDb.ingredient.create({
+      data: {
+        name: "Suco de laranja", baseUnit: "UN", isRawMaterial: false, forResale: true,
+        resaleProductId: product.id, workspaceId: context.workspaceId,
+      },
+    });
+
+    const createRes = await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-09-15",
+        items: JSON.stringify([{ ingredientId: suco.id, quantity: 10, unit: "UN", pricePaidCents: 3000 }]),
+      }),
+    );
+    expect(createRes.ok).toBe(true);
+
+    const purchase = await testDb.purchase.findFirstOrThrow();
+    expect(await testDb.stockMovement.count({ where: { purchaseId: purchase.id } })).toBe(1);
+
+    const res = await deletePurchase(purchase.id);
+    expect(res.ok).toBe(true);
+    expect(await testDb.stockMovement.count({ where: { purchaseId: purchase.id } })).toBe(0);
+    expect(await testDb.stockMovement.count({ where: { productId: product.id } })).toBe(0);
   });
 });
 
