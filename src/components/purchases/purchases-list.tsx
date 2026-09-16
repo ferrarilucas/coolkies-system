@@ -70,7 +70,7 @@ function PurchaseRow({ purchase }: { purchase: PurchaseListItem }) {
 
       <div className="space-y-1">
         {purchase.items.map((item) => {
-          const pricePerUnit = item.quantity > 0 ? (item.pricePaidCents / item.quantity).toFixed(2) : "—";
+          const pricePerUnit = item.quantity > 0 ? (item.pricePaidCents / item.quantity / 100).toFixed(2) : "—";
           const unitLabel = baseUnitLabel(item.ingredient.baseUnit);
           return (
             <div key={item.id} className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground pl-1">

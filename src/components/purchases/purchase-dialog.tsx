@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { MoneyInput } from "@/components/shared/money-input";
 import { createPurchase, fetchLastPriceForSupplierItem } from "@/server/actions/purchases";
-import { PURCHASE_UNITS, UNIT_LABEL, toDisplayValue, type InputUnit } from "@/lib/units";
+import { PURCHASE_UNITS, UNIT_LABEL, bestInputUnit, toDisplayValue, type InputUnit } from "@/lib/units";
+import { formatBRL } from "@/lib/money";
 import { SupplierCombobox, type SupplierOption } from "./supplier-combobox";
 import { PurchaseIngredientCombobox, type PurchaseIngredientOption } from "./ingredient-combobox";
 
@@ -24,11 +25,17 @@ type DraftItem = {
   ingredient: PurchaseIngredientOption | null;
   quantity: string;
   unit: InputUnit;
-  priceCents: number;
+  unitPriceCents: number;
 };
 
 function emptyItem(): DraftItem {
-  return { key: crypto.randomUUID(), ingredient: null, quantity: "", unit: "G", priceCents: 0 };
+  return { key: crypto.randomUUID(), ingredient: null, quantity: "", unit: "G", unitPriceCents: 0 };
+}
+
+function itemTotalCents(item: DraftItem): number {
+  const qty = parseFloat(item.quantity);
+  if (isNaN(qty) || qty <= 0) return 0;
+  return Math.round(qty * item.unitPriceCents);
 }
 
 interface Props {
@@ -59,12 +66,14 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     updateItem(key, { ingredient: ing });
     const last = await fetchLastPriceForSupplierItem(supplier?.id ?? null, ing.id);
     if (!last) return;
-    const displayQty = toDisplayValue(last.quantity, last.unit as InputUnit, last.unit);
+    const displayUnit = bestInputUnit(last.quantity, last.unit);
+    const displayQty = toDisplayValue(last.quantity, displayUnit, last.unit);
+    const unitPriceCents = displayQty > 0 ? Math.round(last.pricePaidCents / displayQty) : 0;
     updateItem(key, {
       ingredient: ing,
       quantity: String(displayQty),
-      unit: last.unit as InputUnit,
-      priceCents: last.pricePaidCents,
+      unit: displayUnit,
+      unitPriceCents,
     });
   }
 
@@ -78,7 +87,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
 
   const canSubmit =
     items.length > 0 &&
-    items.every((i) => i.ingredient && parseFloat(i.quantity) > 0 && i.priceCents > 0);
+    items.every((i) => i.ingredient && parseFloat(i.quantity) > 0 && i.unitPriceCents > 0);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -94,7 +103,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
           ingredientId: i.ingredient!.id,
           quantity: parseFloat(i.quantity),
           unit: i.unit,
-          pricePaidCents: i.priceCents,
+          pricePaidCents: itemTotalCents(i),
         })),
       ),
     );
@@ -119,12 +128,19 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className={[
+            "inset-0 top-0 left-0 h-full max-h-screen w-full max-w-full translate-x-0 translate-y-0",
+            "rounded-none overflow-y-auto",
+            "sm:inset-auto sm:top-[50%] sm:left-[50%] sm:h-auto sm:max-h-[85vh] sm:w-full sm:max-w-lg",
+            "sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg",
+          ].join(" ")}
+        >
           <DialogHeader>
             <DialogTitle>Registrar compra</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Fornecedor</Label>
                 <SupplierCombobox
@@ -147,7 +163,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
 
             <div className="space-y-3">
               {items.map((item) => (
-                <div key={item.key} className="rounded-lg border p-3 space-y-2">
+                <div key={item.key} className="rounded-lg border p-3 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <PurchaseIngredientCombobox
@@ -168,7 +184,8 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+
+                  <div className="grid grid-cols-2 gap-2">
                     <Input
                       type="number"
                       min="0.001"
@@ -187,11 +204,21 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      Preço por {UNIT_LABEL[item.unit]}
+                    </Label>
                     <MoneyInput
-                      valueCents={item.priceCents}
-                      onChangeCents={(cents) => updateItem(item.key, { priceCents: cents })}
+                      valueCents={item.unitPriceCents}
+                      onChangeCents={(cents) => updateItem(item.key, { unitPriceCents: cents })}
                     />
                   </div>
+
+                  <p className="text-right text-xs text-muted-foreground">
+                    Total: <span className="font-medium text-foreground tabular-nums">{formatBRL(itemTotalCents(item))}</span>
+                  </p>
                 </div>
               ))}
 
