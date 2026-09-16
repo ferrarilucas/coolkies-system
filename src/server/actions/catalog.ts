@@ -8,18 +8,18 @@ export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: 
 
 // ─── Ativar / desativar ─────────────────────────────
 
-export async function toggleProductActive(id: string, active: boolean): Promise<ActionResult> {
+export async function toggleItemActive(id: string, active: boolean): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
   await assertCanWrite();
-  await db.product.update({ where: { id }, data: { active } });
+  await db.item.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
 }
 
-export async function toggleFlavorActive(id: string, active: boolean): Promise<ActionResult> {
+export async function toggleVariantActive(id: string, active: boolean): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
   await assertCanWrite();
-  await db.flavor.update({ where: { id }, data: { active } });
+  await db.variant.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
 }
@@ -32,21 +32,21 @@ export async function togglePriceActive(id: string, active: boolean): Promise<Ac
   return { ok: true };
 }
 
-// ─── Cadastro unificado (produto + sabores + preços) ─────────────────────────
+// ─── Cadastro unificado (item + variantes + preços) ─────────────────────────
 
-export type ProductFlavorInput = {
+export type ItemVariantInput = {
   id: string | null;
   name: string;
   priceCents: number | null;
-  fillingRecipeId: string | null;
+  recipeId: string | null;
   active: boolean;
 };
 
-export type SaveProductInput = {
+export type SaveItemInput = {
   name: string;
   genericPriceCents: number | null;
-  flavors: ProductFlavorInput[];
-  removedFlavorIds: string[];
+  variants: ItemVariantInput[];
+  removedVariantIds: string[];
 };
 
 type PriceClient = Awaited<ReturnType<typeof getScopedDb>>["db"];
@@ -54,12 +54,12 @@ type PriceClient = Awaited<ReturnType<typeof getScopedDb>>["db"];
 async function applyPrice(
   db: PriceClient,
   workspaceId: string,
-  productId: string,
-  flavorId: string | null,
+  itemId: string,
+  variantId: string | null,
   priceCents: number | null,
 ) {
   const existing = await db.priceListItem.findFirst({
-    where: { productId, flavorId },
+    where: { itemId, variantId },
   });
 
   if (priceCents == null || priceCents <= 0) {
@@ -69,7 +69,7 @@ async function applyPrice(
 
   if (!existing) {
     await db.priceListItem.create({
-      data: { productId, flavorId, priceCents, workspaceId },
+      data: { itemId, variantId, priceCents, workspaceId },
     });
     return;
   }
@@ -85,9 +85,9 @@ async function applyPrice(
   }
 }
 
-export async function saveProduct(
-  productId: string | null,
-  input: SaveProductInput,
+export async function saveItem(
+  itemId: string | null,
+  input: SaveItemInput,
 ): Promise<ActionResult<{ id: string; deactivated: string[] }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   await assertCanWrite();
@@ -95,74 +95,74 @@ export async function saveProduct(
   const name = normalizeName(input.name);
   if (!name) return { ok: false, error: "Nome do produto é obrigatório." };
 
-  const flavors = input.flavors
-    .map((f) => ({ ...f, name: normalizeName(f.name) }))
-    .filter((f) => f.name);
+  const variants = input.variants
+    .map((v) => ({ ...v, name: normalizeName(v.name) }))
+    .filter((v) => v.name);
 
   const seen = new Set<string>();
-  for (const f of flavors) {
-    const key = f.name.toLowerCase();
-    if (seen.has(key)) return { ok: false, error: `Sabor "${f.name}" está duplicado.` };
+  for (const v of variants) {
+    const key = v.name.toLowerCase();
+    if (seen.has(key)) return { ok: false, error: `Sabor "${v.name}" está duplicado.` };
     seen.add(key);
   }
 
-  if (flavors.length === 0 && (input.genericPriceCents ?? 0) <= 0) {
+  if (variants.length === 0 && (input.genericPriceCents ?? 0) <= 0) {
     return { ok: false, error: "Defina um preço para o produto ou cadastre ao menos um sabor." };
   }
 
-  const duplicateName = await db.product.findFirst({
-    where: { name, ...(productId ? { id: { not: productId } } : {}) },
+  const duplicateName = await db.item.findFirst({
+    where: { name, ...(itemId ? { id: { not: itemId } } : {}) },
     select: { id: true },
   });
   if (duplicateName) return { ok: false, error: "Já existe um produto com esse nome." };
 
-  const product = productId
-    ? await db.product.update({ where: { id: productId }, data: { name } })
-    : await db.product.create({ data: { name, workspaceId } });
+  const item = itemId
+    ? await db.item.update({ where: { id: itemId }, data: { name } })
+    : await db.item.create({ data: { name, sellable: true, workspaceId } });
 
   const deactivated: string[] = [];
 
-  for (const flavorId of input.removedFlavorIds) {
-    const used = await db.saleItem.count({ where: { flavorId } });
-    const produced = await db.productionBatch.count({ where: { flavorId } });
+  for (const variantId of input.removedVariantIds) {
+    const used = await db.saleItem.count({ where: { variantId } });
+    const produced = await db.productionBatch.count({ where: { variantId } });
     if (used > 0 || produced > 0) {
-      const flavor = await db.flavor.update({
-        where: { id: flavorId },
+      const variant = await db.variant.update({
+        where: { id: variantId },
         data: { active: false },
       });
-      deactivated.push(flavor.name);
+      deactivated.push(variant.name);
     } else {
-      await db.priceListItem.deleteMany({ where: { flavorId } });
-      await db.flavor.delete({ where: { id: flavorId } });
+      await db.priceListItem.deleteMany({ where: { variantId } });
+      await db.variant.delete({ where: { id: variantId } });
     }
   }
 
-  for (const flavor of flavors) {
-    const saved = flavor.id
-      ? await db.flavor.update({
-          where: { id: flavor.id },
+  for (const variant of variants) {
+    const saved = variant.id
+      ? await db.variant.update({
+          where: { id: variant.id },
           data: {
-            name: flavor.name,
-            fillingRecipeId: flavor.fillingRecipeId,
-            active: flavor.active,
+            name: variant.name,
+            recipeId: variant.recipeId,
+            active: variant.active,
           },
         })
-      : await db.flavor.create({
+      : await db.variant.create({
           data: {
-            name: flavor.name,
-            productId: product.id,
-            fillingRecipeId: flavor.fillingRecipeId,
-            active: flavor.active,
+            name: variant.name,
+            itemId: item.id,
+            recipeId: variant.recipeId,
+            active: variant.active,
             workspaceId,
           },
         });
 
-    await applyPrice(db, workspaceId, product.id, saved.id, flavor.priceCents);
+    await applyPrice(db, workspaceId, item.id, saved.id, variant.priceCents);
   }
 
-  await applyPrice(db, workspaceId, product.id, null, input.genericPriceCents);
+  await applyPrice(db, workspaceId, item.id, null, input.genericPriceCents);
 
   revalidatePath("/admin/catalog");
   revalidatePath("/sales/new");
-  return { ok: true, data: { id: product.id, deactivated } };
+  return { ok: true, data: { id: item.id, deactivated } };
 }
