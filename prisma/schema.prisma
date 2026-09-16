@@ -33,28 +33,28 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions         Session[]
-  accounts         Account[]
-  sales            Sale[]
+  sessions          Session[]
+  accounts          Account[]
+  sales             Sale[]
   productionBatches ProductionBatch[]
   purchases         Purchase[]
-  members          Member[]
-  subscription     Subscription?
+  members           Member[]
+  subscription      Subscription?
 
   @@map("user")
 }
 
 model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id
+  expiresAt         DateTime
+  token             String   @unique
+  ipAddress         String?
+  userAgent         String?
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeWorkspaceId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("session")
 }
@@ -150,8 +150,8 @@ model Subscription {
   interpixPixCopyPaste   String?
   lastAppliedEventId     BigInt?
 
-  stripeCustomerId     String? @unique
-  stripeSubscriptionId String? @unique
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
   stripeSyncedAt       DateTime?
   cardBrand            String?
   cardLast4            String?
@@ -162,11 +162,11 @@ model Subscription {
   authorizedAt     DateTime?
   currentPeriodEnd DateTime?
 
-  pendingCycleSeq     Int?
-  pendingChargeDueAt  DateTime?
-  lastFailureReason   String?
-  lastPaidAt          DateTime?
-  paidThroughAt       DateTime?
+  pendingCycleSeq    Int?
+  pendingChargeDueAt DateTime?
+  lastFailureReason  String?
+  lastPaidAt         DateTime?
+  paidThroughAt      DateTime?
 
   notes String?
 
@@ -249,20 +249,20 @@ model Invitation {
 // ─────────────────────────────────────────────
 
 model Item {
-  id        String   @id @default(cuid())
-  name      String
-  active    Boolean  @default(true)
-  unit      BaseUnit @default(UN)
-  sellable        Boolean @default(true)
-  productionInput Boolean @default(false)
-  minStock  Float?   @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  active          Boolean  @default(true)
+  unit            BaseUnit @default(UN)
+  sellable        Boolean  @default(true)
+  productionInput Boolean  @default(false)
+  minStock        Float?   @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  variants       Variant[]
-  priceListItems PriceListItem[]
-  saleItems      SaleItem[]
-  stockMovements StockMovement[]
+  variants          Variant[]
+  priceListItems    PriceListItem[]
+  saleItems         SaleItem[]
+  stockMovements    StockMovement[]
   productionBatches ProductionBatch[]
   purchaseItems     PurchaseItem[]
   recipeItems       RecipeItem[]
@@ -276,22 +276,22 @@ model Item {
 }
 
 model Variant {
-  id        String   @id @default(cuid())
-  name      String
-  active    Boolean  @default(true)
-  itemId    String
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  id     String  @id @default(cuid())
+  name   String
+  active Boolean @default(true)
+  itemId String
+  item   Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  recipeId  String?
-  recipe    Recipe? @relation("VariantRecipe", fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeId String?
+  recipe   Recipe? @relation("VariantRecipe", fields: [recipeId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  priceListItems PriceListItem[]
-  saleItems      SaleItem[]
-  stockMovements StockMovement[]
-  productionBatches ProductionBatch[]
+  priceListItems         PriceListItem[]
+  saleItems              SaleItem[]
+  stockMovements         StockMovement[]
+  productionBatches      ProductionBatch[]
   productionVariantLines ProductionVariantLine[]
 
   workspaceId String
@@ -378,7 +378,7 @@ enum ForecastPreset {
 
 enum DiscountType {
   PERCENTAGE // valor em inteiro, ex: 10 = 10%
-  FIXED      // valor em centavos
+  FIXED // valor em centavos
 }
 
 model Sale {
@@ -387,7 +387,7 @@ model Sale {
   user         User       @relation(fields: [userId], references: [id])
   customerId   String?
   customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerName String?    // snapshot do nome no momento da venda
+  customerName String? // snapshot do nome no momento da venda
   soldAt       DateTime   @default(now())
   status       SaleStatus @default(PAID)
   paidAt       DateTime?
@@ -418,9 +418,9 @@ model Sale {
 }
 
 model SaleItem {
-  id       String  @id @default(cuid())
-  saleId   String
-  sale     Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   itemId    String
   item      Item     @relation(fields: [itemId], references: [id])
   variantId String?
@@ -429,8 +429,8 @@ model SaleItem {
   quantity Int
 
   // SNAPSHOTS — congelados no momento da venda
-  unitPriceSnapshot  Int // centavos
-  flavorNameSnapshot String?
+  unitPriceSnapshot   Int // centavos
+  flavorNameSnapshot  String?
   productNameSnapshot String
 
   workspaceId String
@@ -488,11 +488,11 @@ model Purchase {
 
 // Linha de uma compra: um insumo, quantidade e preço pago. Base para custo por unidade.
 model PurchaseItem {
-  id           String     @id @default(cuid())
-  purchaseId   String
-  purchase     Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  itemId       String
-  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   quantity       Float // quantidade comprada na unidade base do ingrediente
   unit           BaseUnit
@@ -519,9 +519,9 @@ model Recipe {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items RecipeItem[]
+  items             RecipeItem[]
   productionBatches ProductionBatch[]
-  variantRecipes Variant[] @relation("VariantRecipe")
+  variantRecipes    Variant[]         @relation("VariantRecipe")
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -560,13 +560,13 @@ model ProductionBatch {
   user      User?    @relation(fields: [userId], references: [id])
 
   // Receita base usada (para dedução de ingredientes e cálculo de custo)
-  recipeId  String?
-  recipe    Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeId String?
+  recipe   Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
 
-  quantity  Int // quantos cookies foram feitos (base)
-  notes     String?
+  quantity   Int // quantos cookies foram feitos (base)
+  notes      String?
   producedAt DateTime @default(now())
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   movements    StockMovement[]
   variantLines ProductionVariantLine[]
