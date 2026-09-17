@@ -18,7 +18,7 @@ export type SalesFilters = {
   overdueOnly?: boolean;
 };
 
-function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
+export function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
   const search = f.q?.trim();
   const forecast: Prisma.DateTimeNullableFilter = {
     ...(f.forecastFrom ? { gte: f.forecastFrom } : {}),

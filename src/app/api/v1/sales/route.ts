@@ -1,51 +1,20 @@
 import { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
 import { StockMovementType } from "@prisma/client";
 import { getMcpWorkspaceContext, assertMcpCanWrite, mcpErrorResponse } from "@/server/tenant/mcp-context";
+import { buildSalesWhere, type SalesFilters } from "@/server/queries/sales";
 
-type SalesFilters = {
-  status?: "PAID" | "PENDING";
-  q?: string;
-  customerId?: string;
-  from?: string;
-  to?: string;
-  forecastFrom?: string;
-  forecastTo?: string;
-  overdueOnly?: boolean;
-};
+function parseDateOnly(value: string): Date {
+  return new Date(`${value}T12:00:00`);
+}
 
-function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
-  const search = f.q?.trim();
-  const forecast: Prisma.DateTimeNullableFilter = {
-    ...(f.forecastFrom ? { gte: new Date(f.forecastFrom) } : {}),
-    ...(f.forecastTo ? { lte: new Date(f.forecastTo) } : {}),
-    ...(f.overdueOnly ? { lt: new Date() } : {}),
-  };
-  return {
-    ...(f.status ? { status: f.status } : {}),
-    ...(f.overdueOnly ? { status: "PENDING" } : {}),
-    ...(f.customerId ? { customerId: f.customerId } : {}),
-    ...(f.from || f.to
-      ? {
-          soldAt: {
-            ...(f.from ? { gte: new Date(f.from) } : {}),
-            ...(f.to ? { lte: new Date(f.to) } : {}),
-          },
-        }
-      : {}),
-    ...(Object.keys(forecast).length > 0 ? { paymentForecastDate: forecast } : {}),
-    ...(search
-      ? {
-          OR: [
-            { customerName: { contains: search, mode: "insensitive" } },
-            { customer: { sector: { contains: search, mode: "insensitive" } } },
-            { notes: { contains: search, mode: "insensitive" } },
-            { items: { some: { productNameSnapshot: { contains: search, mode: "insensitive" } } } },
-            { items: { some: { flavorNameSnapshot: { contains: search, mode: "insensitive" } } } },
-          ],
-        }
-      : {}),
-  };
+function isValidDate(date: Date): boolean {
+  return !Number.isNaN(date.getTime());
+}
+
+function parseFilterDate(value: string | null): Date | undefined {
+  if (!value) return undefined;
+  const date = parseDateOnly(value);
+  return isValidDate(date) ? date : undefined;
 }
 
 function parseFilters(searchParams: URLSearchParams): SalesFilters {
@@ -54,10 +23,10 @@ function parseFilters(searchParams: URLSearchParams): SalesFilters {
     status: status === "PAID" || status === "PENDING" ? status : undefined,
     q: searchParams.get("q") ?? undefined,
     customerId: searchParams.get("customerId") ?? undefined,
-    from: searchParams.get("from") ?? undefined,
-    to: searchParams.get("to") ?? undefined,
-    forecastFrom: searchParams.get("forecastFrom") ?? undefined,
-    forecastTo: searchParams.get("forecastTo") ?? undefined,
+    from: parseFilterDate(searchParams.get("from")),
+    to: parseFilterDate(searchParams.get("to")),
+    forecastFrom: parseFilterDate(searchParams.get("forecastFrom")),
+    forecastTo: parseFilterDate(searchParams.get("forecastTo")),
     overdueOnly: searchParams.get("overdueOnly") === "true",
   };
 }
@@ -142,11 +111,25 @@ export async function POST(request: NextRequest) {
     const customerId = typeof body.customerId === "string" && body.customerId ? body.customerId : null;
     const customerName =
       typeof body.customerName === "string" && body.customerName.trim() ? body.customerName.trim() : null;
-    const soldAt = body.soldAt ? new Date(body.soldAt) : new Date();
+
+    let soldAt = new Date();
+    if (typeof body.soldAt === "string" && body.soldAt.trim()) {
+      const parsed = parseDateOnly(body.soldAt.trim());
+      if (!isValidDate(parsed)) return Response.json({ error: "Data inválida." }, { status: 400 });
+      soldAt = parsed;
+    }
+
     const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
     const status: "PAID" | "PENDING" = body.status === "PENDING" ? "PENDING" : "PAID";
     const forecastPreset = typeof body.forecastPreset === "string" ? body.forecastPreset : null;
-    const paymentForecastDate = body.forecastDate ? new Date(body.forecastDate) : null;
+
+    let paymentForecastDate: Date | null = null;
+    if (typeof body.forecastDate === "string" && body.forecastDate.trim()) {
+      const parsed = parseDateOnly(body.forecastDate.trim());
+      if (!isValidDate(parsed)) return Response.json({ error: "Data inválida." }, { status: 400 });
+      paymentForecastDate = parsed;
+    }
+
     const discountType: "PERCENTAGE" | "FIXED" | null =
       body.discountType === "PERCENTAGE" || body.discountType === "FIXED" ? body.discountType : null;
     const discountValue = discountType ? Math.max(0, Number(body.discountValue) || 0) : 0;
@@ -154,6 +137,21 @@ export async function POST(request: NextRequest) {
     const items = Array.isArray(body.items) ? (body.items as SaleItemInput[]) : [];
     if (items.length === 0) {
       return Response.json({ error: "Adicione pelo menos um item." }, { status: 400 });
+    }
+
+    if (customerId) {
+      const customer = await context.db.customer.findFirst({ where: { id: customerId } });
+      if (!customer) return Response.json({ error: "Cliente não encontrado." }, { status: 400 });
+    }
+
+    for (const item of items) {
+      const foundItem = await context.db.item.findFirst({ where: { id: item.itemId } });
+      if (!foundItem) return Response.json({ error: "Item não encontrado." }, { status: 400 });
+
+      if (item.variantId) {
+        const variant = await context.db.variant.findFirst({ where: { id: item.variantId } });
+        if (!variant) return Response.json({ error: "Variante não encontrada." }, { status: 400 });
+      }
     }
 
     const subtotalCents = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
@@ -174,6 +172,7 @@ export async function POST(request: NextRequest) {
         discountType,
         discountValue,
         totalCents,
+        workspaceId: context.workspaceId,
         items: {
           create: items.map((item) => ({
             itemId: item.itemId,
@@ -182,6 +181,7 @@ export async function POST(request: NextRequest) {
             flavorNameSnapshot: item.flavorName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
+            workspaceId: context.workspaceId,
           })),
         },
       },
@@ -195,6 +195,7 @@ export async function POST(request: NextRequest) {
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: sale.id,
+          workspaceId: context.workspaceId,
         },
       });
     }
