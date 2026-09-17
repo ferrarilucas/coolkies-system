@@ -58,7 +58,7 @@ export async function deleteSupplier(id: string): Promise<ActionResult> {
 // ─── Compras ──────────────────────────────────────────────────────────────────
 
 type PurchaseItemInput = {
-  ingredientId: string;
+  itemId: string;
   quantity: number;
   unit: InputUnit;
   pricePaidCents: number;
@@ -80,18 +80,18 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
   }
   if (items.length === 0) return { ok: false, error: "Adicione ao menos um item." };
   for (const item of items) {
-    if (!item.ingredientId) return { ok: false, error: "Selecione o insumo em todos os itens." };
+    if (!item.itemId) return { ok: false, error: "Selecione o item em todos os itens." };
     if (!item.quantity || item.quantity <= 0) return { ok: false, error: "Quantidade inválida em algum item." };
     if (!item.pricePaidCents || item.pricePaidCents <= 0) {
       return { ok: false, error: "Informe o preço pago em todos os itens." };
     }
   }
 
-  const ingredients = await db.ingredient.findMany({
-    where: { id: { in: items.map((i) => i.ingredientId) } },
-    select: { id: true, baseUnit: true, forResale: true, resaleProductId: true },
+  const catalogItems = await db.item.findMany({
+    where: { id: { in: items.map((i) => i.itemId) } },
+    select: { id: true, unit: true },
   });
-  const ingredientMap = new Map(ingredients.map((i) => [i.id, i]));
+  const itemMap = new Map(catalogItems.map((i) => [i.id, i]));
 
   try {
     await db.$transaction(async (tx) => {
@@ -102,46 +102,34 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
           purchasedAt,
           workspaceId,
           items: {
-            create: items.map((item) => {
-              const ing = ingredientMap.get(item.ingredientId);
-              const { quantity, unit } = toBaseUnit(item.quantity, item.unit, ing?.baseUnit);
-              return {
-                ingredientId: item.ingredientId,
-                quantity,
-                unit,
-                pricePaidCents: item.pricePaidCents,
-                workspaceId,
-              };
+            create: items.map((line) => {
+              const catalogItem = itemMap.get(line.itemId);
+              const { quantity, unit } = toBaseUnit(line.quantity, line.unit, catalogItem?.unit);
+              return { itemId: line.itemId, quantity, unit, pricePaidCents: line.pricePaidCents, workspaceId };
             }),
           },
         },
         include: { items: true },
       });
 
-      for (const item of created.items) {
-        const ing = ingredientMap.get(item.ingredientId);
-        if (ing?.forResale && ing.resaleProductId) {
-          await tx.stockMovement.create({
-            data: {
-              productId: ing.resaleProductId,
-              type: StockMovementType.PURCHASE,
-              quantity: Math.round(item.quantity),
-              purchaseId: created.id,
-              workspaceId,
-            },
-          });
-        }
+      for (const line of created.items) {
+        await tx.stockMovement.create({
+          data: {
+            itemId: line.itemId,
+            type: StockMovementType.PURCHASE,
+            quantity: Math.round(line.quantity),
+            purchaseId: created.id,
+            workspaceId,
+          },
+        });
       }
-
-      return created;
     });
   } catch {
     return { ok: false, error: "Não foi possível registrar a compra." };
   }
 
   revalidatePath("/purchases");
-  revalidatePath("/pantry");
-  revalidatePath("/products");
+  revalidatePath("/stock");
   return { ok: true };
 }
 
@@ -151,7 +139,7 @@ export async function deletePurchase(id: string): Promise<ActionResult> {
   await db.stockMovement.deleteMany({ where: { purchaseId: id } });
   await db.purchase.delete({ where: { id } });
   revalidatePath("/purchases");
-  revalidatePath("/pantry");
+  revalidatePath("/stock");
   return { ok: true };
 }
 
@@ -159,10 +147,10 @@ export async function deletePurchase(id: string): Promise<ActionResult> {
 
 export async function fetchLastPriceForSupplierItem(
   supplierId: string | null,
-  ingredientId: string,
+  itemId: string,
 ): Promise<{ quantity: number; unit: BaseUnit; pricePaidCents: number } | null> {
   const { db } = await getScopedDb();
-  const last = await getLastPurchase(db, ingredientId, supplierId ?? undefined);
+  const last = await getLastPurchase(db, itemId, supplierId ?? undefined);
   if (!last) return null;
   return { quantity: last.quantity, unit: last.unit, pricePaidCents: last.pricePaidCents };
 }

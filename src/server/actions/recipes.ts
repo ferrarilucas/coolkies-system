@@ -8,7 +8,7 @@ export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: 
 
 // ─── Recipe ─────────────────────────────────────────────────────────────────
 
-type IngredientLine = { ingredientId: string; quantity: number };
+type ItemLine = { itemId: string; quantity: number };
 
 export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
@@ -19,7 +19,7 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
   const yieldQty = parseInt(String(formData.get("yieldQty") ?? "1"), 10);
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const stepsRaw = String(formData.get("steps") ?? "").trim();
-  const ingredientsRaw = String(formData.get("ingredients") ?? "[]");
+  const itemsRaw = String(formData.get("items") ?? "[]");
 
   if (!name) return { ok: false, error: "Nome obrigatório." };
   if (isNaN(yieldQty) || yieldQty < 1) return { ok: false, error: "Rendimento deve ser ≥ 1." };
@@ -31,29 +31,29 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
     steps = Prisma.JsonNull;
   }
 
-  let ingredients: IngredientLine[] = [];
+  let items: ItemLine[] = [];
   try {
-    ingredients = JSON.parse(ingredientsRaw) as IngredientLine[];
+    items = JSON.parse(itemsRaw) as ItemLine[];
   } catch {
-    ingredients = [];
+    items = [];
   }
 
   try {
     if (id) {
-      // update: recria os RecipeIngredients em transação
+      // update: recria os RecipeItems em transação
       await db.$transaction([
         db.recipe.update({
           where: { id },
           data: { name, yieldQty, notes, steps },
         }),
-        db.recipeIngredient.deleteMany({ where: { recipeId: id } }),
-        ...(ingredients.length > 0
+        db.recipeItem.deleteMany({ where: { recipeId: id } }),
+        ...(items.length > 0
           ? [
-              db.recipeIngredient.createMany({
-                data: ingredients.map((ing) => ({
+              db.recipeItem.createMany({
+                data: items.map((it) => ({
                   recipeId: id,
-                  ingredientId: ing.ingredientId,
-                  quantity: ing.quantity,
+                  itemId: it.itemId,
+                  quantity: it.quantity,
                   workspaceId,
                 })),
               }),
@@ -70,10 +70,10 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
           notes,
           steps,
           workspaceId,
-          ingredients: {
-            create: ingredients.map((ing) => ({
-              ingredientId: ing.ingredientId,
-              quantity: ing.quantity,
+          items: {
+            create: items.map((it) => ({
+              itemId: it.itemId,
+              quantity: it.quantity,
               workspaceId,
             })),
           },
@@ -99,28 +99,25 @@ export async function deleteRecipe(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-// ─── Quick-add de ingrediente dentro do formulário de receita ────────────────
+// ─── Quick-add de item dentro do formulário de receita ───────────────────────
 
-type IngredientData = { id: string; name: string; baseUnit: string };
+type ItemData = { id: string; name: string; unit: string };
 
-export async function createIngredientInline(
-  formData: FormData,
-): Promise<ActionResult<IngredientData>> {
+export async function createItemInline(formData: FormData): Promise<ActionResult<ItemData>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
   await assertCanWrite();
 
   const name = String(formData.get("name") ?? "").trim();
-  const baseUnitRaw = String(formData.get("baseUnit") ?? "G");
-  const baseUnit =
-    baseUnitRaw === "ML" ? BaseUnit.ML : baseUnitRaw === "UN" ? BaseUnit.UN : BaseUnit.G;
+  const unitRaw = String(formData.get("unit") ?? "G");
+  const unit = unitRaw === "ML" ? BaseUnit.ML : unitRaw === "UN" ? BaseUnit.UN : BaseUnit.G;
 
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
-    const ingredient = await db.ingredient.create({ data: { name, baseUnit, workspaceId } });
+    const item = await db.item.create({ data: { name, unit, productionInput: true, workspaceId } });
     revalidatePath("/admin/ingredients");
-    return { ok: true, data: { id: ingredient.id, name: ingredient.name, baseUnit: ingredient.baseUnit } };
+    return { ok: true, data: { id: item.id, name: item.name, unit: item.unit } };
   } catch {
-    return { ok: false, error: "Já existe um ingrediente com esse nome." };
+    return { ok: false, error: "Já existe um item com esse nome." };
   }
 }

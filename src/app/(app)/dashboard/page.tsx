@@ -28,7 +28,7 @@ import {
 } from "@/server/queries/dashboard";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
-import { FlavorMixChart } from "@/components/charts/flavor-mix-chart";
+import { VariantMixChart } from "@/components/charts/variant-mix-chart";
 import { SupplierSpendChart } from "@/components/charts/supplier-spend-chart";
 
 export const dynamic = "force-dynamic";
@@ -61,8 +61,8 @@ export default async function DashboardPage({
     from,
     to,
     status: ["ALL", "PAID", "PENDING"].includes(status) ? status : "ALL",
-    productId: s("productId"),
-    flavorId: s("flavorId"),
+    itemId: s("itemId"),
+    variantId: s("variantId"),
     customerId: s("customerId"),
     supplierId: s("supplierId"),
   } as const;
@@ -95,8 +95,8 @@ export default async function DashboardPage({
           from: format(from, "yyyy-MM-dd"),
           to: format(to, "yyyy-MM-dd"),
           status: filters.status,
-          productId: filters.productId,
-          flavorId: filters.flavorId,
+          itemId: filters.itemId,
+          variantId: filters.variantId,
           customerId: filters.customerId,
           supplierId: filters.supplierId,
         }}
@@ -194,7 +194,7 @@ export default async function DashboardPage({
             <CardTitle className="text-base">Mix de sabores</CardTitle>
           </CardHeader>
           <CardContent className="pr-2">
-            {mix.length > 0 ? <FlavorMixChart data={mix} /> : <ChartEmpty />}
+            {mix.length > 0 ? <VariantMixChart data={mix} /> : <ChartEmpty />}
           </CardContent>
         </Card>
       </div>
@@ -259,7 +259,7 @@ export default async function DashboardPage({
               Estoque baixo
             </CardTitle>
             <Link
-              href="/pantry/shopping-list"
+              href="/stock/shopping-list"
               className="text-xs font-medium text-primary hover:underline"
             >
               Lista de compras
@@ -280,12 +280,12 @@ export default async function DashboardPage({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{i.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Atual {formatQty(Math.max(i.current, 0), i.baseUnit as BaseUnit)} ·
-                        mín {formatQty(i.minStock, i.baseUnit as BaseUnit)}
+                        Atual {formatQty(Math.max(i.current, 0), i.unit as BaseUnit)} ·
+                        mín {formatQty(i.minStock, i.unit as BaseUnit)}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive">
-                      faltam {formatQty(i.deficit, i.baseUnit as BaseUnit)}
+                      faltam {formatQty(i.deficit, i.unit as BaseUnit)}
                     </span>
                   </li>
                 ))}
@@ -339,7 +339,7 @@ export default async function DashboardPage({
                       <p className="text-xs text-muted-foreground">
                         {p.cheapestSupplier} ·{" "}
                         {formatBRL(Math.round(p.cheapestUnitCents))}/
-                        {p.baseUnit.toLowerCase()}
+                        {p.unit.toLowerCase()}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-md bg-success/10 px-2 py-1 text-xs font-medium text-success">

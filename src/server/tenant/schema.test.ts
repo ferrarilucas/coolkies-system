@@ -6,11 +6,11 @@ describe("schema multi-tenant", () => {
     await resetDb();
   });
 
-  it("cria produto vinculado a um workspace", async () => {
+  it("cria item vinculado a um workspace", async () => {
     const ws = await createWorkspace("Douce Vie");
-    const product = await testDb.product.create({
+    const item = await testDb.item.create({
       data: { name: "Cookie", workspaceId: ws.id },
     });
-    expect(product.workspaceId).toBe(ws.id);
+    expect(item.workspaceId).toBe(ws.id);
   });
 });

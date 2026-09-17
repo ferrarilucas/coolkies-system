@@ -12,22 +12,22 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { deleteIngredient } from "@/server/actions/ingredients";
+import { deleteItem } from "@/server/actions/items";
 
 interface Props {
   id: string;
   name: string;
 }
 
-export function DeleteIngredientButton({ id, name }: Props) {
+export function DeleteItemButton({ id, name }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function handleConfirm() {
     startTransition(async () => {
-      const res = await deleteIngredient(id);
+      const res = await deleteItem(id);
       if (res.ok) {
-        toast.success("Ingrediente excluído.");
+        toast.success("Insumo excluído.");
         setOpen(false);
       } else {
         toast.error(res.error ?? "Erro ao excluir.");
@@ -50,10 +50,10 @@ export function DeleteIngredientButton({ id, name }: Props) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir ingrediente</DialogTitle>
+            <DialogTitle>Excluir insumo</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir <strong>{name}</strong>? Esta ação não pode ser
-              desfeita e pode afetar receitas que usam este ingrediente.
+              desfeita e pode afetar receitas que usam este insumo.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -4,12 +4,12 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import {
-  toggleProductActive,
-  toggleFlavorActive,
+  toggleItemActive,
+  toggleVariantActive,
   togglePriceActive,
 } from "@/server/actions/catalog";
 
-type Entity = "product" | "flavor" | "price";
+type Entity = "item" | "variant" | "price";
 
 interface Props {
   entity: Entity;
@@ -23,10 +23,10 @@ export function ActiveToggle({ entity, id, active }: Props) {
   function handleChange(checked: boolean) {
     startTransition(async () => {
       const action =
-        entity === "product"
-          ? toggleProductActive
-          : entity === "flavor"
-            ? toggleFlavorActive
+        entity === "item"
+          ? toggleItemActive
+          : entity === "variant"
+            ? toggleVariantActive
             : togglePriceActive;
 
       const res = await action(id, checked);

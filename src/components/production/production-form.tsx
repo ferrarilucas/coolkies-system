@@ -15,35 +15,35 @@ import {
 } from "@/components/ui/select";
 import { createProductionBatch, updateProductionBatch } from "@/server/actions/production";
 
-interface Product { id: string; name: string }
-interface Flavor { id: string; name: string; productId: string; fillingRecipeId: string | null }
+interface Item { id: string; name: string }
+interface Variant { id: string; name: string; itemId: string; recipeId: string | null }
 interface Recipe { id: string; name: string; yieldQty: number }
 
 interface Props {
   batchId?: string;
-  products: Product[];
-  flavors: Flavor[];
+  items: Item[];
+  variants: Variant[];
   recipes: Recipe[];
   initial?: {
-    productId: string;
+    itemId: string;
     recipeId: string | null;
     quantity: number;
     notes: string;
     producedAt: string;
-    fillings: { flavorId: string; quantity: number }[];
+    fillings: { variantId: string; quantity: number }[];
   };
 }
 
-type FillingLine = { key: string; flavorId: string; quantity: number };
+type VariantLine = { key: string; variantId: string; quantity: number };
 
 const NO_RECIPE = "__none__";
 
-export function ProductionForm({ batchId, products, flavors, recipes, initial }: Props) {
+export function ProductionForm({ batchId, items, variants, recipes, initial }: Props) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
 
-  const [productId, setProductId] = useState(
-    initial?.productId ?? (products.length === 1 ? products[0].id : "")
+  const [itemId, setItemId] = useState(
+    initial?.itemId ?? (items.length === 1 ? items[0].id : "")
   );
   const [recipeId, setRecipeId] = useState(initial?.recipeId ?? NO_RECIPE);
   const [quantity, setQuantity] = useState(String(initial?.quantity ?? 12));
@@ -51,59 +51,59 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
   const [producedAt, setProducedAt] = useState(
     initial?.producedAt ?? format(new Date(), "yyyy-MM-dd")
   );
-  const [fillings, setFillings] = useState<FillingLine[]>(
+  const [variantLines, setVariantLines] = useState<VariantLine[]>(
     initial?.fillings.map((f) => ({ ...f, key: crypto.randomUUID() })) ?? []
   );
 
-  // Todos os sabores do produto — qualquer um pode ser distribuído
-  const productFlavors = flavors.filter((f) => f.productId === productId);
+  // Todas as variantes do item — qualquer uma pode ser distribuída
+  const itemVariants = variants.filter((v) => v.itemId === itemId);
   const selectedRecipe = recipeId !== NO_RECIPE ? recipes.find((r) => r.id === recipeId) : undefined;
 
-  function handleProductChange(pid: string) {
-    setProductId(pid);
-    setFillings([]);
+  function handleItemChange(id: string) {
+    setItemId(id);
+    setVariantLines([]);
   }
 
-  function addFilling() {
-    const available = productFlavors.filter(
-      (f) => !fillings.some((l) => l.flavorId === f.id),
+  function addVariantLine() {
+    const available = itemVariants.filter(
+      (v) => !variantLines.some((l) => l.variantId === v.id),
     );
     if (available.length === 0) return;
-    setFillings((prev) => [
+    setVariantLines((prev) => [
       ...prev,
-      { key: crypto.randomUUID(), flavorId: available[0].id, quantity: 0 },
+      { key: crypto.randomUUID(), variantId: available[0].id, quantity: 0 },
     ]);
   }
 
-  function removeFilling(key: string) {
-    setFillings((prev) => prev.filter((l) => l.key !== key));
+  function removeVariantLine(key: string) {
+    setVariantLines((prev) => prev.filter((l) => l.key !== key));
   }
 
-  function updateFilling(key: string, patch: Partial<FillingLine>) {
-    setFillings((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  function updateVariantLine(key: string, patch: Partial<VariantLine>) {
+    setVariantLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
   const totalQty = parseInt(quantity) || 0;
-  const fillingsTotal = fillings.reduce((s, f) => s + (f.quantity || 0), 0);
-  const fillingsIncomplete = fillings.length > 0 && fillingsTotal < totalQty;
-  const fillingsExceeded = fillingsTotal > totalQty;
-  const selectedFillingIds = new Set(fillings.map((f) => f.flavorId));
+  const variantLinesTotal = variantLines.reduce((s, f) => s + (f.quantity || 0), 0);
+  const variantLinesIncomplete = variantLines.length > 0 && variantLinesTotal < totalQty;
+  const variantLinesExceeded = variantLinesTotal > totalQty;
+  const selectedVariantIds = new Set(variantLines.map((f) => f.variantId));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!productId) { toast.error("Selecione um produto."); return; }
+    if (!itemId) { toast.error("Selecione um item."); return; }
     if (totalQty <= 0) { toast.error("Quantidade deve ser maior que zero."); return; }
-    if (fillingsExceeded) { toast.error("Total de sabores excede a quantidade produzida."); return; }
-    if (fillingsIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre os sabores (faltam ${totalQty - fillingsTotal}).`); return; }
+    if (variantLinesExceeded) { toast.error("Total de variantes excede a quantidade produzida."); return; }
+    if (variantLinesIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre as variantes (faltam ${totalQty - variantLinesTotal}).`); return; }
 
     const fd = new FormData();
-    fd.set("productId", productId);
+    fd.set("itemId", itemId);
     fd.set("recipeId", recipeId === NO_RECIPE ? "" : recipeId);
     fd.set("quantity", String(totalQty));
     fd.set("notes", notes);
     fd.set("producedAt", producedAt);
-    fd.set("fillings", JSON.stringify(
-      fillings.filter((f) => f.quantity > 0).map(({ flavorId, quantity }) => ({ flavorId, quantity }))
+    fd.set("variantLines", JSON.stringify(
+      variantLines.filter((f) => f.quantity > 0).map(({ variantId, quantity }) => ({ variantId, quantity }))
     ));
 
     startSave(async () => {
@@ -130,14 +130,14 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Produto</Label>
-            <Select value={productId} onValueChange={handleProductChange}>
+            <Label>Item</Label>
+            <Select value={itemId} onValueChange={handleItemChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Selecione o produto…" />
+                <SelectValue placeholder="Selecione o item…" />
               </SelectTrigger>
               <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                {items.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -197,53 +197,53 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
         </div>
       </section>
 
-      {/* ── Distribuição por sabor ─────────────────────────────────── */}
-      {productId && (
+      {/* ── Distribuição por variante ─────────────────────────────────── */}
+      {itemId && (
         <>
           <Separator />
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Sabores
+                Variantes
               </h2>
-              {totalQty > 0 && fillings.length > 0 && (
+              {totalQty > 0 && variantLines.length > 0 && (
                 <span className="text-xs tabular-nums">
-                  {fillingsExceeded ? (
-                    <span className="text-destructive">Excede em {fillingsTotal - totalQty}</span>
-                  ) : fillingsTotal === totalQty ? (
+                  {variantLinesExceeded ? (
+                    <span className="text-destructive">Excede em {variantLinesTotal - totalQty}</span>
+                  ) : variantLinesTotal === totalQty ? (
                     <span className="text-success">Todos distribuídos ✓</span>
                   ) : (
-                    <span className="text-warning-text">{fillingsTotal}/{totalQty} distribuídos</span>
+                    <span className="text-warning-text">{variantLinesTotal}/{totalQty} distribuídos</span>
                   )}
                 </span>
               )}
             </div>
 
-            {productFlavors.length === 0 ? (
+            {itemVariants.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
-                Nenhum sabor cadastrado para este produto.{" "}
+                Nenhuma variante cadastrada para este item.{" "}
                 Configure em <strong>Cadastros → Catálogo</strong>.
               </p>
             ) : (
               <>
                 <div className="space-y-2">
-                  {fillings.map((line) => (
+                  {variantLines.map((line) => (
                     <div key={line.key} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
                       <Select
-                        value={line.flavorId}
-                        onValueChange={(v) => updateFilling(line.key, { flavorId: v })}
+                        value={line.variantId}
+                        onValueChange={(v) => updateVariantLine(line.key, { variantId: v })}
                       >
                         <SelectTrigger className="flex-1">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {productFlavors.map((f) => (
+                          {itemVariants.map((v) => (
                             <SelectItem
-                              key={f.id}
-                              value={f.id}
-                              disabled={selectedFillingIds.has(f.id) && f.id !== line.flavorId}
+                              key={v.id}
+                              value={v.id}
+                              disabled={selectedVariantIds.has(v.id) && v.id !== line.variantId}
                             >
-                              {f.name}
+                              {v.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -253,14 +253,14 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
                         min="0"
                         max={totalQty}
                         value={line.quantity || ""}
-                        onChange={(e) => updateFilling(line.key, { quantity: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => updateVariantLine(line.key, { quantity: parseInt(e.target.value) || 0 })}
                         placeholder="Qtd."
                         className="w-20 text-right tabular-nums"
                       />
                       <span className="text-xs text-muted-foreground shrink-0">un.</span>
                       <button
                         type="button"
-                        onClick={() => removeFilling(line.key)}
+                        onClick={() => removeVariantLine(line.key)}
                         className="flex h-10 w-10 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="size-4" />
@@ -269,10 +269,10 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
                   ))}
                 </div>
 
-                {productFlavors.length > fillings.length && (
-                  <Button type="button" variant="outline" className="w-full gap-2" onClick={addFilling}>
+                {itemVariants.length > variantLines.length && (
+                  <Button type="button" variant="outline" className="w-full gap-2" onClick={addVariantLine}>
                     <Plus className="size-4" />
-                    Adicionar sabor
+                    Adicionar variante
                   </Button>
                 )}
               </>
@@ -286,7 +286,7 @@ export function ProductionForm({ batchId, products, flavors, recipes, initial }:
         <Button type="button" variant="outline" onClick={() => router.push("/products")} disabled={saving}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={saving || !productId || totalQty <= 0}>
+        <Button type="submit" disabled={saving || !itemId || totalQty <= 0}>
           <ChefHat className="size-4" />
           {saving ? "Salvando…" : batchId ? "Salvar produção" : "Registrar produção"}
         </Button>

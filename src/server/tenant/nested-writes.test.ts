@@ -44,7 +44,7 @@ describe("UNSCOPED_MODELS", () => {
 
 describe("injectWorkspaceId", () => {
   it("injeta no nível de topo", () => {
-    const result = injectWorkspaceId("Product", { name: "Cookie" }, "ws1") as Record<string, unknown>;
+    const result = injectWorkspaceId("Item", { name: "Cookie" }, "ws1") as Record<string, unknown>;
     expect(result.workspaceId).toBe("ws1");
   });
 
@@ -137,19 +137,19 @@ describe("injectWorkspaceId", () => {
 
   it("injeta em profundidade além de um nível", () => {
     const result = injectWorkspaceId(
-      "Product",
-      { name: "Cookie", flavors: { create: [{ name: "Chocolate", saleItems: { create: { quantity: 1 } } }] } },
+      "Item",
+      { name: "Cookie", variants: { create: [{ name: "Chocolate", saleItems: { create: { quantity: 1 } } }] } },
       "ws1",
     ) as {
       workspaceId: string;
-      flavors: {
+      variants: {
         create: Array<{ workspaceId: string; saleItems: { create: { workspaceId: string } } }>;
       };
     };
 
     expect(result.workspaceId).toBe("ws1");
-    expect(result.flavors.create[0].workspaceId).toBe("ws1");
-    expect(result.flavors.create[0].saleItems.create.workspaceId).toBe("ws1");
+    expect(result.variants.create[0].workspaceId).toBe("ws1");
+    expect(result.variants.create[0].saleItems.create.workspaceId).toBe("ws1");
   });
 
   it("não muta o objeto recebido", () => {
@@ -244,23 +244,23 @@ describe("injectIntoNestedWrites", () => {
 
   it("percorre o data de um update aninhado sem escrever workspaceId nele", () => {
     const result = injectIntoNestedWrites(
-      "Product",
+      "Item",
       {
-        flavors: {
+        variants: {
           update: { where: { id: "f1" }, data: { saleItems: { create: { quantity: 1 } } } },
         },
       },
       "ws1",
     ) as {
-      flavors: {
+      variants: {
         update: {
           data: { workspaceId?: string; saleItems: { create: { workspaceId: string } } };
         };
       };
     };
 
-    expect(result.flavors.update.data.workspaceId).toBeUndefined();
-    expect(result.flavors.update.data.saleItems.create.workspaceId).toBe("ws1");
+    expect(result.variants.update.data.workspaceId).toBeUndefined();
+    expect(result.variants.update.data.saleItems.create.workspaceId).toBe("ws1");
   });
 
   it("não toca connect", () => {
@@ -291,7 +291,7 @@ describe("injectIntoNestedWrites", () => {
         customerName: "Ana",
         items: {
           create: [
-            { productId: "p1", productNameSnapshot: "Cookie", quantity: 3, unitPriceSnapshot: 500 },
+            { itemId: "p1", productNameSnapshot: "Cookie", quantity: 3, unitPriceSnapshot: 500 },
           ],
         },
       },

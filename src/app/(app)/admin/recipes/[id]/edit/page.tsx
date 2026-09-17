@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { RecipeForm } from "@/components/recipes/recipe-form";
-import { getRecipeById, getIngredientOptions } from "@/server/queries/recipes";
+import { getRecipeById, getItemOptions } from "@/server/queries/recipes";
 import type { PartialBlock } from "@blocknote/core";
 
 export default async function EditRecipePage({
@@ -12,7 +12,7 @@ export default async function EditRecipePage({
   const { id } = await params;
   const [recipe, ingredients] = await Promise.all([
     getRecipeById(id),
-    getIngredientOptions(),
+    getItemOptions(),
   ]);
 
   if (!recipe) notFound();

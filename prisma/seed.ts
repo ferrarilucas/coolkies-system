@@ -21,49 +21,38 @@ async function main() {
     },
   });
 
-  // Produto base
-  const cookie = await db.product.upsert({
+  const cookie = await db.item.upsert({
     where: { workspaceId_name: { workspaceId: workspace.id, name: "Cookie" } },
     update: {},
-    create: { name: "Cookie", workspaceId: workspace.id },
+    create: { name: "Cookie", sellable: true, unit: "UN", workspaceId: workspace.id },
   });
 
-  // Sabores
-  const flavors = ["Chocolate", "Red Velvet", "Tradicional"];
-  for (const name of flavors) {
-    const flavor = await db.flavor.upsert({
-      where: { productId_name: { productId: cookie.id, name } },
+  const variants = ["Chocolate", "Red Velvet", "Tradicional"];
+  for (const name of variants) {
+    const variant = await db.variant.upsert({
+      where: { itemId_name: { itemId: cookie.id, name } },
       update: {},
-      create: { name, productId: cookie.id, workspaceId: workspace.id },
+      create: { name, itemId: cookie.id, workspaceId: workspace.id },
     });
-    // Preço atual exemplo: R$ 8,00
     await db.priceListItem.upsert({
-      where: {
-        productId_flavorId: { productId: cookie.id, flavorId: flavor.id },
-      },
+      where: { itemId_variantId: { itemId: cookie.id, variantId: variant.id } },
       update: {},
-      create: {
-        productId: cookie.id,
-        flavorId: flavor.id,
-        priceCents: 800,
-        workspaceId: workspace.id,
-      },
+      create: { itemId: cookie.id, variantId: variant.id, priceCents: 800, workspaceId: workspace.id },
     });
   }
 
-  // Ingredientes exemplo
-  const ingredients: Array<[string, "G" | "ML" | "UN"]> = [
+  const rawItems: Array<[string, "G" | "ML" | "UN"]> = [
     ["Açúcar", "G"],
     ["Farinha de trigo", "G"],
     ["Manteiga", "G"],
-    ["Chocolate", "G"],
+    ["Chocolate (insumo)", "G"],
     ["Ovo", "UN"],
   ];
-  for (const [name, baseUnit] of ingredients) {
-    await db.ingredient.upsert({
+  for (const [name, unit] of rawItems) {
+    await db.item.upsert({
       where: { workspaceId_name: { workspaceId: workspace.id, name } },
       update: {},
-      create: { name, baseUnit, minStock: 0, workspaceId: workspace.id },
+      create: { name, unit, productionInput: true, sellable: false, minStock: 0, workspaceId: workspace.id },
     });
   }
 

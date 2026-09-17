@@ -71,11 +71,11 @@ function PurchaseRow({ purchase }: { purchase: PurchaseListItem }) {
       <div className="space-y-1">
         {purchase.items.map((item) => {
           const pricePerUnit = item.quantity > 0 ? (item.pricePaidCents / item.quantity / 100).toFixed(2) : "—";
-          const unitLabel = baseUnitLabel(item.ingredient.baseUnit);
+          const unitLabel = baseUnitLabel(item.item.unit);
           return (
             <div key={item.id} className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground pl-1">
-              <span className="text-foreground">{item.ingredient.name}</span>
-              <span>{formatQty(item.quantity, item.ingredient.baseUnit)}</span>
+              <span className="text-foreground">{item.item.name}</span>
+              <span>{formatQty(item.quantity, item.item.unit)}</span>
               <span className="text-foreground tabular-nums">{formatBRL(item.pricePaidCents)}</span>
               <span className="text-xs">R$ {pricePerUnit}/{unitLabel}</span>
             </div>

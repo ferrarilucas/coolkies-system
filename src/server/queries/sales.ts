@@ -155,9 +155,9 @@ export async function getSaleById(id: string) {
       items: {
         select: {
           id: true,
-          productId: true,
+          itemId: true,
           productNameSnapshot: true,
-          flavorId: true,
+          variantId: true,
           flavorNameSnapshot: true,
           quantity: true,
           unitPriceSnapshot: true,
@@ -173,11 +173,11 @@ export type CatalogProduct = Awaited<ReturnType<typeof getCatalogForSale>>[numbe
 
 export async function getCatalogForSale() {
   const db = await getWorkspaceDb();
-  const products = await db.product.findMany({
-    where: { active: true },
+  const items = await db.item.findMany({
+    where: { active: true, sellable: true },
     orderBy: { name: "asc" },
     include: {
-      flavors: {
+      variants: {
         where: { active: true },
         orderBy: { name: "asc" },
         include: {
@@ -188,20 +188,20 @@ export async function getCatalogForSale() {
         },
       },
       priceListItems: {
-        where: { active: true, flavorId: null },
+        where: { active: true, variantId: null },
         select: { priceCents: true },
       },
     },
   });
 
-  return products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    genericPriceCents: p.priceListItems[0]?.priceCents ?? null,
-    flavors: p.flavors.map((f) => ({
-      id: f.id,
-      name: f.name,
-      priceCents: f.priceListItems[0]?.priceCents ?? p.priceListItems[0]?.priceCents ?? null,
+  return items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    genericPriceCents: item.priceListItems[0]?.priceCents ?? null,
+    flavors: item.variants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      priceCents: v.priceListItems[0]?.priceCents ?? item.priceListItems[0]?.priceCents ?? null,
     })),
   }));
 }

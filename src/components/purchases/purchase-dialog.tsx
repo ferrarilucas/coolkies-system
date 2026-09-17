@@ -18,18 +18,18 @@ import { createPurchase, fetchLastPriceForSupplierItem } from "@/server/actions/
 import { PURCHASE_UNITS, UNIT_LABEL, bestInputUnit, toDisplayValue, type InputUnit } from "@/lib/units";
 import { formatBRL } from "@/lib/money";
 import { SupplierCombobox, type SupplierOption } from "./supplier-combobox";
-import { PurchaseIngredientCombobox, type PurchaseIngredientOption } from "./ingredient-combobox";
+import { PurchaseItemCombobox, type PurchaseItemOption } from "./item-combobox";
 
 type DraftItem = {
   key: string;
-  ingredient: PurchaseIngredientOption | null;
+  item: PurchaseItemOption | null;
   quantity: string;
   unit: InputUnit;
   unitPriceCents: number;
 };
 
 function emptyItem(): DraftItem {
-  return { key: crypto.randomUUID(), ingredient: null, quantity: "", unit: "G", unitPriceCents: 0 };
+  return { key: crypto.randomUUID(), item: null, quantity: "", unit: "G", unitPriceCents: 0 };
 }
 
 function itemTotalCents(item: DraftItem): number {
@@ -40,14 +40,14 @@ function itemTotalCents(item: DraftItem): number {
 
 interface Props {
   suppliers: SupplierOption[];
-  ingredients: PurchaseIngredientOption[];
+  ingredients: PurchaseItemOption[];
 }
 
 export function PurchaseDialog({ suppliers, ingredients }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, startSave] = useTransition();
   const [allSuppliers, setAllSuppliers] = useState(suppliers);
-  const [allIngredients, setAllIngredients] = useState(ingredients);
+  const [allItems, setAllItems] = useState(ingredients);
   const [supplier, setSupplier] = useState<SupplierOption | null>(null);
   const [purchasedAt, setPurchasedAt] = useState(format(new Date(), "yyyy-MM-dd"));
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
@@ -62,15 +62,15 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   }
 
-  async function handleIngredientChange(key: string, ing: PurchaseIngredientOption) {
-    updateItem(key, { ingredient: ing });
-    const last = await fetchLastPriceForSupplierItem(supplier?.id ?? null, ing.id);
+  async function handleItemChange(key: string, item: PurchaseItemOption) {
+    updateItem(key, { item });
+    const last = await fetchLastPriceForSupplierItem(supplier?.id ?? null, item.id);
     if (!last) return;
     const displayUnit = bestInputUnit(last.quantity, last.unit);
     const displayQty = toDisplayValue(last.quantity, displayUnit, last.unit);
     const unitPriceCents = displayQty > 0 ? Math.round(last.pricePaidCents / displayQty) : 0;
     updateItem(key, {
-      ingredient: ing,
+      item,
       quantity: String(displayQty),
       unit: displayUnit,
       unitPriceCents,
@@ -87,7 +87,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
 
   const canSubmit =
     items.length > 0 &&
-    items.every((i) => i.ingredient && parseFloat(i.quantity) > 0 && i.unitPriceCents > 0);
+    items.every((i) => i.item && parseFloat(i.quantity) > 0 && i.unitPriceCents > 0);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,7 +100,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
       "items",
       JSON.stringify(
         items.map((i) => ({
-          ingredientId: i.ingredient!.id,
+          itemId: i.item!.id,
           quantity: parseFloat(i.quantity),
           unit: i.unit,
           pricePaidCents: itemTotalCents(i),
@@ -166,11 +166,11 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                 <div key={item.key} className="rounded-lg border p-3 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
-                      <PurchaseIngredientCombobox
-                        value={item.ingredient}
-                        onChange={(ing) => handleIngredientChange(item.key, ing)}
-                        options={allIngredients}
-                        onOptionCreated={(ing) => setAllIngredients((prev) => [...prev, ing])}
+                      <PurchaseItemCombobox
+                        value={item.item}
+                        onChange={(v) => handleItemChange(item.key, v)}
+                        options={allItems}
+                        onOptionCreated={(v) => setAllItems((prev) => [...prev, v])}
                       />
                     </div>
                     <Button

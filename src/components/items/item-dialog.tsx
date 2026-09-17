@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createIngredient, updateIngredient } from "@/server/actions/ingredients";
+import { createItem, updateItem } from "@/server/actions/items";
 
 const BASE_UNIT_LABELS: Record<string, string> = {
   G: "Grama (g)",
@@ -30,45 +30,43 @@ const BASE_UNIT_LABELS: Record<string, string> = {
   UN: "Unidade (un)",
 };
 
-interface Ingredient {
+interface Item {
   id: string;
   name: string;
-  baseUnit: string;
+  unit: string;
   minStock: number | null;
-  isRawMaterial: boolean;
-  forResale: boolean;
+  productionInput: boolean;
+  sellable: boolean;
 }
 
 interface Props {
   mode: "create" | "edit";
-  ingredient?: Ingredient;
+  item?: Item;
 }
 
-export function IngredientDialog({ mode, ingredient }: Props) {
+export function ItemDialog({ mode, item }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
-  const [baseUnit, setBaseUnit] = useState(ingredient?.baseUnit ?? "G");
-  const [isRawMaterial, setIsRawMaterial] = useState(ingredient?.isRawMaterial ?? true);
-  const [forResale, setForResale] = useState(ingredient?.forResale ?? false);
+  const [unit, setUnit] = useState(item?.unit ?? "G");
+  const [productionInput, setProductionInput] = useState(item?.productionInput ?? true);
+  const [sellable, setSellable] = useState(item?.sellable ?? false);
 
-  function handleBaseUnitChange(value: string) {
-    setBaseUnit(value);
-    if (value !== "UN" && forResale) setForResale(false);
+  function handleUnitChange(value: string) {
+    setUnit(value);
+    if (value !== "UN" && sellable) setSellable(false);
   }
 
   function handleSubmit(formData: FormData) {
-    formData.set("baseUnit", baseUnit);
-    formData.set("isRawMaterial", isRawMaterial ? "on" : "off");
-    formData.set("forResale", forResale ? "on" : "off");
+    formData.set("unit", unit);
+    formData.set("productionInput", productionInput ? "on" : "off");
+    formData.set("sellable", sellable ? "on" : "off");
     startTransition(async () => {
       const res =
-        mode === "create"
-          ? await createIngredient(formData)
-          : await updateIngredient(ingredient!.id, formData);
+        mode === "create" ? await createItem(formData) : await updateItem(item!.id, formData);
 
       if (res.ok) {
-        toast.success(mode === "create" ? "Ingrediente criado." : "Ingrediente atualizado.");
+        toast.success(mode === "create" ? "Insumo criado." : "Insumo atualizado.");
         setOpen(false);
         formRef.current?.reset();
       } else {
@@ -77,7 +75,7 @@ export function IngredientDialog({ mode, ingredient }: Props) {
     });
   }
 
-  const unitAbbr = baseUnit === "ML" ? "ml" : baseUnit === "UN" ? "un" : "g";
+  const unitAbbr = unit === "ML" ? "ml" : unit === "UN" ? "un" : "g";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -85,7 +83,7 @@ export function IngredientDialog({ mode, ingredient }: Props) {
         {mode === "create" ? (
           <Button size="sm">
             <Plus />
-            Novo ingrediente
+            Novo insumo
           </Button>
         ) : (
           <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -96,18 +94,16 @@ export function IngredientDialog({ mode, ingredient }: Props) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "Novo ingrediente" : "Editar ingrediente"}
-          </DialogTitle>
+          <DialogTitle>{mode === "create" ? "Novo insumo" : "Editar insumo"}</DialogTitle>
         </DialogHeader>
         <form ref={formRef} action={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="ing-name">Nome</Label>
+            <Label htmlFor="item-name">Nome</Label>
             <Input
-              id="ing-name"
+              id="item-name"
               name="name"
               placeholder="Ex.: Açúcar"
-              defaultValue={ingredient?.name}
+              defaultValue={item?.name}
               required
               autoFocus
             />
@@ -115,11 +111,7 @@ export function IngredientDialog({ mode, ingredient }: Props) {
 
           <div className="space-y-2">
             <Label>Unidade base</Label>
-            <Select
-              value={baseUnit}
-              onValueChange={handleBaseUnitChange}
-              disabled={mode === "edit"}
-            >
+            <Select value={unit} onValueChange={handleUnitChange} disabled={mode === "edit"}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -139,47 +131,51 @@ export function IngredientDialog({ mode, ingredient }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ing-min-stock">
+            <Label htmlFor="item-min-stock">
               Estoque mínimo ({unitAbbr})
               <span className="ml-1 text-muted-foreground">(opcional)</span>
             </Label>
             <Input
-              id="ing-min-stock"
+              id="item-min-stock"
               name="minStock"
               type="number"
               min="0"
               step="any"
               placeholder="0"
-              defaultValue={ingredient?.minStock ?? ""}
+              defaultValue={item?.minStock ?? ""}
             />
           </div>
 
           <div className="space-y-3 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label htmlFor="ing-raw">Matéria-prima</Label>
+                <Label htmlFor="item-production-input">Matéria-prima</Label>
                 <p className="text-xs text-muted-foreground">Entra em receitas e produção.</p>
               </div>
-              <Switch id="ing-raw" checked={isRawMaterial} onCheckedChange={setIsRawMaterial} />
+              <Switch
+                id="item-production-input"
+                checked={productionInput}
+                onCheckedChange={setProductionInput}
+              />
             </div>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label htmlFor="ing-resale">Revenda</Label>
-                <p className="text-xs text-muted-foreground">Vira um produto vendável no Catálogo.</p>
+                <Label htmlFor="item-sellable">Venda</Label>
+                <p className="text-xs text-muted-foreground">Pode ser vendido no Catálogo.</p>
               </div>
               <Switch
-                id="ing-resale"
-                checked={forResale}
-                onCheckedChange={setForResale}
-                disabled={baseUnit !== "UN"}
+                id="item-sellable"
+                checked={sellable}
+                onCheckedChange={setSellable}
+                disabled={unit !== "UN"}
               />
             </div>
-            {baseUnit !== "UN" && (
+            {unit !== "UN" && (
               <p className="text-xs text-muted-foreground">
-                Revenda só é permitida para insumos com unidade &quot;Unidade (un)&quot;.
+                Venda só é permitida para itens com unidade &quot;Unidade (un)&quot;.
               </p>
             )}
-            {!isRawMaterial && !forResale && (
+            {!productionInput && !sellable && (
               <p className="text-xs text-destructive">Marque ao menos uma das duas opções.</p>
             )}
           </div>
@@ -188,7 +184,7 @@ export function IngredientDialog({ mode, ingredient }: Props) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={pending || (!isRawMaterial && !forResale)}>
+            <Button type="submit" disabled={pending || (!productionInput && !sellable)}>
               {pending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>

@@ -10,9 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { createIngredientInline } from "@/server/actions/recipes";
+import { createItemInline } from "@/server/actions/recipes";
 import { toast } from "sonner";
-import type { IngredientOption } from "./recipe-form";
+import type { ItemOption } from "./recipe-form";
 
 // ─── Quick-create inline ──────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ function QuickCreateForm({
   onCancel,
 }: {
   initialName: string;
-  onCreated: (ing: IngredientOption) => void;
+  onCreated: (item: ItemOption) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initialName);
@@ -34,15 +34,15 @@ function QuickCreateForm({
     if (!name.trim()) return;
     const fd = new FormData();
     fd.set("name", name.trim());
-    fd.set("baseUnit", unit);
+    fd.set("unit", unit);
     startSave(async () => {
-      const res = await createIngredientInline(fd);
+      const res = await createItemInline(fd);
       if (res.ok && res.data) {
         toast.success(`"${res.data.name}" criado.`);
         onCreated({
           id: res.data.id,
           name: res.data.name,
-          baseUnit: res.data.baseUnit,
+          unit: res.data.unit,
           unitCostCents: null,
         });
       } else {
@@ -54,7 +54,7 @@ function QuickCreateForm({
   return (
     <form onSubmit={handleSubmit} className="p-3 space-y-3">
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        Novo ingrediente
+        Novo item
       </p>
       <div className="space-y-2">
         <div>
@@ -109,19 +109,19 @@ function QuickCreateForm({
 // ─── Combobox ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  value: IngredientOption | null;
-  /** Chamado quando o usuário seleciona OU cria um ingrediente */
-  onChange: (v: IngredientOption) => void;
-  options: IngredientOption[];
-  /** Notifica o pai que um novo ingrediente foi criado (para atualizar a lista global) */
-  onOptionCreated: (v: IngredientOption) => void;
-  /** IDs de ingredientes já usados em OUTRAS linhas — não aparecem na lista */
+  value: ItemOption | null;
+  /** Chamado quando o usuário seleciona OU cria um item */
+  onChange: (v: ItemOption) => void;
+  options: ItemOption[];
+  /** Notifica o pai que um novo item foi criado (para atualizar a lista global) */
+  onOptionCreated: (v: ItemOption) => void;
+  /** IDs de itens já usados em OUTRAS linhas — não aparecem na lista */
   usedIds?: Set<string>;
 }
 
 const UNIT_ABBR: Record<string, string> = { G: "g", ML: "ml", UN: "un" };
 
-export function IngredientCombobox({
+export function ItemCombobox({
   value,
   onChange,
   options,
@@ -149,14 +149,14 @@ export function IngredientCombobox({
     o.name.toLowerCase().includes(query.toLowerCase()),
   );
 
-  function handleSelect(o: IngredientOption) {
+  function handleSelect(o: ItemOption) {
     onChange(o);
     setOpen(false);
   }
 
-  function handleCreated(ing: IngredientOption) {
-    onOptionCreated(ing);
-    onChange(ing);
+  function handleCreated(item: ItemOption) {
+    onOptionCreated(item);
+    onChange(item);
     setShowCreate(false);
     setOpen(false);
   }
@@ -174,11 +174,11 @@ export function IngredientCombobox({
             <span className="flex items-center gap-1.5 min-w-0">
               <span className="truncate">{value.name}</span>
               <span className="text-xs text-muted-foreground shrink-0">
-                ({UNIT_ABBR[value.baseUnit] ?? value.baseUnit.toLowerCase()})
+                ({UNIT_ABBR[value.unit] ?? value.unit.toLowerCase()})
               </span>
             </span>
           ) : (
-            <span className="text-muted-foreground">Ingrediente…</span>
+            <span className="text-muted-foreground">Item…</span>
           )}
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
@@ -199,7 +199,7 @@ export function IngredientCombobox({
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar ingrediente…"
+                placeholder="Buscar item…"
                 className="h-7 border-0 p-0 shadow-none focus-visible:ring-0 text-sm"
               />
             </div>
@@ -221,7 +221,7 @@ export function IngredientCombobox({
                   />
                   <span className="flex-1 truncate">{o.name}</span>
                   <span className="text-xs text-muted-foreground">
-                    {UNIT_ABBR[o.baseUnit] ?? o.baseUnit.toLowerCase()}
+                    {UNIT_ABBR[o.unit] ?? o.unit.toLowerCase()}
                   </span>
                 </button>
               ))}
@@ -232,8 +232,8 @@ export function IngredientCombobox({
                     {query
                       ? `Nenhum resultado para "${query}".`
                       : available.length === 0
-                        ? "Todos os ingredientes já estão adicionados."
-                        : "Nenhum ingrediente disponível."}
+                        ? "Todos os itens já estão adicionados."
+                        : "Nenhum item disponível."}
                   </p>
                   {(query || available.length === 0) && (
                     <Button
@@ -244,7 +244,7 @@ export function IngredientCombobox({
                       onClick={() => setShowCreate(true)}
                     >
                       <Plus className="size-3.5" />
-                      {query ? `Criar "${query}"` : "Criar ingrediente"}
+                      {query ? `Criar "${query}"` : "Criar item"}
                     </Button>
                   )}
                 </div>
@@ -260,7 +260,7 @@ export function IngredientCombobox({
                     onClick={() => setShowCreate(true)}
                   >
                     <Plus className="size-3.5" />
-                    {query ? `Criar "${query}"` : "Criar novo ingrediente"}
+                    {query ? `Criar "${query}"` : "Criar novo item"}
                   </Button>
                 </div>
               )}

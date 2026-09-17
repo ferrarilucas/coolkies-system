@@ -9,16 +9,16 @@ import { ActiveToggle } from "@/components/catalog/active-toggle";
 import { formatBRL } from "@/lib/money";
 
 function priceLabel(product: Awaited<ReturnType<typeof getCatalogOverview>>[number]) {
-  const flavorPrices = product.flavors
-    .map((f) => f.priceCents ?? product.genericPriceCents)
+  const variantPrices = product.variants
+    .map((v) => v.priceCents ?? product.genericPriceCents)
     .filter((p): p is number => p != null && p > 0);
 
-  if (flavorPrices.length === 0) {
+  if (variantPrices.length === 0) {
     return product.genericPriceCents ? formatBRL(product.genericPriceCents) : "Sem preço";
   }
 
-  const min = Math.min(...flavorPrices);
-  const max = Math.max(...flavorPrices);
+  const min = Math.min(...variantPrices);
+  const max = Math.max(...variantPrices);
   return min === max ? formatBRL(min) : `${formatBRL(min)} – ${formatBRL(max)}`;
 }
 
@@ -58,7 +58,7 @@ export default async function CatalogPage() {
       ) : (
         <div className="space-y-2">
           {products.map((product) => {
-            const activeFlavors = product.flavors.filter((f) => f.active);
+            const activeVariants = product.variants.filter((v) => v.active);
             return (
               <div
                 key={product.id}
@@ -76,8 +76,8 @@ export default async function CatalogPage() {
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {activeFlavors.length > 0
-                        ? `${activeFlavors.length} ${activeFlavors.length === 1 ? "sabor" : "sabores"} · ${activeFlavors.map((f) => f.name).join(", ")}`
+                      {activeVariants.length > 0
+                        ? `${activeVariants.length} ${activeVariants.length === 1 ? "sabor" : "sabores"} · ${activeVariants.map((v) => v.name).join(", ")}`
                         : "Sem sabores"}
                     </p>
                   </div>
@@ -86,7 +86,7 @@ export default async function CatalogPage() {
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </Link>
-                <ActiveToggle entity="product" id={product.id} active={product.active} />
+                <ActiveToggle entity="item" id={product.id} active={product.active} />
               </div>
             );
           })}

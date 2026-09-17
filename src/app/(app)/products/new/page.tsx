@@ -5,12 +5,12 @@ import { getWorkspaceDb } from "@/server/tenant/context";
 export default async function NewProductionPage() {
   const db = await getWorkspaceDb();
 
-  const [products, flavors, recipes] = await Promise.all([
-    db.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    db.flavor.findMany({
+  const [items, variants, recipes] = await Promise.all([
+    db.item.findMany({ where: { active: true, sellable: true }, orderBy: { name: "asc" } }),
+    db.variant.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, productId: true, fillingRecipeId: true },
+      select: { id: true, name: true, itemId: true, recipeId: true },
     }),
     db.recipe.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, yieldQty: true } }),
   ]);
@@ -18,7 +18,7 @@ export default async function NewProductionPage() {
   return (
     <div>
       <PageHeader title="Registrar produção" backHref="/products" />
-      <ProductionForm products={products} flavors={flavors} recipes={recipes} />
+      <ProductionForm items={items} variants={variants} recipes={recipes} />
     </div>
   );
 }

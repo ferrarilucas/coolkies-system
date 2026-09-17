@@ -11,10 +11,10 @@ describe("escopo por workspace", () => {
   it("findMany não enxerga dados de outro workspace", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    await testDb.product.create({ data: { name: "Cookie A", workspaceId: a.id } });
-    await testDb.product.create({ data: { name: "Cookie B", workspaceId: b.id } });
+    await testDb.item.create({ data: { name: "Cookie A", workspaceId: a.id } });
+    await testDb.item.create({ data: { name: "Cookie B", workspaceId: b.id } });
 
-    const found = await scopedDb(a.id).product.findMany();
+    const found = await scopedDb(a.id).item.findMany();
 
     expect(found).toHaveLength(1);
     expect(found[0].name).toBe("Cookie A");
@@ -22,8 +22,8 @@ describe("escopo por workspace", () => {
 
   it("create grava o workspaceId sem que o chamador informe", async () => {
     const a = await createWorkspace("A");
-    const created = await scopedDb(a.id).product.create({
-      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    const created = await scopedDb(a.id).item.create({
+      data: { name: "Cookie" } as Prisma.ItemUncheckedCreateInput,
     });
     expect(created.workspaceId).toBe(a.id);
   });
@@ -31,15 +31,15 @@ describe("escopo por workspace", () => {
   it("deleteMany não atinge outro workspace", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    await testDb.product.create({ data: { name: "X-a", workspaceId: a.id } });
-    await testDb.product.create({ data: { name: "X-b", workspaceId: b.id } });
+    await testDb.item.create({ data: { name: "X-a", workspaceId: a.id } });
+    await testDb.item.create({ data: { name: "X-b", workspaceId: b.id } });
 
-    const before = await testDb.product.findMany();
+    const before = await testDb.item.findMany();
     expect(before).toHaveLength(2);
 
-    await scopedDb(a.id).product.deleteMany({});
+    await scopedDb(a.id).item.deleteMany({});
 
-    const remaining = await testDb.product.findMany();
+    const remaining = await testDb.item.findMany();
     expect(remaining).toHaveLength(1);
     expect(remaining[0].workspaceId).toBe(b.id);
   });
@@ -47,41 +47,41 @@ describe("escopo por workspace", () => {
   it("count respeita o escopo", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    await testDb.product.create({ data: { name: "X", workspaceId: a.id } });
-    await testDb.product.create({ data: { name: "Y", workspaceId: b.id } });
+    await testDb.item.create({ data: { name: "X", workspaceId: a.id } });
+    await testDb.item.create({ data: { name: "Y", workspaceId: b.id } });
 
-    expect(await scopedDb(a.id).product.count()).toBe(1);
+    expect(await scopedDb(a.id).item.count()).toBe(1);
   });
 
   it("upsert respeita o escopo no create e no update", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    const alheio = await testDb.product.create({
+    const alheio = await testDb.item.create({
       data: { name: "Alheio", workspaceId: b.id },
     });
 
-    const criado = await scopedDb(a.id).product.upsert({
+    const criado = await scopedDb(a.id).item.upsert({
       where: { id: alheio.id },
-      create: { name: "Novo" } as Prisma.ProductUncheckedCreateInput,
+      create: { name: "Novo" } as Prisma.ItemUncheckedCreateInput,
       update: { name: "Sequestrado" },
     });
 
     expect(criado.workspaceId).toBe(a.id);
     expect(criado.id).not.toBe(alheio.id);
 
-    const intacto = await testDb.product.findUnique({ where: { id: alheio.id } });
+    const intacto = await testDb.item.findUnique({ where: { id: alheio.id } });
     expect(intacto?.name).toBe("Alheio");
   });
 
   it("update não atinge linha de outro workspace", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    const alheio = await testDb.product.create({
+    const alheio = await testDb.item.create({
       data: { name: "Alheio", workspaceId: b.id },
     });
 
     await expect(
-      scopedDb(a.id).product.update({
+      scopedDb(a.id).item.update({
         where: { id: alheio.id },
         data: { name: "Sequestrado" },
       }),
@@ -97,20 +97,20 @@ describe("escopo por workspace", () => {
   it("findUnique não retorna linha de outro workspace", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    const alheio = await testDb.product.create({
+    const alheio = await testDb.item.create({
       data: { name: "Alheio", workspaceId: b.id },
     });
 
-    const found = await scopedDb(a.id).product.findUnique({ where: { id: alheio.id } });
+    const found = await scopedDb(a.id).item.findUnique({ where: { id: alheio.id } });
 
     expect(found).toBeNull();
   });
 
   it("findUnique retorna a linha do próprio workspace", async () => {
     const a = await createWorkspace("A");
-    const meu = await testDb.product.create({ data: { name: "Meu", workspaceId: a.id } });
+    const meu = await testDb.item.create({ data: { name: "Meu", workspaceId: a.id } });
 
-    const found = await scopedDb(a.id).product.findUnique({ where: { id: meu.id } });
+    const found = await scopedDb(a.id).item.findUnique({ where: { id: meu.id } });
 
     expect(found?.id).toBe(meu.id);
   });
@@ -121,8 +121,8 @@ describe("escopo por workspace", () => {
     const user = await testDb.user.create({
       data: { id: "u-nested", name: "Ana", email: "ana@example.com" },
     });
-    const product = await scoped.product.create({
-      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    const item = await scoped.item.create({
+      data: { name: "Cookie" } as Prisma.ItemUncheckedCreateInput,
     });
 
     const sale = await scoped.sale.create({
@@ -132,7 +132,7 @@ describe("escopo por workspace", () => {
         items: {
           create: [
             {
-              productId: product.id,
+              itemId: item.id,
               productNameSnapshot: "Cookie",
               quantity: 2,
               unitPriceSnapshot: 500,
@@ -153,8 +153,8 @@ describe("escopo por workspace", () => {
     const user = await testDb.user.create({
       data: { id: "u-update", name: "Bia", email: "bia@example.com" },
     });
-    const product = await scoped.product.create({
-      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    const item = await scoped.item.create({
+      data: { name: "Cookie" } as Prisma.ItemUncheckedCreateInput,
     });
 
     const sale = await scoped.sale.create({
@@ -164,7 +164,7 @@ describe("escopo por workspace", () => {
         items: {
           create: [
             {
-              productId: product.id,
+              itemId: item.id,
               productNameSnapshot: "Cookie",
               quantity: 2,
               unitPriceSnapshot: 500,
@@ -183,7 +183,7 @@ describe("escopo por workspace", () => {
         items: {
           create: [
             {
-              productId: product.id,
+              itemId: item.id,
               productNameSnapshot: "Cookie",
               quantity: 3,
               unitPriceSnapshot: 500,
@@ -206,7 +206,7 @@ describe("escopo por workspace", () => {
     const user = await testDb.user.create({
       data: { id: "u-leak", name: "Cau", email: "cau@example.com" },
     });
-    const product = await testDb.product.create({
+    const item = await testDb.item.create({
       data: { name: "Cookie B", workspaceId: b.id },
     });
     const alheia = await testDb.sale.create({
@@ -220,7 +220,7 @@ describe("escopo por workspace", () => {
           items: {
             create: [
               {
-                productId: product.id,
+                itemId: item.id,
                 productNameSnapshot: "Cookie B",
                 quantity: 1,
                 unitPriceSnapshot: 100,
@@ -238,10 +238,10 @@ describe("escopo por workspace", () => {
   it("updateManyAndReturn não atinge linhas de outro workspace", async () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
-    await testDb.product.create({ data: { name: "Meu", workspaceId: a.id, active: true } });
-    await testDb.product.create({ data: { name: "Alheio", workspaceId: b.id, active: true } });
+    await testDb.item.create({ data: { name: "Meu", workspaceId: a.id, active: true } });
+    await testDb.item.create({ data: { name: "Alheio", workspaceId: b.id, active: true } });
 
-    const returned = await scopedDb(a.id).product.updateManyAndReturn({
+    const returned = await scopedDb(a.id).item.updateManyAndReturn({
       where: {},
       data: { active: false },
     });
@@ -249,7 +249,7 @@ describe("escopo por workspace", () => {
     expect(returned).toHaveLength(1);
     expect(returned[0].workspaceId).toBe(a.id);
 
-    const alheio = await testDb.product.findFirst({ where: { workspaceId: b.id } });
+    const alheio = await testDb.item.findFirst({ where: { workspaceId: b.id } });
     expect(alheio?.active).toBe(true);
   });
 
@@ -257,27 +257,27 @@ describe("escopo por workspace", () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
 
-    const returned = await scopedDb(a.id).product.createManyAndReturn({
+    const returned = await scopedDb(a.id).item.createManyAndReturn({
       data: [{ name: "Novo", workspaceId: b.id }],
-    } as Prisma.ProductCreateManyAndReturnArgs);
+    } as Prisma.ItemCreateManyAndReturnArgs);
 
     expect(returned).toHaveLength(1);
     expect(returned[0].workspaceId).toBe(a.id);
 
-    const noOutro = await testDb.product.count({ where: { workspaceId: b.id } });
+    const noOutro = await testDb.item.count({ where: { workspaceId: b.id } });
     expect(noOutro).toBe(0);
   });
 
   it("operação não suportada lança em vez de rodar sem escopo", async () => {
     const a = await createWorkspace("A");
     const scoped = scopedDb(a.id) as unknown as {
-      product: { findRaw: (args: unknown) => Promise<unknown> };
+      item: { findRaw: (args: unknown) => Promise<unknown> };
     };
 
-    await expect(scoped.product.findRaw({})).rejects.toThrow(
+    await expect(scoped.item.findRaw({})).rejects.toThrow(
       /não é suportada pelo client escopado/,
     );
-    await expect(scoped.product.findRaw({})).rejects.toThrow(
+    await expect(scoped.item.findRaw({})).rejects.toThrow(
       /src\/server\/tenant\/extension\.ts/,
     );
   });
@@ -308,17 +308,17 @@ describe("escopo por workspace", () => {
     const a = await createWorkspace("A");
     const b = await createWorkspace("B");
 
-    await scopedDb(a.id).product.create({
-      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    await scopedDb(a.id).item.create({
+      data: { name: "Cookie" } as Prisma.ItemUncheckedCreateInput,
     });
-    const outro = await scopedDb(b.id).product.create({
-      data: { name: "Cookie" } as Prisma.ProductUncheckedCreateInput,
+    const outro = await scopedDb(b.id).item.create({
+      data: { name: "Cookie" } as Prisma.ItemUncheckedCreateInput,
     });
 
     expect(outro.name).toBe("Cookie");
     expect(outro.workspaceId).toBe(b.id);
 
-    const total = await testDb.product.count({ where: { name: "Cookie" } });
+    const total = await testDb.item.count({ where: { name: "Cookie" } });
     expect(total).toBe(2);
   });
 });

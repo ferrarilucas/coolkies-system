@@ -62,11 +62,11 @@ describe("createPurchase", () => {
   });
 
   it("registra vários itens numa única compra, sem fornecedor", async () => {
-    const acucar = await testDb.ingredient.create({
-      data: { name: "Açúcar", baseUnit: "G", workspaceId: context.workspaceId },
+    const acucar = await testDb.item.create({
+      data: { name: "Açúcar", unit: "G", productionInput: true, workspaceId: context.workspaceId },
     });
-    const farinha = await testDb.ingredient.create({
-      data: { name: "Farinha", baseUnit: "G", workspaceId: context.workspaceId },
+    const farinha = await testDb.item.create({
+      data: { name: "Farinha", unit: "G", productionInput: true, workspaceId: context.workspaceId },
     });
 
     const res = await createPurchase(
@@ -74,8 +74,8 @@ describe("createPurchase", () => {
         supplierId: "",
         purchasedAt: "2026-09-15",
         items: JSON.stringify([
-          { ingredientId: acucar.id, quantity: 1, unit: "KG", pricePaidCents: 500 },
-          { ingredientId: farinha.id, quantity: 2, unit: "KG", pricePaidCents: 900 },
+          { itemId: acucar.id, quantity: 1, unit: "KG", pricePaidCents: 500 },
+          { itemId: farinha.id, quantity: 2, unit: "KG", pricePaidCents: 900 },
         ]),
       }),
     );
@@ -85,50 +85,29 @@ describe("createPurchase", () => {
     expect(purchases).toHaveLength(1);
     expect(purchases[0].supplierId).toBeNull();
     expect(purchases[0].items).toHaveLength(2);
-    const acucarItem = purchases[0].items.find((i) => i.ingredientId === acucar.id)!;
+    const acucarItem = purchases[0].items.find((i) => i.itemId === acucar.id)!;
     expect(acucarItem.quantity).toBe(1000);
     expect(acucarItem.unit).toBe("G");
   });
 
-  it("emite StockMovement de compra para insumo de revenda", async () => {
-    const product = await testDb.product.create({
-      data: { name: "Refrigerante", workspaceId: context.workspaceId },
-    });
-    const refri = await testDb.ingredient.create({
-      data: {
-        name: "Refrigerante", baseUnit: "UN", isRawMaterial: false, forResale: true,
-        resaleProductId: product.id, workspaceId: context.workspaceId,
-      },
+  it("grava StockMovement(PURCHASE) para qualquer item comprado, revenda ou não", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Farinha", workspaceId: context.workspaceId, unit: "G", productionInput: true, sellable: false },
     });
 
-    await createPurchase(
+    const res = await createPurchase(
       fd({
         supplierId: "",
         purchasedAt: "2026-09-15",
-        items: JSON.stringify([{ ingredientId: refri.id, quantity: 24, unit: "UN", pricePaidCents: 4800 }]),
+        items: JSON.stringify([{ itemId: item.id, quantity: 5, unit: "KG", pricePaidCents: 2000 }]),
       }),
     );
+    expect(res.ok).toBe(true);
 
-    const movements = await testDb.stockMovement.findMany({ where: { productId: product.id } });
-    expect(movements).toHaveLength(1);
-    expect(movements[0]).toMatchObject({ type: "PURCHASE", quantity: 24 });
-  });
-
-  it("não emite StockMovement para insumo só de matéria-prima", async () => {
-    const acucar = await testDb.ingredient.create({
-      data: { name: "Açúcar", baseUnit: "G", workspaceId: context.workspaceId },
+    const movement = await testDb.stockMovement.findFirstOrThrow({
+      where: { itemId: item.id, type: "PURCHASE" },
     });
-
-    await createPurchase(
-      fd({
-        supplierId: "",
-        purchasedAt: "2026-09-15",
-        items: JSON.stringify([{ ingredientId: acucar.id, quantity: 1, unit: "KG", pricePaidCents: 500 }]),
-      }),
-    );
-
-    const movements = await testDb.stockMovement.count();
-    expect(movements).toBe(0);
+    expect(movement.quantity).toBe(5000);
   });
 
   it("recusa compra sem itens", async () => {
@@ -149,12 +128,12 @@ describe("deletePurchase", () => {
   });
 
   it("exclui a compra e todos os seus itens", async () => {
-    const ing = await testDb.ingredient.create({
-      data: { name: "Ovos", baseUnit: "UN", workspaceId: context.workspaceId },
+    const item = await testDb.item.create({
+      data: { name: "Ovos", unit: "UN", workspaceId: context.workspaceId },
     });
     const purchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
     await testDb.purchaseItem.create({
-      data: { purchaseId: purchase.id, ingredientId: ing.id, quantity: 12, unit: "UN", pricePaidCents: 1200, workspaceId: context.workspaceId },
+      data: { purchaseId: purchase.id, itemId: item.id, quantity: 12, unit: "UN", pricePaidCents: 1200, workspaceId: context.workspaceId },
     });
 
     const res = await deletePurchase(purchase.id);
@@ -164,21 +143,15 @@ describe("deletePurchase", () => {
   });
 
   it("exclui também os StockMovement(PURCHASE) que a compra gerou", async () => {
-    const product = await testDb.product.create({
-      data: { name: "Suco de laranja", workspaceId: context.workspaceId },
-    });
-    const suco = await testDb.ingredient.create({
-      data: {
-        name: "Suco de laranja", baseUnit: "UN", isRawMaterial: false, forResale: true,
-        resaleProductId: product.id, workspaceId: context.workspaceId,
-      },
+    const item = await testDb.item.create({
+      data: { name: "Suco de laranja", unit: "UN", sellable: true, workspaceId: context.workspaceId },
     });
 
     const createRes = await createPurchase(
       fd({
         supplierId: "",
         purchasedAt: "2026-09-15",
-        items: JSON.stringify([{ ingredientId: suco.id, quantity: 10, unit: "UN", pricePaidCents: 3000 }]),
+        items: JSON.stringify([{ itemId: item.id, quantity: 10, unit: "UN", pricePaidCents: 3000 }]),
       }),
     );
     expect(createRes.ok).toBe(true);
@@ -189,7 +162,7 @@ describe("deletePurchase", () => {
     const res = await deletePurchase(purchase.id);
     expect(res.ok).toBe(true);
     expect(await testDb.stockMovement.count({ where: { purchaseId: purchase.id } })).toBe(0);
-    expect(await testDb.stockMovement.count({ where: { productId: product.id } })).toBe(0);
+    expect(await testDb.stockMovement.count({ where: { itemId: item.id } })).toBe(0);
   });
 });
 
@@ -201,9 +174,9 @@ describe("fetchLastPriceForSupplierItem", () => {
     context.canWrite = true;
   });
 
-  it("retorna o preço lembrado daquele fornecedor+insumo", async () => {
-    const ing = await testDb.ingredient.create({
-      data: { name: "Açúcar", baseUnit: "G", workspaceId: context.workspaceId },
+  it("retorna o preço lembrado daquele fornecedor+item", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Açúcar", unit: "G", workspaceId: context.workspaceId },
     });
     const supplier = await testDb.supplier.create({
       data: { name: "Atacadão", workspaceId: context.workspaceId },
@@ -212,22 +185,22 @@ describe("fetchLastPriceForSupplierItem", () => {
       data: { supplierId: supplier.id, workspaceId: context.workspaceId },
     });
     await testDb.purchaseItem.create({
-      data: { purchaseId: purchase.id, ingredientId: ing.id, quantity: 1000, unit: "G", pricePaidCents: 450, workspaceId: context.workspaceId },
+      data: { purchaseId: purchase.id, itemId: item.id, quantity: 1000, unit: "G", pricePaidCents: 450, workspaceId: context.workspaceId },
     });
 
-    const result = await fetchLastPriceForSupplierItem(supplier.id, ing.id);
+    const result = await fetchLastPriceForSupplierItem(supplier.id, item.id);
     expect(result).toMatchObject({ quantity: 1000, unit: "G", pricePaidCents: 450 });
   });
 
-  it("retorna null quando o par fornecedor+insumo nunca teve compra", async () => {
-    const ing = await testDb.ingredient.create({
-      data: { name: "Farinha", baseUnit: "G", workspaceId: context.workspaceId },
+  it("retorna null quando o par fornecedor+item nunca teve compra", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Farinha", unit: "G", workspaceId: context.workspaceId },
     });
     const supplier = await testDb.supplier.create({
       data: { name: "Atacadão", workspaceId: context.workspaceId },
     });
 
-    const result = await fetchLastPriceForSupplierItem(supplier.id, ing.id);
+    const result = await fetchLastPriceForSupplierItem(supplier.id, item.id);
     expect(result).toBeNull();
   });
 });

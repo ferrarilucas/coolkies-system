@@ -18,10 +18,10 @@ import {
 const ALL = "__all__";
 
 type Option = { id: string; name: string };
-type ProductOption = Option & { flavors: Option[] };
+type ItemOption = Option & { variants: Option[] };
 
 export type DashboardFilterOptions = {
-  products: ProductOption[];
+  products: ItemOption[];
   customers: Option[];
   suppliers: Option[];
 };
@@ -45,8 +45,8 @@ export function DashboardFilters({
     from: string;
     to: string;
     status: string;
-    productId?: string;
-    flavorId?: string;
+    itemId?: string;
+    variantId?: string;
     customerId?: string;
     supplierId?: string;
   };
@@ -57,17 +57,17 @@ export function DashboardFilters({
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
-  const flavors = useMemo(
+  const variants = useMemo(
     () =>
-      options.products.find((p) => p.id === current.productId)?.flavors ?? [],
-    [options.products, current.productId],
+      options.products.find((p) => p.id === current.itemId)?.variants ?? [],
+    [options.products, current.itemId],
   );
 
   function apply(next: Partial<typeof current>) {
     const params = new URLSearchParams(searchParams.toString());
     const merged = { ...current, ...next };
     // sabor depende do produto
-    if (next.productId !== undefined) merged.flavorId = undefined;
+    if (next.itemId !== undefined) merged.variantId = undefined;
 
     const setOrDel = (k: string, v?: string) => {
       if (v && v !== ALL) params.set(k, v);
@@ -76,8 +76,8 @@ export function DashboardFilters({
     params.set("from", merged.from);
     params.set("to", merged.to);
     setOrDel("status", merged.status === "ALL" ? undefined : merged.status);
-    setOrDel("productId", merged.productId);
-    setOrDel("flavorId", merged.flavorId);
+    setOrDel("itemId", merged.itemId);
+    setOrDel("variantId", merged.variantId);
     setOrDel("customerId", merged.customerId);
     setOrDel("supplierId", merged.supplierId);
 
@@ -107,8 +107,8 @@ export function DashboardFilters({
 
   const activeCount = [
     current.status && current.status !== "ALL",
-    current.productId,
-    current.flavorId,
+    current.itemId,
+    current.variantId,
     current.customerId,
     current.supplierId,
   ].filter(Boolean).length;
@@ -212,8 +212,8 @@ export function DashboardFilters({
             {/* Produto */}
             <FilterSelect
               label="Produto"
-              value={current.productId || ALL}
-              onChange={(v) => apply({ productId: v === ALL ? undefined : v })}
+              value={current.itemId || ALL}
+              onChange={(v) => apply({ itemId: v === ALL ? undefined : v })}
               placeholder="Todos"
               items={options.products}
             />
@@ -221,11 +221,11 @@ export function DashboardFilters({
             {/* Sabor */}
             <FilterSelect
               label="Sabor"
-              value={current.flavorId || ALL}
-              onChange={(v) => apply({ flavorId: v === ALL ? undefined : v })}
-              placeholder={current.productId ? "Todos" : "Selecione produto"}
-              items={flavors}
-              disabled={!current.productId || flavors.length === 0}
+              value={current.variantId || ALL}
+              onChange={(v) => apply({ variantId: v === ALL ? undefined : v })}
+              placeholder={current.itemId ? "Todos" : "Selecione produto"}
+              items={variants}
+              disabled={!current.itemId || variants.length === 0}
             />
 
             {/* Cliente */}

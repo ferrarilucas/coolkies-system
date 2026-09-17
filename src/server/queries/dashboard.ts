@@ -11,7 +11,7 @@ import {
   format,
 } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { isLowStock } from "@/lib/stock";
+import { getItemStock } from "./production";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos de filtro
@@ -23,16 +23,16 @@ export type DashboardFilters = {
   from: Date;
   to: Date;
   status: DashboardStatus;
-  productId?: string;
-  flavorId?: string;
+  itemId?: string;
+  variantId?: string;
   customerId?: string;
   supplierId?: string;
 };
 
 export type Granularity = "day" | "week" | "month";
 
-function flavorKey(productId: string, flavorId: string | null) {
-  return `${productId}|${flavorId ?? "null"}`;
+function mixKey(itemId: string, variantId: string | null) {
+  return `${itemId}|${variantId ?? "null"}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,12 +43,13 @@ export type FilterOptions = Awaited<ReturnType<typeof getFilterOptions>>;
 
 export async function getFilterOptions() {
   const db = await getWorkspaceDb();
-  const products = await db.product.findMany({
+  const products = await db.item.findMany({
+    where: { sellable: true },
     orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,
-      flavors: {
+      variants: {
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       },
@@ -83,11 +84,11 @@ export async function getDashboardData(filters: DashboardFilters) {
   };
   if (filters.status !== "ALL") where.status = filters.status;
   if (filters.customerId) where.customerId = filters.customerId;
-  if (filters.productId || filters.flavorId) {
+  if (filters.itemId || filters.variantId) {
     where.items = {
       some: {
-        ...(filters.productId ? { productId: filters.productId } : {}),
-        ...(filters.flavorId ? { flavorId: filters.flavorId } : {}),
+        ...(filters.itemId ? { itemId: filters.itemId } : {}),
+        ...(filters.variantId ? { variantId: filters.variantId } : {}),
       },
     };
   }
@@ -107,8 +108,8 @@ export async function getDashboardData(filters: DashboardFilters) {
       customer: { select: { sector: true } },
       items: {
         select: {
-          productId: true,
-          flavorId: true,
+          itemId: true,
+          variantId: true,
           quantity: true,
           unitPriceSnapshot: true,
           productNameSnapshot: true,
@@ -118,35 +119,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     },
   });
 
-  // ── Query 2: ingredientes ────────────────────────────────────────────────────
-  const ingredients = await db.ingredient.findMany({
-    select: { id: true, name: true, baseUnit: true, minStock: true, forResale: true, resaleProductId: true },
-  });
-
-  const resaleProductIds = new Set(
-    ingredients
-      .filter((ing) => ing.forResale && ing.resaleProductId)
-      .map((ing) => ing.resaleProductId as string),
-  );
-
-  const resaleSoldByIngredientId = new Map<string, number>();
-  if (resaleProductIds.size > 0) {
-    const soldMovements = await db.stockMovement.groupBy({
-      by: ["productId"],
-      where: { productId: { in: Array.from(resaleProductIds) }, type: "SALE" },
-      _sum: { quantity: true },
-    });
-    const soldByProductId = new Map(
-      soldMovements.map((r) => [r.productId, Math.abs(r._sum.quantity ?? 0)]),
-    );
-    for (const ing of ingredients) {
-      if (ing.forResale && ing.resaleProductId) {
-        resaleSoldByIngredientId.set(ing.id, soldByProductId.get(ing.resaleProductId) ?? 0);
-      }
-    }
-  }
-
-  // ── Query 3: lotes de produção ──────────────────────────────────────────────
+  // ── Query 2: lotes de produção ──────────────────────────────────────────────
   const batches = await db.productionBatch.findMany({
     where: { recipeId: { not: null } },
     select: {
@@ -154,17 +127,17 @@ export async function getDashboardData(filters: DashboardFilters) {
       recipe: {
         select: {
           yieldQty: true,
-          ingredients: { select: { ingredientId: true, quantity: true } },
+          items: { select: { itemId: true, quantity: true } },
         },
       },
-      fillings: {
+      variantLines: {
         select: {
           quantity: true,
-          flavor: {
+          variant: {
             select: {
-              fillingRecipe: {
+              recipe: {
                 select: {
-                  ingredients: { select: { ingredientId: true, quantity: true } },
+                  items: { select: { itemId: true, quantity: true } },
                 },
               },
             },
@@ -174,7 +147,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     },
   });
 
-  // ── Query 4: itens de compra ─────────────────────────────────────────────────
+  // ── Query 3: itens de compra ─────────────────────────────────────────────────
   const purchaseItems = await db.purchaseItem.findMany({
     orderBy: { purchase: { purchasedAt: "desc" } },
     select: {
@@ -183,55 +156,44 @@ export async function getDashboardData(filters: DashboardFilters) {
       purchase: {
         select: { purchasedAt: true, supplierId: true, supplier: { select: { id: true, name: true } } },
       },
-      ingredient: { select: { id: true, name: true, baseUnit: true, forResale: true, resaleProductId: true } },
+      item: { select: { id: true, name: true, unit: true } },
     },
   });
 
-  // ─── Custo/unidade base (última compra), consumo total ───────────────────────
+  // ─── Custo/unidade base (última compra) ──────────────────────────────────────
   const costPerBaseUnit = new Map<string, number>();
-  const purchasedTotal = new Map<string, number>();
   const lastPriceBySupplier = new Map<string, Map<string, number>>();
-  const resaleUnitCostByProductId = new Map<string, number>();
   for (const p of purchaseItems) {
-    const ingId = p.ingredient.id;
-    purchasedTotal.set(ingId, (purchasedTotal.get(ingId) ?? 0) + p.quantity);
+    const itemId = p.item.id;
     if (p.quantity > 0) {
       const unit = p.pricePaidCents / p.quantity;
-      if (!costPerBaseUnit.has(ingId)) costPerBaseUnit.set(ingId, unit);
-      if (p.ingredient.forResale && p.ingredient.resaleProductId) {
-        if (!resaleUnitCostByProductId.has(p.ingredient.resaleProductId)) {
-          resaleUnitCostByProductId.set(p.ingredient.resaleProductId, unit);
-        }
-      }
+      if (!costPerBaseUnit.has(itemId)) costPerBaseUnit.set(itemId, unit);
       const supplierId = p.purchase.supplierId;
       if (supplierId) {
-        let bySupplier = lastPriceBySupplier.get(ingId);
-        if (!bySupplier) { bySupplier = new Map(); lastPriceBySupplier.set(ingId, bySupplier); }
+        let bySupplier = lastPriceBySupplier.get(itemId);
+        if (!bySupplier) { bySupplier = new Map(); lastPriceBySupplier.set(itemId, bySupplier); }
         if (!bySupplier.has(supplierId)) bySupplier.set(supplierId, unit);
       }
     }
   }
 
   // ─── Custo médio por cookie ──────────────────────────────────────────────────
-  const consumed = new Map<string, number>();
   let totalProductionCost = 0;
   let totalProduced = 0;
   for (const batch of batches) {
     if (!batch.recipe) continue;
     const yieldQty = batch.recipe.yieldQty || 1;
     const recipeBatches = batch.quantity / yieldQty;
-    for (const ri of batch.recipe.ingredients) {
-      consumed.set(ri.ingredientId, (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * recipeBatches);
-      const unit = costPerBaseUnit.get(ri.ingredientId);
+    for (const ri of batch.recipe.items) {
+      const unit = costPerBaseUnit.get(ri.itemId);
       if (unit != null) totalProductionCost += unit * ri.quantity * recipeBatches;
     }
-    for (const f of batch.fillings) {
-      const fr = f.flavor.fillingRecipe;
-      if (!fr) continue;
-      for (const ri of fr.ingredients) {
-        consumed.set(ri.ingredientId, (consumed.get(ri.ingredientId) ?? 0) + ri.quantity * f.quantity);
-        const unit = costPerBaseUnit.get(ri.ingredientId);
-        if (unit != null) totalProductionCost += unit * ri.quantity * f.quantity;
+    for (const line of batch.variantLines) {
+      const vr = line.variant.recipe;
+      if (!vr) continue;
+      for (const ri of vr.items) {
+        const unit = costPerBaseUnit.get(ri.itemId);
+        if (unit != null) totalProductionCost += unit * ri.quantity * line.quantity;
       }
     }
     totalProduced += batch.quantity;
@@ -242,10 +204,10 @@ export async function getDashboardData(filters: DashboardFilters) {
       : null;
 
   // ─── KPIs + mix + clientes ───────────────────────────────────────────────────
-  const hasItemFilter = !!(filters.productId || filters.flavorId);
-  const itemMatches = (i: { productId: string; flavorId: string | null }) =>
-    (!filters.productId || i.productId === filters.productId) &&
-    (!filters.flavorId || i.flavorId === filters.flavorId);
+  const hasItemFilter = !!(filters.itemId || filters.variantId);
+  const itemMatches = (i: { itemId: string; variantId: string | null }) =>
+    (!filters.itemId || i.itemId === filters.itemId) &&
+    (!filters.variantId || i.variantId === filters.variantId);
 
   let paidRevenue = 0;
   let forecastRevenue = 0;
@@ -261,7 +223,7 @@ export async function getDashboardData(filters: DashboardFilters) {
   for (const sale of sales) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
     const saleQty = matchedItems.reduce(
-      (s, i) => s + (resaleProductIds.has(i.productId) ? 0 : i.quantity),
+      (s, i) => s + (costPerBaseUnit.has(i.itemId) ? 0 : i.quantity),
       0,
     );
 
@@ -284,7 +246,7 @@ export async function getDashboardData(filters: DashboardFilters) {
     else forecastRevenue += saleRevenue;
 
     for (const i of matchedItems) {
-      const key = flavorKey(i.productId, i.flavorId);
+      const key = mixKey(i.itemId, i.variantId);
       const label = i.flavorNameSnapshot
         ? `${i.productNameSnapshot} ${i.flavorNameSnapshot}`
         : i.productNameSnapshot;
@@ -315,9 +277,9 @@ export async function getDashboardData(filters: DashboardFilters) {
   for (const sale of sales) {
     const matched = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
     for (const item of matched) {
-      const resaleUnit = resaleUnitCostByProductId.get(item.productId);
-      if (resaleUnit == null) continue;
-      resaleCogs += resaleUnit * item.quantity;
+      const directUnit = costPerBaseUnit.get(item.itemId);
+      if (directUnit == null) continue;
+      resaleCogs += directUnit * item.quantity;
     }
   }
   const cogs = unitCost != null || resaleCogs > 0
@@ -393,16 +355,17 @@ export async function getDashboardData(filters: DashboardFilters) {
     }));
 
   // ─── Estoque baixo ───────────────────────────────────────────────────────────
-  const lowStock = ingredients
-    .map((ing) => {
-      const purchased = purchasedTotal.get(ing.id) ?? 0;
-      const used = consumed.get(ing.id) ?? 0;
-      const resaleSold = resaleSoldByIngredientId.get(ing.id) ?? 0;
-      const current = purchased - used - resaleSold;
-      const min = ing.minStock ?? 0;
-      return { id: ing.id, name: ing.name, baseUnit: ing.baseUnit as string, current, minStock: min, deficit: min - current };
-    })
-    .filter((i) => isLowStock(i.current, i.minStock))
+  const itemStock = await getItemStock();
+  const lowStock = itemStock
+    .filter((s) => s.belowMin && s.productionInput && s.variantId == null)
+    .map((s) => ({
+      id: s.itemId,
+      name: s.itemName,
+      unit: s.unit,
+      current: s.current,
+      minStock: s.minStock ?? 0,
+      deficit: (s.minStock ?? 0) - s.current,
+    }))
     .sort((a, b) => b.deficit - a.deficit);
 
   // ─── Fornecedor ──────────────────────────────────────────────────────────────
@@ -427,17 +390,17 @@ export async function getDashboardData(filters: DashboardFilters) {
       .filter((p) => p.purchase.supplierId)
       .map((p) => [p.purchase.supplierId as string, p.purchase.supplier!.name]),
   );
-  const ingNameById = new Map(purchaseItems.map((p) => [p.ingredient.id, p.ingredient]));
+  const itemNameById = new Map(purchaseItems.map((p) => [p.item.id, p.item]));
   const priceComparison = Array.from(lastPriceBySupplier.entries())
-    .map(([ingId, bySupplier]) => {
-      const ing = ingNameById.get(ingId);
-      if (!ing || bySupplier.size < 2) return null;
+    .map(([itemId, bySupplier]) => {
+      const item = itemNameById.get(itemId);
+      if (!item || bySupplier.size < 2) return null;
       const entries = Array.from(bySupplier.entries()).sort((a, b) => a[1] - b[1]);
       const [cheapSupplier, cheapVal] = entries[0];
       const [dearSupplier, dearVal] = entries[entries.length - 1];
       return {
-        name: ing.name,
-        baseUnit: ing.baseUnit as string,
+        name: item.name,
+        unit: item.unit as string,
         cheapestSupplier: supplierNameById.get(cheapSupplier) ?? "—",
         cheapestUnitCents: cheapVal,
         dearestSupplier: supplierNameById.get(dearSupplier) ?? "—",

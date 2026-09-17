@@ -9,9 +9,9 @@ export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
 type SaleItemInput = {
-  productId: string;
+  itemId: string;
   productName: string;
-  flavorId: string | null;
+  variantId: string | null;
   flavorName: string | null;
   quantity: number;
   unitPriceCents: number;
@@ -83,9 +83,9 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
         workspaceId,
         items: {
           create: items.map((item) => ({
-            productId: item.productId,
+            itemId: item.itemId,
             productNameSnapshot: item.productName,
-            flavorId: item.flavorId,
+            variantId: item.variantId,
             flavorNameSnapshot: item.flavorName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
@@ -98,8 +98,8 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
     for (const item of items) {
       await db.stockMovement.create({
         data: {
-          productId: item.productId,
-          flavorId: item.flavorId,
+          itemId: item.itemId,
+          variantId: item.variantId,
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: sale.id,
@@ -109,6 +109,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
     }
 
     revalidatePath("/sales");
+    revalidatePath("/stock");
     return { ok: true, data: { id: sale.id } };
   } catch (e) {
     console.error("createSale error:", e);
@@ -168,9 +169,9 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
         totalCents,
         items: {
           create: items.map((item) => ({
-            productId: item.productId,
+            itemId: item.itemId,
             productNameSnapshot: item.productName,
-            flavorId: item.flavorId,
+            variantId: item.variantId,
             flavorNameSnapshot: item.flavorName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
@@ -183,8 +184,8 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
     for (const item of items) {
       await db.stockMovement.create({
         data: {
-          productId: item.productId,
-          flavorId: item.flavorId,
+          itemId: item.itemId,
+          variantId: item.variantId,
           type: StockMovementType.SALE,
           quantity: -item.quantity,
           saleId: id,
@@ -194,6 +195,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
     }
 
     revalidatePath("/sales");
+    revalidatePath("/stock");
     return { ok: true };
   } catch (e) {
     console.error("updateSale error:", e);
@@ -324,5 +326,6 @@ export async function deleteSale(id: string): Promise<ActionResult> {
     return { ok: false, error: "Não foi possível excluir." };
   }
   revalidatePath("/sales");
+  revalidatePath("/stock");
   return { ok: true };
 }

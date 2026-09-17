@@ -13,12 +13,12 @@ import { SuppliersList } from "@/components/purchases/suppliers-list";
 export default async function PurchasesPage() {
   const db = await getWorkspaceDb();
 
-  const [suppliers, purchases, ingredients] = await Promise.all([
+  const [suppliers, purchases, items] = await Promise.all([
     getSuppliers(),
     getPurchases(),
-    db.ingredient.findMany({
+    db.item.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, baseUnit: true, forResale: true },
+      select: { id: true, name: true, unit: true, sellable: true },
     }),
   ]);
 
@@ -27,7 +27,7 @@ export default async function PurchasesPage() {
       <PageHeader
         title="Compras"
         description="Registre compras de matéria-prima ou itens para revenda."
-        action={<PurchaseDialog suppliers={suppliers} ingredients={ingredients} />}
+        action={<PurchaseDialog suppliers={suppliers} ingredients={items} />}
       />
 
       <Tabs defaultValue="purchases">
@@ -56,11 +56,11 @@ export default async function PurchasesPage() {
               icon={ShoppingBag}
               title="Nenhuma compra registrada"
               description={
-                ingredients.length === 0
+                items.length === 0
                   ? "Registre sua primeira compra — você pode criar o insumo direto no formulário."
                   : "Registre sua primeira compra para calcular o custo das receitas e o lucro de itens revendidos."
               }
-              action={<PurchaseDialog suppliers={suppliers} ingredients={ingredients} />}
+              action={<PurchaseDialog suppliers={suppliers} ingredients={items} />}
             />
           ) : (
             <PurchasesList purchases={purchases} />

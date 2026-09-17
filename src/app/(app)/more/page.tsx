@@ -9,7 +9,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
-  UtensilsCrossed,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -54,15 +54,15 @@ export default async function MorePage() {
     },
     {
       href: "/products",
-      label: "Produtos",
-      description: "Estoque de produto final e produções",
+      label: "Produção",
+      description: "Histórico de produções",
       icon: Cookie,
     },
     {
-      href: "/pantry",
-      label: "Despensa",
-      description: "Ingredientes e lista de compras",
-      icon: UtensilsCrossed,
+      href: "/stock",
+      label: "Estoque",
+      description: "Itens e lista de compras",
+      icon: Package,
     },
     {
       href: "/purchases",

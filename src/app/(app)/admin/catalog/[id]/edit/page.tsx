@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { ProductEditor } from "@/components/catalog/product-editor";
-import { getProductForEdit } from "@/server/queries/catalog";
+import { getItemForEdit } from "@/server/queries/catalog";
 import { getWorkspaceDb } from "@/server/tenant/context";
 
 export default async function EditProductPage({
@@ -12,7 +12,7 @@ export default async function EditProductPage({
   const { id } = await params;
   const db = await getWorkspaceDb();
   const [product, recipes] = await Promise.all([
-    getProductForEdit(id),
+    getItemForEdit(id),
     db.recipe.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 

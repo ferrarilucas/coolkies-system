@@ -22,48 +22,50 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       data: { id: "u-dash", name: "Dona", email: "dona@example.com" },
     });
 
-    const cookieProduct = await testDb.product.create({
-      data: { name: "Cookie Chocolate", workspaceId: context.workspaceId },
-    });
-    const refriProduct = await testDb.product.create({
-      data: { name: "Refrigerante", workspaceId: context.workspaceId },
-    });
-
-    const farinha = await testDb.ingredient.create({
-      data: { name: "Farinha", baseUnit: "G", workspaceId: context.workspaceId },
-    });
-    const refri = await testDb.ingredient.create({
+    const cookie = await testDb.item.create({
       data: {
-        name: "Refrigerante", baseUnit: "UN", isRawMaterial: false, forResale: true,
-        resaleProductId: refriProduct.id, workspaceId: context.workspaceId,
+        name: "Cookie Chocolate", unit: "UN", sellable: true, productionInput: false,
+        workspaceId: context.workspaceId,
+      },
+    });
+    const farinha = await testDb.item.create({
+      data: {
+        name: "Farinha", unit: "G", sellable: false, productionInput: true,
+        workspaceId: context.workspaceId,
+      },
+    });
+    const refri = await testDb.item.create({
+      data: {
+        name: "Refrigerante", unit: "UN", sellable: true, productionInput: false,
+        workspaceId: context.workspaceId,
       },
     });
 
     const recipe = await testDb.recipe.create({
       data: { name: "Massa base", yieldQty: 10, workspaceId: context.workspaceId },
     });
-    await testDb.recipeIngredient.create({
-      data: { recipeId: recipe.id, ingredientId: farinha.id, quantity: 500, workspaceId: context.workspaceId },
+    await testDb.recipeItem.create({
+      data: { recipeId: recipe.id, itemId: farinha.id, quantity: 500, workspaceId: context.workspaceId },
     });
 
     const farinhaPurchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
     await testDb.purchaseItem.create({
       data: {
-        purchaseId: farinhaPurchase.id, ingredientId: farinha.id,
+        purchaseId: farinhaPurchase.id, itemId: farinha.id,
         quantity: 1000, unit: "G", pricePaidCents: 200, workspaceId: context.workspaceId,
       },
     });
     const refriPurchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
     await testDb.purchaseItem.create({
       data: {
-        purchaseId: refriPurchase.id, ingredientId: refri.id,
+        purchaseId: refriPurchase.id, itemId: refri.id,
         quantity: 24, unit: "UN", pricePaidCents: 4800, workspaceId: context.workspaceId,
       },
     });
 
     await testDb.productionBatch.create({
       data: {
-        productId: cookieProduct.id, recipeId: recipe.id, quantity: 10,
+        itemId: cookie.id, recipeId: recipe.id, quantity: 10,
         userId: user.id, workspaceId: context.workspaceId,
       },
     });
@@ -80,11 +82,11 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
         items: {
           create: [
             {
-              productId: cookieProduct.id, quantity: 5, unitPriceSnapshot: 300,
+              itemId: cookie.id, quantity: 5, unitPriceSnapshot: 300,
               productNameSnapshot: "Cookie Chocolate", workspaceId: context.workspaceId,
             },
             {
-              productId: refriProduct.id, quantity: 3, unitPriceSnapshot: 250,
+              itemId: refri.id, quantity: 3, unitPriceSnapshot: 250,
               productNameSnapshot: "Refrigerante", workspaceId: context.workspaceId,
             },
           ],
@@ -100,7 +102,7 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
 
     expect(result.kpis.soldCookies).toBe(5);
     expect(result.kpis.paidRevenueCents).toBe(2250);
-    // productionCogs = 10 cents/cookie * 5 cookies = 50; resaleCogs = 200 cents/un * 3 un = 600
+    // productionCogs = 10 cents/cookie * 5 cookies = 50; custo direto = 200 cents/un * 3 un = 600
     expect(result.kpis.cogsCents).toBe(650);
     expect(result.kpis.grossProfitCents).toBe(1600);
   });

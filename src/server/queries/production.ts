@@ -1,9 +1,6 @@
 "use server";
 
-import type { PrismaClient } from "@prisma/client";
 import { getWorkspaceDb } from "@/server/tenant/context";
-import { formatBRL } from "@/lib/money";
-import { formatQty } from "@/lib/units";
 import { isLowStock } from "@/lib/stock";
 import { unitCostFromLastPurchase } from "./purchase-cost";
 
@@ -16,11 +13,11 @@ export async function getProductionBatches() {
   return db.productionBatch.findMany({
     orderBy: { producedAt: "desc" },
     include: {
-      product: { select: { id: true, name: true } },
-      flavor: { select: { id: true, name: true } },
+      item: { select: { id: true, name: true } },
+      variant: { select: { id: true, name: true } },
       recipe: { select: { id: true, name: true, yieldQty: true } },
-      fillings: {
-        include: { flavor: { select: { id: true, name: true } } },
+      variantLines: {
+        include: { variant: { select: { id: true, name: true } } },
       },
     },
   });
@@ -35,107 +32,34 @@ export async function getProductionBatchById(id: string) {
   return db.productionBatch.findUnique({
     where: { id },
     include: {
-      fillings: {
-        select: { flavorId: true, quantity: true },
-      },
+      variantLines: { select: { variantId: true, quantity: true } },
     },
   });
 }
 
-// ─── Estoque atual de cookies ─────────────────────────────────────────────────
+// ─── Estoque unificado de itens (via StockMovement) ───────────────────────────
 
-export type CookieStockEntry = {
-  productId: string;
-  productName: string;
-  flavorId: string | null;
-  flavorName: string | null;
-  produced: number;
-  sold: number;
-  current: number;
-};
-
-export async function getCookieStock(): Promise<CookieStockEntry[]> {
-  const db = await getWorkspaceDb();
-  // Fonte de verdade para produção: ProductionFilling (direto, sem StockMovement)
-  const fillings = await db.productionFilling.findMany({
-    select: {
-      flavorId: true,
-      quantity: true,
-      productionBatch: { select: { productId: true } },
-    },
-  });
-
-  // Fonte de verdade para vendas: SaleItem (inclui pago + pendente)
-  const saleItems = await db.saleItem.findMany({
-    where: { flavorId: { not: null } },
-    select: { productId: true, flavorId: true, quantity: true },
-  });
-
-  const products = await db.product.findMany({ select: { id: true, name: true } });
-  const flavors = await db.flavor.findMany({ select: { id: true, name: true } });
-
-  const productMap = new Map(products.map((p) => [p.id, p.name]));
-  const flavorMap = new Map(flavors.map((f) => [f.id, f.name]));
-
-  // Agrega produzidos por (productId, flavorId)
-  const producedMap = new Map<string, number>();
-  for (const f of fillings) {
-    const key = `${f.productionBatch.productId}|${f.flavorId}`;
-    producedMap.set(key, (producedMap.get(key) ?? 0) + f.quantity);
-  }
-
-  // Agrega vendidos por (productId, flavorId)
-  const soldMap = new Map<string, number>();
-  for (const item of saleItems) {
-    if (!item.flavorId) continue;
-    const key = `${item.productId}|${item.flavorId}`;
-    soldMap.set(key, (soldMap.get(key) ?? 0) + item.quantity);
-  }
-
-  const keys = new Set([...producedMap.keys(), ...soldMap.keys()]);
-
-  return Array.from(keys)
-    .map((key) => {
-      const [productId, flavorId] = key.split("|");
-      if (!flavorId || flavorId === "null") return null;
-      const p = producedMap.get(key) ?? 0;
-      const s = soldMap.get(key) ?? 0;
-      return {
-        productId,
-        productName: productMap.get(productId) ?? productId,
-        flavorId,
-        flavorName: flavorMap.get(flavorId) ?? flavorId,
-        produced: p,
-        sold: s,
-        current: p - s,
-      };
-    })
-    .filter((e): e is NonNullable<typeof e> => e !== null)
-    .sort((a, b) => a.productName.localeCompare(b.productName));
-}
-
-// ─── Estoque de ingredientes (despensa) ───────────────────────────────────────
-
-export type PantryEntry = {
-  ingredientId: string;
-  ingredientName: string;
-  baseUnit: string;
-  purchased: number;
-  consumed: number;
+export type ItemStockEntry = {
+  itemId: string;
+  itemName: string;
+  variantId: string | null;
+  variantName: string | null;
+  unit: string;
   current: number;
   minStock: number | null;
   belowMin: boolean;
-  latestPriceCents: number | null; // preço por unidade base (centavos)
+  sellable: boolean;
+  productionInput: boolean;
+  latestPriceCents: number | null;
   latestSupplier: string | null;
-  forResale: boolean;
-  resaleSold: number | null; // quantidade vendida do produto vinculado (null se não é revenda)
 };
 
-export async function getPantryStock(): Promise<PantryEntry[]> {
+export async function getItemStock(): Promise<ItemStockEntry[]> {
   const db = await getWorkspaceDb();
-  const ingredients = await db.ingredient.findMany({
+  const items = await db.item.findMany({
     orderBy: { name: "asc" },
     include: {
+      variants: { orderBy: { name: "asc" } },
       purchaseItems: {
         orderBy: { purchase: { purchasedAt: "desc" } },
         take: 1,
@@ -144,106 +68,40 @@ export async function getPantryStock(): Promise<PantryEntry[]> {
     },
   });
 
-  // Total comprado por ingrediente
-  const purchaseSums = await db.purchaseItem.groupBy({
-    by: ["ingredientId"],
+  const balances = await db.stockMovement.groupBy({
+    by: ["itemId", "variantId"],
     _sum: { quantity: true },
   });
-  const purchaseMap = new Map(
-    purchaseSums.map((r) => [r.ingredientId, r._sum.quantity ?? 0]),
+  const balanceMap = new Map(
+    balances.map((b) => [`${b.itemId}|${b.variantId ?? ""}`, b._sum.quantity ?? 0]),
   );
 
-  // Total consumido em produções (matéria-prima)
-  const consumptionMap = await buildConsumptionMap(db);
-
-  // Total vendido diretamente (insumos de revenda), via o mesmo ledger de StockMovement
-  // usado por produto acabado: soma apenas os movimentos de venda (tipo SALE).
-  const resaleIds = ingredients
-    .filter((ing) => ing.forResale && ing.resaleProductId)
-    .map((ing) => ing.resaleProductId!);
-  const soldMovements = resaleIds.length > 0
-    ? await db.stockMovement.groupBy({
-        by: ["productId"],
-        where: { productId: { in: resaleIds }, type: "SALE" },
-        _sum: { quantity: true },
-      })
-    : [];
-  const soldByProductId = new Map(
-    soldMovements.map((r) => [r.productId, Math.abs(r._sum.quantity ?? 0)]),
-  );
-
-  return ingredients.map((ing) => {
-    const purchased = purchaseMap.get(ing.id) ?? 0;
-    const consumed = consumptionMap.get(ing.id) ?? 0;
-    const resaleSold = ing.forResale && ing.resaleProductId
-      ? soldByProductId.get(ing.resaleProductId) ?? 0
-      : null;
-    const current = purchased - consumed - (resaleSold ?? 0);
-    const lastPurchase = ing.purchaseItems[0];
-    const pricePerUnit = unitCostFromLastPurchase(lastPurchase ?? null);
-
-    return {
-      ingredientId: ing.id,
-      ingredientName: ing.name,
-      baseUnit: ing.baseUnit,
-      purchased,
-      consumed,
-      current,
-      minStock: ing.minStock ?? null,
-      belowMin: isLowStock(current, ing.minStock),
-      latestPriceCents: pricePerUnit !== null ? Math.round(pricePerUnit) : null,
-      latestSupplier: lastPurchase?.purchase.supplier?.name ?? null,
-      forResale: ing.forResale,
-      resaleSold,
+  const entries: ItemStockEntry[] = [];
+  for (const item of items) {
+    const lastPurchase = item.purchaseItems[0] ?? null;
+    const pricePerUnit = unitCostFromLastPurchase(lastPurchase);
+    const latestPriceCents = pricePerUnit !== null ? Math.round(pricePerUnit) : null;
+    const latestSupplier = lastPurchase?.purchase.supplier?.name ?? null;
+    const base = {
+      itemId: item.id,
+      itemName: item.name,
+      unit: item.unit,
+      minStock: item.minStock ?? null,
+      sellable: item.sellable,
+      productionInput: item.productionInput,
+      latestPriceCents,
+      latestSupplier,
     };
-  });
-}
 
-/** Constrói mapa ingredientId → quantidade consumida em produções */
-async function buildConsumptionMap(db: PrismaClient): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-
-  const batches = await db.productionBatch.findMany({
-    where: { recipeId: { not: null } },
-    include: {
-      recipe: {
-        include: { ingredients: true },
-      },
-      fillings: {
-        include: {
-          flavor: {
-            include: {
-              fillingRecipe: { include: { ingredients: true } },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  for (const batch of batches) {
-    if (!batch.recipe) continue;
-    const yieldQty = batch.recipe.yieldQty || 1;
-    // Quantos "lotes de receita" foram feitos
-    const batches_count = batch.quantity / yieldQty;
-
-    // Consumo base
-    for (const ri of batch.recipe.ingredients) {
-      const prev = map.get(ri.ingredientId) ?? 0;
-      map.set(ri.ingredientId, prev + ri.quantity * batches_count);
-    }
-
-    // Consumo de recheios
-    for (const filling of batch.fillings) {
-      const fillingRecipe = filling.flavor.fillingRecipe;
-      if (!fillingRecipe) continue;
-      for (const ri of fillingRecipe.ingredients) {
-        const prev = map.get(ri.ingredientId) ?? 0;
-        // filling.quantity cookies recheados × ingrediente por cookie
-        map.set(ri.ingredientId, prev + ri.quantity * filling.quantity);
+    if (item.variants.length === 0) {
+      const current = balanceMap.get(`${item.id}|`) ?? 0;
+      entries.push({ ...base, variantId: null, variantName: null, current, belowMin: isLowStock(current, item.minStock) });
+    } else {
+      for (const variant of item.variants) {
+        const current = balanceMap.get(`${item.id}|${variant.id}`) ?? 0;
+        entries.push({ ...base, variantId: variant.id, variantName: variant.name, current, belowMin: isLowStock(current, item.minStock) });
       }
     }
   }
-
-  return map;
+  return entries;
 }
