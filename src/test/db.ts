@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 export const testDb = new PrismaClient();
 
 const TABLES = [
+  "mcp_workspace_context",
   "member",
   "invitation",
   "workspace",
