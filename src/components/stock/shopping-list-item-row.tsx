@@ -119,8 +119,10 @@ export function ShoppingListItemRow({
       <Switch checked={false} disabled={pending} onCheckedChange={onCheckedChange} aria-label="Marcar como comprado" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{label}</p>
-        {quantity != null && unit != null && (
-          <p className="text-xs text-muted-foreground">{formatQty(quantity, unit as BaseUnit)}</p>
+        {quantity != null && (
+          <p className="text-xs text-muted-foreground">
+            {unit != null ? formatQty(quantity, unit as BaseUnit) : quantity}
+          </p>
         )}
       </div>
       {itemId && (

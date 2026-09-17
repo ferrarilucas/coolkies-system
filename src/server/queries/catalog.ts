@@ -7,6 +7,7 @@ export type ItemWithVariantsAndPrices = Awaited<
 export async function getItemsWithVariantsAndPrices() {
   const db = await getWorkspaceDb();
   return db.item.findMany({
+    where: { sellable: true },
     orderBy: { name: "asc" },
     include: {
       variants: {

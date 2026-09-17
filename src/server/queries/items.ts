@@ -6,6 +6,7 @@ export type ItemWithCost = Awaited<ReturnType<typeof getItemsWithLastCost>>[numb
 export async function getItemsWithLastCost() {
   const db = await getWorkspaceDb();
   const items = await db.item.findMany({
+    where: { productionInput: true },
     orderBy: { name: "asc" },
     include: {
       purchaseItems: {

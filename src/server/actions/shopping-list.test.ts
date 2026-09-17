@@ -20,7 +20,7 @@ vi.mock("@/server/tenant/context", () => ({
   },
 }));
 
-const { createShoppingListItem, deleteShoppingListItem, toggleShoppingListItem, addSuggestedItem } = await import("./shopping-list");
+const { createShoppingListItem, updateShoppingListItem, deleteShoppingListItem, toggleShoppingListItem, addSuggestedItem } = await import("./shopping-list");
 const { getShoppingListItems, getShoppingListSuggestions } = await import("@/server/queries/shopping-list");
 
 function fd(entries: Record<string, string>) {
@@ -56,6 +56,47 @@ describe("createShoppingListItem", () => {
 
     const items = await getShoppingListItems();
     expect(items[0]).toMatchObject({ itemId: item.id, quantity: 500, unit: "G" });
+  });
+});
+
+describe("updateShoppingListItem", () => {
+  it("altera label, quantidade e unidade de um item existente", async () => {
+    const ws = await createWorkspace("Loja H");
+    context.workspaceId = ws.id;
+    await createShoppingListItem(fd({ label: "Café", quantity: "1", unit: "UN" }));
+    const [created] = await getShoppingListItems();
+
+    const res = await updateShoppingListItem(created.id, fd({ label: "Café moído", quantity: "500", unit: "G" }));
+    expect(res.ok).toBe(true);
+
+    const [updated] = await getShoppingListItems();
+    expect(updated).toMatchObject({ id: created.id, label: "Café moído", quantity: 500, unit: "G" });
+  });
+
+  it("limpa quantidade e unidade quando os campos vêm vazios", async () => {
+    const ws = await createWorkspace("Loja I");
+    context.workspaceId = ws.id;
+    await createShoppingListItem(fd({ label: "Café", quantity: "500", unit: "G" }));
+    const [created] = await getShoppingListItems();
+
+    const res = await updateShoppingListItem(created.id, fd({ label: "Café", quantity: "", unit: "" }));
+    expect(res.ok).toBe(true);
+
+    const [updated] = await getShoppingListItems();
+    expect(updated).toMatchObject({ quantity: null, unit: null });
+  });
+
+  it("recusa um label vazio", async () => {
+    const ws = await createWorkspace("Loja J");
+    context.workspaceId = ws.id;
+    await createShoppingListItem(fd({ label: "Café" }));
+    const [created] = await getShoppingListItems();
+
+    const res = await updateShoppingListItem(created.id, fd({ label: "   " }));
+    expect(res.ok).toBe(false);
+
+    const [unchanged] = await getShoppingListItems();
+    expect(unchanged.label).toBe("Café");
   });
 });
 

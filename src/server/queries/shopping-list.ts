@@ -33,7 +33,7 @@ export async function getShoppingListSuggestions(): Promise<ShoppingListSuggesti
   const pendingIds = new Set(pending.map((p) => p.itemId));
 
   return stock
-    .filter((s) => s.belowMin && s.minStock != null && !pendingIds.has(s.itemId))
+    .filter((s) => s.variantId == null && s.belowMin && s.minStock != null && !pendingIds.has(s.itemId))
     .map((s) => {
       const deficit = Math.max(0, (s.minStock ?? 0) - s.current);
       const estimatedCents = s.latestPriceCents != null ? Math.round(deficit * s.latestPriceCents) : null;

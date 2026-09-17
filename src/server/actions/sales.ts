@@ -109,6 +109,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
     }
 
     revalidatePath("/sales");
+    revalidatePath("/stock");
     return { ok: true, data: { id: sale.id } };
   } catch (e) {
     console.error("createSale error:", e);
@@ -194,6 +195,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
     }
 
     revalidatePath("/sales");
+    revalidatePath("/stock");
     return { ok: true };
   } catch (e) {
     console.error("updateSale error:", e);
@@ -324,5 +326,6 @@ export async function deleteSale(id: string): Promise<ActionResult> {
     return { ok: false, error: "Não foi possível excluir." };
   }
   revalidatePath("/sales");
+  revalidatePath("/stock");
   return { ok: true };
 }
