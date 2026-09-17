@@ -7,9 +7,14 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getMcpSession: async () => mcpSessionResult } },
 }));
 
-const { getMcpWorkspaceContext, assertMcpCanWrite, McpAuthError, McpRoleError, McpReadOnlyError } = await import(
-  "./mcp-context"
-);
+const {
+  getMcpWorkspaceContext,
+  assertMcpCanWrite,
+  mcpErrorResponse,
+  McpAuthError,
+  McpRoleError,
+  McpReadOnlyError,
+} = await import("./mcp-context");
 const { NoWorkspaceError } = await import("./context");
 
 function fakeRequest(): NextRequest {
@@ -80,5 +85,34 @@ describe("assertMcpCanWrite", () => {
         db: testDb as never,
       }),
     ).toThrow(McpReadOnlyError);
+  });
+});
+
+describe("mcpErrorResponse", () => {
+  it("mapeia erros conhecidos para os status corretos", async () => {
+    const authRes = mcpErrorResponse(new McpAuthError());
+    expect(authRes.status).toBe(401);
+
+    const roleRes = mcpErrorResponse(new McpRoleError());
+    expect(roleRes.status).toBe(403);
+
+    const readOnlyRes = mcpErrorResponse(new McpReadOnlyError());
+    expect(readOnlyRes.status).toBe(403);
+
+    const noWorkspaceRes = mcpErrorResponse(new NoWorkspaceError());
+    expect(noWorkspaceRes.status).toBe(404);
+  });
+
+  it("mapeia um erro não reconhecido para 500 com mensagem genérica, sem vazar detalhes internos", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = mcpErrorResponse(new Error("Invalid `prisma.customer.create()` invocation: field xyz"));
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.error).toBe("Erro inesperado.");
+    expect(consoleSpy).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
   });
 });

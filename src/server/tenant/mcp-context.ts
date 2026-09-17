@@ -81,6 +81,6 @@ export function mcpErrorResponse(e: unknown): Response {
     return Response.json({ error: e.message }, { status: 403 });
   }
   if (e instanceof NoWorkspaceError) return Response.json({ error: e.message }, { status: 404 });
-  const message = e instanceof Error ? e.message : "Erro inesperado.";
-  return Response.json({ error: message }, { status: 400 });
+  console.error("mcpErrorResponse error:", e);
+  return Response.json({ error: "Erro inesperado." }, { status: 500 });
 }
