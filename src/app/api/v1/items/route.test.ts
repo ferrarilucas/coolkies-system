@@ -45,6 +45,21 @@ describe("GET /api/v1/items", () => {
     expect(body.items).toHaveLength(1);
     expect(body.items[0].name).toBe("Açúcar");
   });
+
+  it("isola itens por workspace: não retorna itens de outro workspace", async () => {
+    const { ws } = await seedOwner();
+    await testDb.item.create({ data: { name: "Item da Loja 1", unit: "G", productionInput: true, workspaceId: ws.id } });
+
+    const otherWs = await createWorkspace("Loja 2");
+    await testDb.item.create({ data: { name: "Item da Loja 2", unit: "G", productionInput: true, workspaceId: otherWs.id } });
+
+    const res = await GET(getReq());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].name).toBe("Item da Loja 1");
+  });
 });
 
 describe("POST /api/v1/items", () => {
@@ -85,5 +100,18 @@ describe("POST /api/v1/items", () => {
 
     const res = await POST(postReq({ name: "Item", unit: "UN", sellable: true, productionInput: false }));
     expect(res.status).toBe(403);
+  });
+
+  it("retorna 403 quando o workspace está em modo somente leitura (sem assinatura utilizável)", async () => {
+    const user = await testDb.user.create({ data: { id: "u3", name: "Carla", email: "carla@example.com" } });
+    const ws = await createWorkspace("Loja 3");
+    await testDb.member.create({ data: { userId: user.id, workspaceId: ws.id, role: "OWNER" } });
+    mcpSessionResult = { userId: user.id };
+
+    const res = await POST(postReq({ name: "Item", unit: "UN", sellable: true, productionInput: false }));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.");
   });
 });
