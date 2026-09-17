@@ -8,7 +8,7 @@ type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
 type VariantLineInput = { variantId: string; quantity: number };
 
-async function computeRecipeConsumption(
+export async function computeRecipeConsumption(
   tx: Prisma.TransactionClient,
   recipeId: string,
   quantity: number,
