@@ -69,6 +69,11 @@ async function main() {
 
       for (const batch of batches) {
         const activeLines = batch.variantLines.filter((l) => l.variantId && l.quantity > 0);
+        const legacyVariantLine =
+          activeLines.length === 0 && batch.variantId
+            ? [{ variantId: batch.variantId, quantity: batch.quantity }]
+            : [];
+        const effectiveLines = activeLines.length > 0 ? activeLines : legacyVariantLine;
 
         const hasProduction = await tx.stockMovement.findFirst({
           where: { type: "PRODUCTION", productionBatchId: batch.id },
@@ -76,8 +81,8 @@ async function main() {
         });
         if (hasProduction) {
           summary.productionSkipped++;
-        } else if (activeLines.length > 0) {
-          for (const line of activeLines) {
+        } else if (effectiveLines.length > 0) {
+          for (const line of effectiveLines) {
             await tx.stockMovement.create({
               data: {
                 type: "PRODUCTION",
@@ -119,7 +124,7 @@ async function main() {
           tx,
           batch.recipeId,
           batch.quantity,
-          activeLines,
+          effectiveLines,
         );
         for (const [itemId, consumedQty] of consumption) {
           if (consumedQty <= 0) continue;
