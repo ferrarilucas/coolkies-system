@@ -11,6 +11,9 @@ export const UNSCOPED_MODELS = new Set([
   "Workspace",
   "Subscription",
   "ProcessedWebhookEvent",
+  "OauthApplication",
+  "OauthAccessToken",
+  "OauthConsent",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 

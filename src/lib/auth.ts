@@ -1,9 +1,11 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { mcp } from "better-auth/plugins";
 import { db } from "./db";
 import { normalizeEmail } from "./allowlist";
 
 export const auth = betterAuth({
+  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),
@@ -16,19 +18,20 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     },
   },
+  plugins: [mcp({ loginPage: "/sign-in" })],
   user: {
     additionalFields: {
       role: {
         type: "string",
         required: false,
         defaultValue: "USER",
-        input: false, // não pode ser definido pelo cliente
+        input: false,
       },
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 30, // 30 dias
-    updateAge: 60 * 60 * 24, // renova a cada 1 dia
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
   },
   databaseHooks: {
     user: {
