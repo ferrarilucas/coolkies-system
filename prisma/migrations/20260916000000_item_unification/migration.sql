@@ -1,5 +1,28 @@
 BEGIN;
 
+-- 0. Pré-voo: "product" e "ingredient" passam a dividir o mesmo namespace de nome
+--    (@@unique([workspaceId, name]) em Item). Se houver colisão, falhar aqui — legível —
+--    em vez de abortar no meio da migração com uma violação de unique constraint.
+--    O par esperado (insumo de revenda + seu Product pareado) é excluído da checagem.
+DO $$
+DECLARE
+  colisoes TEXT;
+BEGIN
+  SELECT string_agg(DISTINCT format('%s (workspace %s)', p.name, p."workspaceId"), ', ')
+    INTO colisoes
+  FROM "product" p
+  JOIN "ingredient" ing
+    ON ing."workspaceId" = p."workspaceId"
+   AND lower(ing.name) = lower(p.name)
+  WHERE ing."resaleProductId" IS DISTINCT FROM p.id;
+
+  IF colisoes IS NOT NULL THEN
+    RAISE EXCEPTION 'Migração abortada: nomes colidem entre "product" e "ingredient" no mesmo workspace: %', colisoes
+      USING HINT = 'Renomeie um dos dois lados antes de rodar esta migração.';
+  END IF;
+END
+$$;
+
 -- 1. Product vira a base física de Item
 ALTER TABLE "product" RENAME TO "item";
 ALTER TABLE "item" ADD COLUMN "unit" "BaseUnit" NOT NULL DEFAULT 'UN';
@@ -8,38 +31,57 @@ ALTER TABLE "item" ADD COLUMN "productionInput" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "item" ADD COLUMN "minStock" DOUBLE PRECISION DEFAULT 0;
 
 -- 2. Novo tipo de movimento de estoque
-ALTER TYPE "StockMovementType" ADD VALUE 'CONSUMPTION';
+ALTER TYPE "StockMovementType" ADD VALUE IF NOT EXISTS 'CONSUMPTION';
 
 -- 3. FKs que apontam para "ingredient" saem antes do repontamento de dados do passo 4
 ALTER TABLE "purchase_item" DROP CONSTRAINT "purchase_item_ingredientId_fkey";
 ALTER TABLE "recipe_ingredient" DROP CONSTRAINT "recipe_ingredient_ingredientId_fkey";
 ALTER TABLE "shopping_list_item" DROP CONSTRAINT "shopping_list_item_ingredientId_fkey";
 
--- 4. Insumos de revenda (Ingredient + Product pareado) se fundem no Item existente
+-- 4. Insumos de revenda (Ingredient + Product pareado) se fundem no Item existente.
+--    O sinal do pareamento é "resaleProductId IS NOT NULL", NÃO "forResale = true": o
+--    syncResaleProduct antigo deixava o resaleProductId preenchido depois que o usuário
+--    desmarcava revenda, então uma linha (forResale=false, resaleProductId != null) é um
+--    par real e precisa se fundir — senão ela sobreviveria até o INSERT do passo 5 e
+--    colidiria por nome com o próprio Product órfão dela.
+--    O pareamento sempre foi intra-workspace; o join com "item" garante isso.
 UPDATE "item" i
 SET "unit" = ing."baseUnit",
     "productionInput" = ing."isRawMaterial",
-    "minStock" = ing."minStock"
+    "minStock" = ing."minStock",
+    "sellable" = true
 FROM "ingredient" ing
 WHERE ing."resaleProductId" = i.id
-  AND ing."forResale" = true;
+  AND ing."workspaceId" = i."workspaceId";
 
 UPDATE "purchase_item" pi
 SET "ingredientId" = ing."resaleProductId"
 FROM "ingredient" ing
-WHERE pi."ingredientId" = ing.id AND ing."forResale" = true AND ing."resaleProductId" IS NOT NULL;
+JOIN "item" i ON i.id = ing."resaleProductId"
+WHERE pi."ingredientId" = ing.id
+  AND ing."resaleProductId" IS NOT NULL
+  AND ing."workspaceId" = i."workspaceId";
 
 UPDATE "recipe_ingredient" ri
 SET "ingredientId" = ing."resaleProductId"
 FROM "ingredient" ing
-WHERE ri."ingredientId" = ing.id AND ing."forResale" = true AND ing."resaleProductId" IS NOT NULL;
+JOIN "item" i ON i.id = ing."resaleProductId"
+WHERE ri."ingredientId" = ing.id
+  AND ing."resaleProductId" IS NOT NULL
+  AND ing."workspaceId" = i."workspaceId";
 
 UPDATE "shopping_list_item" sli
 SET "ingredientId" = ing."resaleProductId"
 FROM "ingredient" ing
-WHERE sli."ingredientId" = ing.id AND ing."forResale" = true AND ing."resaleProductId" IS NOT NULL;
+JOIN "item" i ON i.id = ing."resaleProductId"
+WHERE sli."ingredientId" = ing.id
+  AND ing."resaleProductId" IS NOT NULL
+  AND ing."workspaceId" = i."workspaceId";
 
-DELETE FROM "ingredient" WHERE "forResale" = true AND "resaleProductId" IS NOT NULL;
+DELETE FROM "ingredient" ing
+USING "item" i
+WHERE i.id = ing."resaleProductId"
+  AND ing."workspaceId" = i."workspaceId";
 
 -- 5. Insumos puros (matéria-prima sem Product pareado) viram novas linhas de Item,
 --    preservando o MESMO id (assim as colunas *_ingredient_id não precisam remapear valor, só nome)
