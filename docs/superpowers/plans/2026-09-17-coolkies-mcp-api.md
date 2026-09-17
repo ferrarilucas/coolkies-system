@@ -21,7 +21,7 @@
 
 ---
 
-### Task A1: `McpWorkspaceContext` — schema e helper de contexto
+### Task 1: `McpWorkspaceContext` — schema e helper de contexto
 
 **Files:**
 - Modify: `prisma/schema.prisma` (novo model, após `AllowedEmail`; back-relations em `User` e `Workspace`)
@@ -321,7 +321,7 @@ git commit -m "feat(mcp): tabela McpWorkspaceContext e helper de contexto por to
 
 ---
 
-### Task A2: OAuth provider — schema `oidc-provider` + plugin `mcp` do better-auth
+### Task 2: OAuth provider — schema `oidc-provider` + plugin `mcp` do better-auth
 
 **Files:**
 - Modify: `prisma/schema.prisma` (models `OauthApplication`, `OauthAccessToken`, `OauthConsent`; back-relations em `User`)
@@ -333,11 +333,11 @@ git commit -m "feat(mcp): tabela McpWorkspaceContext e helper de contexto por to
 
 **Interfaces:**
 - Consumes: nada de tasks anteriores.
-- Produces: `auth.api.getMcpSession({ headers })` funcional (consumido por `requireMcpUserId` da Task A1 em produção — nos testes daquela task, ele é mockado); endpoints `/api/auth/mcp/*` e `/api/auth/.well-known/oauth-authorization-server` e `/api/auth/.well-known/oauth-protected-resource` (usados pelo fluxo OAuth do `coolkies-mcp`, plano irmão).
+- Produces: `auth.api.getMcpSession({ headers })` funcional (consumido por `requireMcpUserId` da Task 1 em produção — nos testes daquela task, ele é mockado); endpoints `/api/auth/mcp/*` e `/api/auth/.well-known/oauth-authorization-server` e `/api/auth/.well-known/oauth-protected-resource` (usados pelo fluxo OAuth do `coolkies-mcp`, plano irmão).
 
 - [ ] **Step 1: Editar o schema Prisma**
 
-Em `prisma/schema.prisma`, logo após o model `McpWorkspaceContext` (criado na Task A1), adicione:
+Em `prisma/schema.prisma`, logo após o model `McpWorkspaceContext` (criado na Task 1), adicione:
 
 ```prisma
 model OauthApplication {
@@ -398,7 +398,7 @@ model OauthConsent {
 }
 ```
 
-No model `User`, adicione (depois de `mcpWorkspaceContext McpWorkspaceContext?`, criado na Task A1):
+No model `User`, adicione (depois de `mcpWorkspaceContext McpWorkspaceContext?`, criado na Task 1):
 
 ```prisma
   oauthApplications   OauthApplication[]
@@ -652,7 +652,7 @@ git commit -m "feat(mcp): plugin OAuth do better-auth (mcp/oidc-provider) e sche
 
 ---
 
-### Task A3: `/api/v1/workspaces` (GET) + `/api/v1/workspaces/active` (PUT)
+### Task 3: `/api/v1/workspaces` (GET) + `/api/v1/workspaces/active` (PUT)
 
 **Files:**
 - Create: `src/app/api/v1/workspaces/route.ts`
@@ -661,7 +661,7 @@ git commit -m "feat(mcp): plugin OAuth do better-auth (mcp/oidc-provider) e sche
 - Test: `src/app/api/v1/workspaces/active/route.test.ts`
 
 **Interfaces:**
-- Consumes: `requireMcpUserId`, `mcpErrorResponse`, `McpAuthError` de `@/server/tenant/mcp-context` (Task A1); `db` de `@/lib/db`.
+- Consumes: `requireMcpUserId`, `mcpErrorResponse`, `McpAuthError` de `@/server/tenant/mcp-context` (Task 1); `db` de `@/lib/db`.
 - Produces: `GET /api/v1/workspaces` → `{ workspaces: Array<{ id, name, slug, role, active }> }`; `PUT /api/v1/workspaces/active` (body `{ workspaceId }`) → `{ id, name, slug, role }`. Consumido pelas tools `list_workspaces`/`set_active_workspace` do `coolkies-mcp` (plano irmão).
 
 - [ ] **Step 1: Escrever os testes (vão falhar — rotas não existem)**
@@ -871,14 +871,14 @@ git commit -m "feat(mcp): rotas /api/v1/workspaces (listar e trocar workspace at
 
 ---
 
-### Task A4: `/api/v1/items` (GET, POST)
+### Task 4: `/api/v1/items` (GET, POST)
 
 **Files:**
 - Create: `src/app/api/v1/items/route.ts`
 - Test: `src/app/api/v1/items/route.test.ts`
 
 **Interfaces:**
-- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task A1); `normalizeName` de `@/lib/text`.
+- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task 1); `normalizeName` de `@/lib/text`.
 - Produces: `GET /api/v1/items` → `{ items: Array<{ id, name, unit, sellable, productionInput, minStock }> }`; `POST /api/v1/items` (body `{ name, unit, sellable, productionInput, minStock? }`) → `{ item }`, 201. Só OWNER/ADMIN podem criar. Consumido pelas tools `list_items`/`create_item` do `coolkies-mcp`.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1066,14 +1066,14 @@ git commit -m "feat(mcp): rota /api/v1/items (listar e criar itens do catálogo)
 
 ---
 
-### Task A5: `/api/v1/shopping-list` (GET, POST)
+### Task 5: `/api/v1/shopping-list` (GET, POST)
 
 **Files:**
 - Create: `src/app/api/v1/shopping-list/route.ts`
 - Test: `src/app/api/v1/shopping-list/route.test.ts`
 
 **Interfaces:**
-- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task A1).
+- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task 1).
 - Produces: `GET /api/v1/shopping-list` → `{ items: Array<{ id, itemId, label, quantity, unit }> }`; `POST /api/v1/shopping-list` (body `{ label, itemId?, quantity?, unit? }`) → `{ item }`, 201. Consumido pelas tools `list_shopping_list_items`/`add_shopping_list_item` do `coolkies-mcp`.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1218,14 +1218,14 @@ git commit -m "feat(mcp): rota /api/v1/shopping-list (listar e adicionar itens)"
 
 ---
 
-### Task A6: `/api/v1/customers` (GET com busca, POST)
+### Task 6: `/api/v1/customers` (GET com busca, POST)
 
 **Files:**
 - Create: `src/app/api/v1/customers/route.ts`
 - Test: `src/app/api/v1/customers/route.test.ts`
 
 **Interfaces:**
-- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task A1); `normalizeName` de `@/lib/text`.
+- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task 1); `normalizeName` de `@/lib/text`.
 - Produces: `GET /api/v1/customers?q=` → `{ customers: Array<{ id, name, email, phone, sector }> }` (busca por nome/e-mail/telefone); `POST /api/v1/customers` (body `{ name, email?, phone?, sector?, notes? }`) → `{ customer }`, 201. Consumido pelas tools `list_customers`/`create_customer` do `coolkies-mcp`.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1407,7 +1407,7 @@ git commit -m "feat(mcp): rota /api/v1/customers (buscar e criar clientes)"
 
 ---
 
-### Task A7: `/api/v1/sales` (GET com filtros, POST) + `/api/v1/sales/mark-paid` (POST)
+### Task 7: `/api/v1/sales` (GET com filtros, POST) + `/api/v1/sales/mark-paid` (POST)
 
 **Files:**
 - Create: `src/app/api/v1/sales/route.ts`
@@ -1416,7 +1416,7 @@ git commit -m "feat(mcp): rota /api/v1/customers (buscar e criar clientes)"
 - Test: `src/app/api/v1/sales/mark-paid/route.test.ts`
 
 **Interfaces:**
-- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task A1).
+- Consumes: `getMcpWorkspaceContext`, `assertMcpCanWrite`, `mcpErrorResponse` de `@/server/tenant/mcp-context` (Task 1).
 - Produces: `GET /api/v1/sales` (query: `status`, `q`, `customerId`, `from`, `to`, `forecastFrom`, `forecastTo`, `overdueOnly`) → `{ sales, summary: { pendingCents, pendingCount, paidCents, paidCount, overdueCents, overdueCount } }`; `POST /api/v1/sales` (body com `items[]` obrigatório) → `{ sale: { id, totalCents } }`, 201; `POST /api/v1/sales/mark-paid` (body `{ saleId }` ou `{ saleIds }` ou `{ customerId }`) → `{ count, totalCents }`. Consumido pelas tools `list_sales`/`create_sale`/`mark_sales_as_paid` do `coolkies-mcp`.
 
 - [ ] **Step 1: Escrever os testes**

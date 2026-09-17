@@ -23,7 +23,7 @@
 
 ---
 
-### Task B1: Scaffold do projeto
+### Task 1: Scaffold do projeto
 
 **Files:**
 - Create: `package.json`
@@ -228,7 +228,7 @@ git commit -m "chore: scaffold do coolkies-mcp (Hono + health check)"
 
 ---
 
-### Task B2: Cliente HTTP para a API do coolkies-system + metadata OAuth
+### Task 2: Cliente HTTP para a API do coolkies-system + metadata OAuth
 
 **Files:**
 - Create: `src/lib/coolkies-client.ts`
@@ -239,7 +239,7 @@ git commit -m "chore: scaffold do coolkies-mcp (Hono + health check)"
 - Test: `src/app.test.ts` (adiciona describe da nova rota)
 
 **Interfaces:**
-- Consumes: nada de tasks anteriores além de `app` (Task B1).
+- Consumes: nada de tasks anteriores além de `app` (Task 1).
 - Produces: `callCoolkiesApi(token: string, path: string, options?: { method?: string; body?: unknown }): Promise<unknown>` (lança `CoolkiesApiError`); `toolJson(data: unknown): CallToolResult`; `toolError(e: unknown): CallToolResult`. Usadas por todas as tools (Tasks B3-B7).
 
 - [ ] **Step 1: Escrever os testes (vão falhar — os módulos ainda não existem)**
@@ -319,7 +319,7 @@ describe("toolError", () => {
 });
 ```
 
-Adicione ao `src/app.test.ts` (Task B1):
+Adicione ao `src/app.test.ts` (Task 1):
 
 ```ts
 describe("GET /.well-known/oauth-protected-resource", () => {
@@ -437,7 +437,7 @@ git commit -m "feat: cliente HTTP da API do coolkies-system e resource metadata 
 
 ---
 
-### Task B3: Bootstrap do McpServer + tools de workspace
+### Task 3: Bootstrap do McpServer + tools de workspace
 
 **Files:**
 - Create: `src/tools/auth.ts`
@@ -448,7 +448,7 @@ git commit -m "feat: cliente HTTP da API do coolkies-system e resource metadata 
 - Test: `src/mcp-e2e.test.ts`
 
 **Interfaces:**
-- Consumes: `callCoolkiesApi`, `CoolkiesApiError` de `./lib/coolkies-client`; `toolJson`, `toolError` de `./lib/tool-result` (Task B2); `app` de `./app` (Task B1).
+- Consumes: `callCoolkiesApi`, `CoolkiesApiError` de `./lib/coolkies-client`; `toolJson`, `toolError` de `./lib/tool-result` (Task 2); `app` de `./app` (Task 1).
 - Produces: `requireToken(extra): string` (`src/tools/auth.ts`, usada por todas as tools das Tasks B4-B7); `registerTools(server: McpServer): void` (`src/tools/index.ts`, chamada pela rota `/mcp`; cada task seguinte adiciona uma chamada `registerXTools(server)` a ela); rota `/mcp` funcional em `src/app.ts`.
 
 - [ ] **Step 1: Escrever os testes unitários das tools de workspace (vão falhar — módulos não existem)**
@@ -729,7 +729,7 @@ git commit -m "feat: bootstrap do McpServer, rota /mcp e tools de workspace"
 
 ---
 
-### Task B4: Tools de catálogo (list_items, create_item)
+### Task 4: Tools de catálogo (list_items, create_item)
 
 **Files:**
 - Create: `src/tools/items.ts`
@@ -737,8 +737,8 @@ git commit -m "feat: bootstrap do McpServer, rota /mcp e tools de workspace"
 - Test: `src/tools/items.test.ts`
 
 **Interfaces:**
-- Consumes: `callCoolkiesApi` (Task B2); `toolJson`, `toolError` (Task B2); `requireToken` (Task B3).
-- Produces: `registerItemTools(server: McpServer): void`, registrada em `registerTools` (Task B3).
+- Consumes: `callCoolkiesApi` (Task 2); `toolJson`, `toolError` (Task 2); `requireToken` (Task 3).
+- Produces: `registerItemTools(server: McpServer): void`, registrada em `registerTools` (Task 3).
 
 - [ ] **Step 1: Escrever os testes**
 
@@ -902,7 +902,7 @@ git commit -m "feat: tools list_items e create_item"
 
 ---
 
-### Task B5: Tools de lista de compras (list_shopping_list_items, add_shopping_list_item)
+### Task 5: Tools de lista de compras (list_shopping_list_items, add_shopping_list_item)
 
 **Files:**
 - Create: `src/tools/shopping-list.ts`
@@ -910,7 +910,7 @@ git commit -m "feat: tools list_items e create_item"
 - Test: `src/tools/shopping-list.test.ts`
 
 **Interfaces:**
-- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task B2); `requireToken` (Task B3).
+- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task 2); `requireToken` (Task 3).
 - Produces: `registerShoppingListTools(server: McpServer): void`, registrada em `registerTools`.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1052,7 +1052,7 @@ git commit -m "feat: tools list_shopping_list_items e add_shopping_list_item"
 
 ---
 
-### Task B6: Tools de clientes (list_customers, create_customer)
+### Task 6: Tools de clientes (list_customers, create_customer)
 
 **Files:**
 - Create: `src/tools/customers.ts`
@@ -1060,7 +1060,7 @@ git commit -m "feat: tools list_shopping_list_items e add_shopping_list_item"
 - Test: `src/tools/customers.test.ts`
 
 **Interfaces:**
-- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task B2); `requireToken` (Task B3).
+- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task 2); `requireToken` (Task 3).
 - Produces: `registerCustomerTools(server: McpServer): void`, registrada em `registerTools`.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1220,7 +1220,7 @@ git commit -m "feat: tools list_customers e create_customer"
 
 ---
 
-### Task B7: Tools de vendas (list_sales, create_sale, mark_sales_as_paid)
+### Task 7: Tools de vendas (list_sales, create_sale, mark_sales_as_paid)
 
 **Files:**
 - Create: `src/tools/sales.ts`
@@ -1228,7 +1228,7 @@ git commit -m "feat: tools list_customers e create_customer"
 - Test: `src/tools/sales.test.ts`
 
 **Interfaces:**
-- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task B2); `requireToken` (Task B3).
+- Consumes: `callCoolkiesApi`, `toolJson`, `toolError` (Task 2); `requireToken` (Task 3).
 - Produces: `registerSalesTools(server: McpServer): void`, registrada em `registerTools`. Com esta task, `registerTools` (e portanto o servidor MCP) expõe as 11 tools do escopo v1.
 
 - [ ] **Step 1: Escrever os testes**
@@ -1466,7 +1466,7 @@ export function registerTools(server: McpServer): void {
 - [ ] **Step 5: Rodar todos os testes do projeto e confirmar que passam**
 
 Run: `pnpm vitest run`
-Expected: PASS (todos — inclusive o teste end-to-end da Task B3, que agora exercita um servidor com as 11 tools registradas)
+Expected: PASS (todos — inclusive o teste end-to-end da Task 3, que agora exercita um servidor com as 11 tools registradas)
 
 - [ ] **Step 6: Commit**
 
