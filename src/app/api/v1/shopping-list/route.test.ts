@@ -10,14 +10,16 @@ vi.mock("@/lib/auth", () => ({
 const { GET, POST } = await import("./route");
 
 async function seedMember() {
-  const user = await testDb.user.create({ data: { id: "u1", name: "Ana", email: "ana@example.com" } });
+  const member = await testDb.user.create({ data: { id: "u1", name: "Ana", email: "ana@example.com" } });
+  const owner = await testDb.user.create({ data: { id: "u2", name: "Bruno", email: "bruno@example.com" } });
   const ws = await createWorkspace("Loja 1");
-  await testDb.member.create({ data: { userId: user.id, workspaceId: ws.id, role: "OWNER" } });
+  await testDb.member.create({ data: { userId: member.id, workspaceId: ws.id, role: "MEMBER" } });
+  await testDb.member.create({ data: { userId: owner.id, workspaceId: ws.id, role: "OWNER" } });
   await testDb.subscription.create({
-    data: { userId: user.id, plan: "corre", status: "TRIALING", provider: "INTERPIX" },
+    data: { userId: owner.id, plan: "corre", status: "TRIALING", provider: "INTERPIX" },
   });
-  mcpSessionResult = { userId: user.id };
-  return { user, ws };
+  mcpSessionResult = { userId: member.id };
+  return { user: member, ws };
 }
 
 function getReq(): NextRequest {
