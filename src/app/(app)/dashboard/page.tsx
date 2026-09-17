@@ -28,7 +28,7 @@ import {
 } from "@/server/queries/dashboard";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
-import { FlavorMixChart } from "@/components/charts/flavor-mix-chart";
+import { VariantMixChart } from "@/components/charts/variant-mix-chart";
 import { SupplierSpendChart } from "@/components/charts/supplier-spend-chart";
 
 export const dynamic = "force-dynamic";
@@ -194,7 +194,7 @@ export default async function DashboardPage({
             <CardTitle className="text-base">Mix de sabores</CardTitle>
           </CardHeader>
           <CardContent className="pr-2">
-            {mix.length > 0 ? <FlavorMixChart data={mix} /> : <ChartEmpty />}
+            {mix.length > 0 ? <VariantMixChart data={mix} /> : <ChartEmpty />}
           </CardContent>
         </Card>
       </div>

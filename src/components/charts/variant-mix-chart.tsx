@@ -27,7 +27,7 @@ const COLORS = [
   "hsl(30 25% 55%)",
 ];
 
-export function FlavorMixChart({ data }: { data: Slice[] }) {
+export function VariantMixChart({ data }: { data: Slice[] }) {
   // top 7 + "Outros"
   const top = data.slice(0, 7);
   const rest = data.slice(7);

@@ -11,14 +11,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { createIngredientForPurchase } from "@/server/actions/ingredients";
+import { createItemForPurchase } from "@/server/actions/items";
 import { toast } from "sonner";
 
-export type PurchaseIngredientOption = {
+export type PurchaseItemOption = {
   id: string;
   name: string;
-  baseUnit: string;
-  forResale: boolean;
+  unit: string;
+  sellable: boolean;
 };
 
 function QuickCreateForm({
@@ -27,37 +27,37 @@ function QuickCreateForm({
   onCancel,
 }: {
   initialName: string;
-  onCreated: (ing: PurchaseIngredientOption) => void;
+  onCreated: (item: PurchaseItemOption) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const [unit, setUnit] = useState("G");
-  const [isRawMaterial, setIsRawMaterial] = useState(true);
-  const [forResale, setForResale] = useState(false);
+  const [productionInput, setProductionInput] = useState(true);
+  const [sellable, setSellable] = useState(false);
   const [saving, startSave] = useTransition();
 
   function handleUnitChange(value: string) {
     setUnit(value);
-    if (value !== "UN" && forResale) setForResale(false);
+    if (value !== "UN" && sellable) setSellable(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || (!isRawMaterial && !forResale)) return;
+    if (!name.trim() || (!productionInput && !sellable)) return;
     const fd = new FormData();
     fd.set("name", name.trim());
-    fd.set("baseUnit", unit);
-    fd.set("isRawMaterial", isRawMaterial ? "on" : "off");
-    fd.set("forResale", forResale ? "on" : "off");
+    fd.set("unit", unit);
+    fd.set("productionInput", productionInput ? "on" : "off");
+    fd.set("sellable", sellable ? "on" : "off");
     startSave(async () => {
-      const res = await createIngredientForPurchase(fd);
+      const res = await createItemForPurchase(fd);
       if (res.ok && res.data) {
         toast.success(`"${res.data.name}" criado.`);
         onCreated({
           id: res.data.id,
           name: res.data.name,
-          baseUnit: res.data.baseUnit,
-          forResale: res.data.forResale,
+          unit: res.data.unit,
+          sellable: res.data.sellable,
         });
       } else {
         toast.error(res.error ?? "Erro ao criar.");
@@ -96,18 +96,18 @@ function QuickCreateForm({
         </div>
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs">Matéria-prima</Label>
-          <Switch checked={isRawMaterial} onCheckedChange={setIsRawMaterial} />
+          <Switch checked={productionInput} onCheckedChange={setProductionInput} />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <Label className="text-xs">Revenda</Label>
-          <Switch checked={forResale} onCheckedChange={setForResale} disabled={unit !== "UN"} />
+          <Label className="text-xs">Venda</Label>
+          <Switch checked={sellable} onCheckedChange={setSellable} disabled={unit !== "UN"} />
         </div>
         {unit !== "UN" && (
           <p className="text-xs text-muted-foreground">
-            Revenda só é permitida para insumos com unidade &quot;Unidade (un)&quot;.
+            Venda só é permitida para insumos com unidade &quot;Unidade (un)&quot;.
           </p>
         )}
-        {!isRawMaterial && !forResale && (
+        {!productionInput && !sellable && (
           <p className="text-xs text-destructive">Marque ao menos uma das duas opções.</p>
         )}
       </div>
@@ -119,7 +119,7 @@ function QuickCreateForm({
           type="submit"
           size="sm"
           className="flex-1"
-          disabled={saving || !name.trim() || (!isRawMaterial && !forResale)}
+          disabled={saving || !name.trim() || (!productionInput && !sellable)}
         >
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
           Criar
@@ -130,15 +130,15 @@ function QuickCreateForm({
 }
 
 interface Props {
-  value: PurchaseIngredientOption | null;
-  onChange: (v: PurchaseIngredientOption) => void;
-  options: PurchaseIngredientOption[];
-  onOptionCreated: (v: PurchaseIngredientOption) => void;
+  value: PurchaseItemOption | null;
+  onChange: (v: PurchaseItemOption) => void;
+  options: PurchaseItemOption[];
+  onOptionCreated: (v: PurchaseItemOption) => void;
 }
 
 const UNIT_ABBR: Record<string, string> = { G: "g", ML: "ml", UN: "un" };
 
-export function PurchaseIngredientCombobox({ value, onChange, options, onOptionCreated }: Props) {
+export function PurchaseItemCombobox({ value, onChange, options, onOptionCreated }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -154,14 +154,14 @@ export function PurchaseIngredientCombobox({ value, onChange, options, onOptionC
 
   const filtered = options.filter((o) => o.name.toLowerCase().includes(query.toLowerCase()));
 
-  function handleSelect(o: PurchaseIngredientOption) {
+  function handleSelect(o: PurchaseItemOption) {
     onChange(o);
     setOpen(false);
   }
 
-  function handleCreated(ing: PurchaseIngredientOption) {
-    onOptionCreated(ing);
-    onChange(ing);
+  function handleCreated(item: PurchaseItemOption) {
+    onOptionCreated(item);
+    onChange(item);
     setShowCreate(false);
     setOpen(false);
   }
@@ -174,7 +174,7 @@ export function PurchaseIngredientCombobox({ value, onChange, options, onOptionC
             <span className="flex items-center gap-1.5 min-w-0">
               <span className="truncate">{value.name}</span>
               <span className="text-xs text-muted-foreground shrink-0">
-                ({UNIT_ABBR[value.baseUnit] ?? value.baseUnit.toLowerCase()})
+                ({UNIT_ABBR[value.unit] ?? value.unit.toLowerCase()})
               </span>
             </span>
           ) : (
@@ -209,7 +209,7 @@ export function PurchaseIngredientCombobox({ value, onChange, options, onOptionC
                 >
                   <Check className={cn("size-4 shrink-0", value?.id === o.id ? "opacity-100" : "opacity-0")} />
                   <span className="flex-1 truncate">{o.name}</span>
-                  {o.forResale && <span className="text-xs text-muted-foreground">revenda</span>}
+                  {o.sellable && <span className="text-xs text-muted-foreground">venda</span>}
                 </button>
               ))}
 

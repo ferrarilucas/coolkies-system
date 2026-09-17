@@ -86,7 +86,7 @@ export default async function CatalogPage() {
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </Link>
-                <ActiveToggle entity="product" id={product.id} active={product.active} />
+                <ActiveToggle entity="item" id={product.id} active={product.active} />
               </div>
             );
           })}

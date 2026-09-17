@@ -3,8 +3,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { getItemsWithLastCost } from "@/server/queries/items";
-import { ItemDialog } from "@/components/ingredients/item-dialog";
-import { DeleteItemButton } from "@/components/ingredients/delete-item-button";
+import { ItemDialog } from "@/components/items/item-dialog";
+import { DeleteItemButton } from "@/components/items/delete-item-button";
 import { formatBRL } from "@/lib/money";
 
 const UNIT_ABBR: Record<string, string> = { G: "g", ML: "ml", UN: "un" };

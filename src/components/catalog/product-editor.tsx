@@ -17,39 +17,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MoneyInput } from "@/components/shared/money-input";
-import { saveProduct } from "@/server/actions/catalog";
-import type { ProductForEdit } from "@/server/queries/catalog";
+import { saveItem } from "@/server/actions/catalog";
+import type { ItemForEdit } from "@/server/queries/catalog";
 import { cn } from "@/lib/utils";
 
 const NO_RECIPE = "__none__";
 
-type FlavorLine = {
+type VariantLine = {
   key: string;
   id: string | null;
   name: string;
   priceCents: number;
-  fillingRecipeId: string | null;
+  recipeId: string | null;
   active: boolean;
 };
 
-function toLine(flavor: ProductForEdit["flavors"][number]): FlavorLine {
+function toLine(variant: ItemForEdit["variants"][number]): VariantLine {
   return {
-    key: flavor.id,
-    id: flavor.id,
-    name: flavor.name,
-    priceCents: flavor.priceCents ?? 0,
-    fillingRecipeId: flavor.fillingRecipeId,
-    active: flavor.active,
+    key: variant.id,
+    id: variant.id,
+    name: variant.name,
+    priceCents: variant.priceCents ?? 0,
+    recipeId: variant.recipeId,
+    active: variant.active,
   };
 }
 
-function blankLine(): FlavorLine {
+function blankLine(): VariantLine {
   return {
     key: crypto.randomUUID(),
     id: null,
     name: "",
     priceCents: 0,
-    fillingRecipeId: null,
+    recipeId: null,
     active: true,
   };
 }
@@ -58,7 +58,7 @@ export function ProductEditor({
   product,
   recipes,
 }: {
-  product: ProductForEdit | null;
+  product: ItemForEdit | null;
   recipes: { id: string; name: string }[];
 }) {
   const router = useRouter();
@@ -66,38 +66,38 @@ export function ProductEditor({
   const [genericPriceCents, setGenericPriceCents] = useState(
     product?.genericPriceCents ?? 0,
   );
-  const [flavors, setFlavors] = useState<FlavorLine[]>(
-    product?.flavors.map(toLine) ?? [],
+  const [variants, setVariants] = useState<VariantLine[]>(
+    product?.variants.map(toLine) ?? [],
   );
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [saving, startSave] = useTransition();
 
-  const hasFlavors = flavors.length > 0;
+  const hasVariants = variants.length > 0;
 
-  function updateFlavor(key: string, patch: Partial<FlavorLine>) {
-    setFlavors((prev) =>
-      prev.map((f) => (f.key === key ? { ...f, ...patch } : f)),
+  function updateVariant(key: string, patch: Partial<VariantLine>) {
+    setVariants((prev) =>
+      prev.map((v) => (v.key === key ? { ...v, ...patch } : v)),
     );
   }
 
-  function removeFlavor(line: FlavorLine) {
-    setFlavors((prev) => prev.filter((f) => f.key !== line.key));
+  function removeVariant(line: VariantLine) {
+    setVariants((prev) => prev.filter((v) => v.key !== line.key));
     if (line.id) setRemovedIds((prev) => [...prev, line.id!]);
   }
 
   function handleSubmit() {
     startSave(async () => {
-      const res = await saveProduct(product?.id ?? null, {
+      const res = await saveItem(product?.id ?? null, {
         name,
         genericPriceCents: genericPriceCents > 0 ? genericPriceCents : null,
-        flavors: flavors.map((f) => ({
-          id: f.id,
-          name: f.name,
-          priceCents: f.priceCents > 0 ? f.priceCents : null,
-          fillingRecipeId: f.fillingRecipeId,
-          active: f.active,
+        variants: variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          priceCents: v.priceCents > 0 ? v.priceCents : null,
+          recipeId: v.recipeId,
+          active: v.active,
         })),
-        removedFlavorIds: removedIds,
+        removedVariantIds: removedIds,
       });
 
       if (!res.ok) {
@@ -138,7 +138,7 @@ export function ProductEditor({
           </div>
           <div className="space-y-2">
             <Label htmlFor="generic-price">
-              {hasFlavors ? "Preço padrão" : "Preço de venda *"}
+              {hasVariants ? "Preço padrão" : "Preço de venda *"}
             </Label>
             <MoneyInput
               id="generic-price"
@@ -146,7 +146,7 @@ export function ProductEditor({
               onChangeCents={setGenericPriceCents}
             />
             <p className="text-xs text-muted-foreground">
-              {hasFlavors
+              {hasVariants
                 ? "Usado nos sabores que não tiverem preço próprio."
                 : "Preço cobrado por unidade deste produto."}
             </p>
@@ -170,14 +170,14 @@ export function ProductEditor({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setFlavors((prev) => [...prev, blankLine()])}
+            onClick={() => setVariants((prev) => [...prev, blankLine()])}
           >
             <Plus />
             Adicionar sabor
           </Button>
         </div>
 
-        {!hasFlavors ? (
+        {!hasVariants ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center">
             <Palette className="size-6 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
@@ -186,33 +186,33 @@ export function ProductEditor({
           </div>
         ) : (
           <div className="space-y-3">
-            {flavors.map((flavor) => (
+            {variants.map((variant) => (
               <div
-                key={flavor.key}
+                key={variant.key}
                 className={cn(
                   "space-y-3 rounded-lg border bg-card p-3",
-                  !flavor.active && "opacity-60",
+                  !variant.active && "opacity-60",
                 )}
               >
                 <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
                   <Input
-                    value={flavor.name}
-                    onChange={(e) => updateFlavor(flavor.key, { name: e.target.value })}
+                    value={variant.name}
+                    onChange={(e) => updateVariant(variant.key, { name: e.target.value })}
                     placeholder="Nome do sabor"
                   />
                   <MoneyInput
-                    valueCents={flavor.priceCents}
-                    onChangeCents={(cents) => updateFlavor(flavor.key, { priceCents: cents })}
+                    valueCents={variant.priceCents}
+                    onChangeCents={(cents) => updateVariant(variant.key, { priceCents: cents })}
                   />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                   {recipes.length > 0 && (
                     <Select
-                      value={flavor.fillingRecipeId ?? NO_RECIPE}
+                      value={variant.recipeId ?? NO_RECIPE}
                       onValueChange={(value) =>
-                        updateFlavor(flavor.key, {
-                          fillingRecipeId: value === NO_RECIPE ? null : value,
+                        updateVariant(variant.key, {
+                          recipeId: value === NO_RECIPE ? null : value,
                         })
                       }
                     >
@@ -230,9 +230,9 @@ export function ProductEditor({
 
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Switch
-                      checked={flavor.active}
+                      checked={variant.active}
                       onCheckedChange={(checked) =>
-                        updateFlavor(flavor.key, { active: checked })
+                        updateVariant(variant.key, { active: checked })
                       }
                     />
                     Ativo
@@ -240,9 +240,9 @@ export function ProductEditor({
 
                   <button
                     type="button"
-                    onClick={() => removeFlavor(flavor)}
+                    onClick={() => removeVariant(variant)}
                     className="ml-auto flex size-9 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10"
-                    aria-label={`Remover ${flavor.name || "sabor"}`}
+                    aria-label={`Remover ${variant.name || "sabor"}`}
                   >
                     <Trash2 className="size-4" />
                   </button>

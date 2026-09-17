@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { IngredientCombobox } from "./ingredient-combobox";
+import { ItemCombobox } from "./item-combobox";
 
 import { saveRecipe } from "@/server/actions/recipes";
 import { formatBRL } from "@/lib/money";
@@ -26,24 +26,24 @@ const BlockEditor = dynamic(
   { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-md bg-muted" /> },
 );
 
-export type IngredientOption = {
+export type ItemOption = {
   id: string;
   name: string;
-  baseUnit: string;
+  unit: string;
   unitCostCents: number | null;
 };
 
-type IngredientLine = {
+type ItemLine = {
   key: string;
-  ingredient: IngredientOption | null;
+  item: ItemOption | null;
   quantity: string;
   inputUnit: InputUnit;
 };
 
 type InitialIngredient = {
-  ingredientId: string;
-  ingredientName: string;
-  baseUnit: string;
+  itemId: string;
+  itemName: string;
+  unit: string;
   quantity: number;
   unitCostCents: number | null;
 };
@@ -55,11 +55,11 @@ interface Props {
   initialNotes?: string;
   initialSteps?: PartialBlock[];
   initialIngredients?: InitialIngredient[];
-  availableIngredients: IngredientOption[];
+  availableIngredients: ItemOption[];
 }
 
 function newKey() { return crypto.randomUUID(); }
-function blankLine(): IngredientLine { return { key: newKey(), ingredient: null, quantity: "", inputUnit: "G" }; }
+function blankLine(): ItemLine { return { key: newKey(), item: null, quantity: "", inputUnit: "G" }; }
 
 export function RecipeForm({
   recipeId,
@@ -79,39 +79,39 @@ export function RecipeForm({
   const [notes, setNotes] = useState(initialNotes);
   const stepsRef = useRef<Block[]>([]);
 
-  // ── Ingredientes ──────────────────────────────────────────────────────────
-  const [allIngredients, setAllIngredients] = useState<IngredientOption[]>(availableIngredients);
+  // ── Itens ─────────────────────────────────────────────────────────────────
+  const [allItems, setAllItems] = useState<ItemOption[]>(availableIngredients);
 
-  const [lines, setLines] = useState<IngredientLine[]>(() => {
+  const [lines, setLines] = useState<ItemLine[]>(() => {
     if (initialIngredients.length > 0) {
       return initialIngredients.map((i) => ({
         key: crypto.randomUUID(),
-        ingredient: {
-          id: i.ingredientId,
-          name: i.ingredientName,
-          baseUnit: i.baseUnit,
+        item: {
+          id: i.itemId,
+          name: i.itemName,
+          unit: i.unit,
           unitCostCents: i.unitCostCents,
         },
         quantity: String(i.quantity),
-        inputUnit: i.baseUnit as InputUnit,
+        inputUnit: i.unit as InputUnit,
       }));
     }
     return [blankLine()];
   });
 
-  function updateLine(key: string, patch: Partial<IngredientLine>) {
+  function updateLine(key: string, patch: Partial<ItemLine>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
   /**
-   * Quando o ingrediente muda, atualiza a linha E troca o key para o id do ingrediente.
+   * Quando o item muda, atualiza a linha E troca o key para o id do item.
    * Isso garante: (1) unicidade do key, (2) React recria o combobox (fecha e limpa estado).
    */
-  function setLineIngredient(currentKey: string, ing: IngredientOption) {
+  function setLineItem(currentKey: string, item: ItemOption) {
     setLines((prev) =>
       prev.map((l) =>
         l.key === currentKey
-          ? { ...l, key: ing.id, ingredient: ing, inputUnit: ing.baseUnit as InputUnit }
+          ? { ...l, key: item.id, item, inputUnit: item.unit as InputUnit }
           : l,
       ),
     );
@@ -128,30 +128,30 @@ export function RecipeForm({
     setLines((prev) => [...prev, blankLine()]);
   }
 
-  function handleIngredientCreated(ing: IngredientOption) {
+  function handleItemCreated(item: ItemOption) {
     // Deduplicação: não adiciona se já existe na lista
-    setAllIngredients((prev) => {
-      if (prev.some((i) => i.id === ing.id)) return prev;
-      return [...prev, ing].sort((a, b) => a.name.localeCompare(b.name));
+    setAllItems((prev) => {
+      if (prev.some((i) => i.id === item.id)) return prev;
+      return [...prev, item].sort((a, b) => a.name.localeCompare(b.name));
     });
   }
 
   // ── Custo estimado ────────────────────────────────────────────────────────
   const yieldNum = parseInt(yieldQty) || 1;
-  const filledLines = lines.filter((l) => l.ingredient !== null);
+  const filledLines = lines.filter((l) => l.item !== null);
   let totalCostCents = 0;
   let costComplete = filledLines.length > 0;
   for (const l of filledLines) {
     const rawQty = parseFloat(l.quantity.replace(",", ".")) || 0;
-    const base = l.ingredient!.baseUnit as BaseUnit;
+    const base = l.item!.unit as BaseUnit;
     const { quantity: qtyInBase } = toBaseUnit(rawQty, l.inputUnit, base);
-    if (l.ingredient!.unitCostCents == null) { costComplete = false; continue; }
-    totalCostCents += l.ingredient!.unitCostCents * qtyInBase;
+    if (l.item!.unitCostCents == null) { costComplete = false; continue; }
+    totalCostCents += l.item!.unitCostCents * qtyInBase;
   }
 
-  // usedIds: todos os ingredientes selecionados — o combobox de cada linha
-  // recebe esse set SEM o próprio ingrediente da linha (calculado inline abaixo)
-  const allUsedIds = new Set(lines.map((l) => l.ingredient?.id).filter(Boolean) as string[]);
+  // usedIds: todos os itens selecionados — o combobox de cada linha
+  // recebe esse set SEM o próprio item da linha (calculado inline abaixo)
+  const allUsedIds = new Set(lines.map((l) => l.item?.id).filter(Boolean) as string[]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleBlocksChange = useCallback((blocks: Block[]) => {
@@ -168,14 +168,14 @@ export function RecipeForm({
     fd.set("notes", notes);
     fd.set("steps", JSON.stringify(stepsRef.current));
     fd.set(
-      "ingredients",
+      "items",
       JSON.stringify(
         filledLines
           .map((l) => {
             const rawQty = parseFloat(l.quantity.replace(",", ".")) || 0;
-            const base = l.ingredient!.baseUnit as BaseUnit;
+            const base = l.item!.unit as BaseUnit;
             const { quantity } = toBaseUnit(rawQty, l.inputUnit, base);
-            return { ingredientId: l.ingredient!.id, quantity };
+            return { itemId: l.item!.id, quantity };
           })
           .filter((l) => l.quantity > 0),
       ),
@@ -260,25 +260,25 @@ export function RecipeForm({
 
         <div className="space-y-2">
           {lines.map((line) => {
-            const base = (line.ingredient?.baseUnit ?? "G") as BaseUnit;
+            const base = (line.item?.unit ?? "G") as BaseUnit;
             const unitOptions = recipeUnitsFor(base);
             const rawQty = parseFloat(line.quantity.replace(",", ".")) || 0;
             const { quantity: qtyBase } = toBaseUnit(rawQty, line.inputUnit, base);
-            const lineCost = line.ingredient?.unitCostCents != null
-              ? line.ingredient.unitCostCents * qtyBase
+            const lineCost = line.item?.unitCostCents != null
+              ? line.item.unitCostCents * qtyBase
               : null;
-            // usedIds para esta linha: exclui o ingrediente da própria linha
+            // usedIds para esta linha: exclui o item da própria linha
             const lineUsedIds = new Set(allUsedIds);
-            if (line.ingredient?.id) lineUsedIds.delete(line.ingredient.id);
+            if (line.item?.id) lineUsedIds.delete(line.item.id);
 
             return (
               <div key={line.key} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
                 <div className="flex-1 min-w-0">
-                  <IngredientCombobox
-                    value={line.ingredient}
-                    onChange={(ing) => setLineIngredient(line.key, ing)}
-                    options={allIngredients}
-                    onOptionCreated={handleIngredientCreated}
+                  <ItemCombobox
+                    value={line.item}
+                    onChange={(item) => setLineItem(line.key, item)}
+                    options={allItems}
+                    onOptionCreated={handleItemCreated}
                     usedIds={lineUsedIds}
                   />
                 </div>
@@ -291,7 +291,7 @@ export function RecipeForm({
                   placeholder="Qtd."
                   value={line.quantity}
                   onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
-                  disabled={!line.ingredient}
+                  disabled={!line.item}
                   className="w-20 text-right tabular-nums"
                 />
 
@@ -299,7 +299,7 @@ export function RecipeForm({
                 <Select
                   value={line.inputUnit}
                   onValueChange={(v) => updateLine(line.key, { inputUnit: v as InputUnit })}
-                  disabled={!line.ingredient}
+                  disabled={!line.item}
                 >
                   <SelectTrigger className="w-28 text-xs">
                     <SelectValue />
