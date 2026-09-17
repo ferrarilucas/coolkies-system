@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const customer = await context.db.customer.create({
-        data: { name, email, phone, sector, notes },
+        data: { name, email, phone, sector, notes, workspaceId: context.workspaceId },
         select: { id: true, name: true, email: true, phone: true, sector: true },
       });
       return Response.json({ customer }, { status: 201 });

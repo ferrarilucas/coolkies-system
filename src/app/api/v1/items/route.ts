@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const item = await context.db.item.create({
-        data: { name, unit, minStock, productionInput, sellable },
+        data: { name, unit, minStock, productionInput, sellable, workspaceId: context.workspaceId },
       });
       return Response.json({ item }, { status: 201 });
     } catch {
