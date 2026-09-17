@@ -17,10 +17,12 @@ export async function getLastPurchase(
   db: PrismaClient,
   itemId: string,
   supplierId?: string,
+  variantId?: string | null,
 ): Promise<LastPurchaseInfo | null> {
   const item = await db.purchaseItem.findFirst({
     where: {
       itemId,
+      ...(variantId !== undefined ? { variantId } : {}),
       ...(supplierId ? { purchase: { supplierId } } : {}),
     },
     orderBy: { purchase: { purchasedAt: "desc" } },

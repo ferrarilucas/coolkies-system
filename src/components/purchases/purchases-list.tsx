@@ -74,7 +74,10 @@ function PurchaseRow({ purchase }: { purchase: PurchaseListItem }) {
           const unitLabel = baseUnitLabel(item.item.unit);
           return (
             <div key={item.id} className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground pl-1">
-              <span className="text-foreground">{item.item.name}</span>
+              <span className="text-foreground">
+                {item.item.name}
+                {item.variant && <span className="text-muted-foreground"> — {item.variant.name}</span>}
+              </span>
               <span>{formatQty(item.quantity, item.item.unit)}</span>
               <span className="text-foreground tabular-nums">{formatBRL(item.pricePaidCents)}</span>
               <span className="text-xs">R$ {pricePerUnit}/{unitLabel}</span>

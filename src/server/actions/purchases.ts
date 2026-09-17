@@ -59,6 +59,7 @@ export async function deleteSupplier(id: string): Promise<ActionResult> {
 
 type PurchaseItemInput = {
   itemId: string;
+  variantId?: string | null;
   quantity: number;
   unit: InputUnit;
   pricePaidCents: number;
@@ -89,9 +90,20 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
 
   const catalogItems = await db.item.findMany({
     where: { id: { in: items.map((i) => i.itemId) } },
-    select: { id: true, unit: true },
+    select: { id: true, unit: true, variants: { select: { id: true } } },
   });
   const itemMap = new Map(catalogItems.map((i) => [i.id, i]));
+
+  for (const line of items) {
+    const catalogItem = itemMap.get(line.itemId);
+    if (!catalogItem) return { ok: false, error: "Item não encontrado." };
+    if (catalogItem.variants.length > 0 && !line.variantId) {
+      return { ok: false, error: "Selecione a variante em todos os itens que têm variante." };
+    }
+    if (line.variantId && !catalogItem.variants.some((v) => v.id === line.variantId)) {
+      return { ok: false, error: "Variante inválida para o item selecionado." };
+    }
+  }
 
   try {
     await db.$transaction(async (tx) => {
@@ -105,7 +117,14 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
             create: items.map((line) => {
               const catalogItem = itemMap.get(line.itemId);
               const { quantity, unit } = toBaseUnit(line.quantity, line.unit, catalogItem?.unit);
-              return { itemId: line.itemId, quantity, unit, pricePaidCents: line.pricePaidCents, workspaceId };
+              return {
+                itemId: line.itemId,
+                variantId: line.variantId ?? null,
+                quantity,
+                unit,
+                pricePaidCents: line.pricePaidCents,
+                workspaceId,
+              };
             }),
           },
         },
@@ -116,6 +135,7 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
         await tx.stockMovement.create({
           data: {
             itemId: line.itemId,
+            variantId: line.variantId,
             type: StockMovementType.PURCHASE,
             quantity: Math.round(line.quantity),
             purchaseId: created.id,
@@ -148,9 +168,10 @@ export async function deletePurchase(id: string): Promise<ActionResult> {
 export async function fetchLastPriceForSupplierItem(
   supplierId: string | null,
   itemId: string,
+  variantId?: string | null,
 ): Promise<{ quantity: number; unit: BaseUnit; pricePaidCents: number } | null> {
   const { db } = await getScopedDb();
-  const last = await getLastPurchase(db, itemId, supplierId ?? undefined);
+  const last = await getLastPurchase(db, itemId, supplierId ?? undefined, variantId);
   if (!last) return null;
   return { quantity: last.quantity, unit: last.unit, pricePaidCents: last.pricePaidCents };
 }

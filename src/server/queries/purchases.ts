@@ -19,7 +19,10 @@ export async function getPurchases() {
     include: {
       supplier: { select: { id: true, name: true } },
       items: {
-        include: { item: { select: { id: true, name: true, unit: true } } },
+        include: {
+          item: { select: { id: true, name: true, unit: true } },
+          variant: { select: { id: true, name: true } },
+        },
       },
     },
   });

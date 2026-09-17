@@ -23,13 +23,14 @@ import { PurchaseItemCombobox, type PurchaseItemOption } from "./item-combobox";
 type DraftItem = {
   key: string;
   item: PurchaseItemOption | null;
+  variantId: string | null;
   quantity: string;
   unit: InputUnit;
   unitPriceCents: number;
 };
 
 function emptyItem(): DraftItem {
-  return { key: crypto.randomUUID(), item: null, quantity: "", unit: "G", unitPriceCents: 0 };
+  return { key: crypto.randomUUID(), item: null, variantId: null, quantity: "", unit: "G", unitPriceCents: 0 };
 }
 
 function itemTotalCents(item: DraftItem): number {
@@ -62,19 +63,25 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   }
 
-  async function handleItemChange(key: string, item: PurchaseItemOption) {
-    updateItem(key, { item });
-    const last = await fetchLastPriceForSupplierItem(supplier?.id ?? null, item.id);
+  async function applyLastPrice(key: string, itemId: string, variantId: string | null) {
+    const last = await fetchLastPriceForSupplierItem(supplier?.id ?? null, itemId, variantId);
     if (!last) return;
     const displayUnit = bestInputUnit(last.quantity, last.unit);
     const displayQty = toDisplayValue(last.quantity, displayUnit, last.unit);
     const unitPriceCents = displayQty > 0 ? Math.round(last.pricePaidCents / displayQty) : 0;
-    updateItem(key, {
-      item,
-      quantity: String(displayQty),
-      unit: displayUnit,
-      unitPriceCents,
-    });
+    updateItem(key, { quantity: String(displayQty), unit: displayUnit, unitPriceCents });
+  }
+
+  async function handleItemChange(key: string, item: PurchaseItemOption) {
+    updateItem(key, { item, variantId: null });
+    if (item.variants.length === 0) {
+      await applyLastPrice(key, item.id, null);
+    }
+  }
+
+  async function handleVariantChange(key: string, item: PurchaseItemOption, variantId: string) {
+    updateItem(key, { variantId });
+    await applyLastPrice(key, item.id, variantId);
   }
 
   function addItem() {
@@ -87,7 +94,13 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
 
   const canSubmit =
     items.length > 0 &&
-    items.every((i) => i.item && parseFloat(i.quantity) > 0 && i.unitPriceCents > 0);
+    items.every(
+      (i) =>
+        i.item &&
+        parseFloat(i.quantity) > 0 &&
+        i.unitPriceCents > 0 &&
+        (i.item.variants.length === 0 || i.variantId),
+    );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,6 +114,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
       JSON.stringify(
         items.map((i) => ({
           itemId: i.item!.id,
+          variantId: i.variantId,
           quantity: parseFloat(i.quantity),
           unit: i.unit,
           pricePaidCents: itemTotalCents(i),
@@ -184,6 +198,22 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+
+                  {item.item && item.item.variants.length > 0 && (
+                    <Select
+                      value={item.variantId ?? ""}
+                      onValueChange={(v) => handleVariantChange(item.key, item.item!, v)}
+                    >
+                      <SelectTrigger className={!item.variantId ? "text-muted-foreground" : undefined}>
+                        <SelectValue placeholder="Selecione a variante…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {item.item.variants.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   <div className="grid grid-cols-2 gap-2">
                     <Input

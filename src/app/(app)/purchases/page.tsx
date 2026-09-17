@@ -18,7 +18,13 @@ export default async function PurchasesPage() {
     getPurchases(),
     db.item.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, unit: true, sellable: true },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        sellable: true,
+        variants: { orderBy: { name: "asc" }, select: { id: true, name: true } },
+      },
     }),
   ]);
 

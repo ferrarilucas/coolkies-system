@@ -114,6 +114,76 @@ describe("createPurchase", () => {
     const res = await createPurchase(fd({ supplierId: "", purchasedAt: "2026-09-15", items: "[]" }));
     expect(res.ok).toBe(false);
   });
+
+  it("grava a variante no PurchaseItem e no StockMovement de um item de revenda com variantes", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Refrigerante", unit: "UN", sellable: true, workspaceId: context.workspaceId },
+    });
+    const lata = await testDb.variant.create({
+      data: { name: "Lata", itemId: item.id, workspaceId: context.workspaceId },
+    });
+
+    const res = await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-09-15",
+        items: JSON.stringify([
+          { itemId: item.id, variantId: lata.id, quantity: 12, unit: "UN", pricePaidCents: 2400 },
+        ]),
+      }),
+    );
+
+    expect(res.ok).toBe(true);
+    const purchaseItem = await testDb.purchaseItem.findFirstOrThrow({ where: { itemId: item.id } });
+    expect(purchaseItem.variantId).toBe(lata.id);
+    const movement = await testDb.stockMovement.findFirstOrThrow({
+      where: { itemId: item.id, type: "PURCHASE" },
+    });
+    expect(movement.variantId).toBe(lata.id);
+  });
+
+  it("recusa comprar um item com variantes sem escolher a variante", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Refrigerante", unit: "UN", sellable: true, workspaceId: context.workspaceId },
+    });
+    await testDb.variant.create({
+      data: { name: "Lata", itemId: item.id, workspaceId: context.workspaceId },
+    });
+
+    const res = await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-09-15",
+        items: JSON.stringify([{ itemId: item.id, quantity: 12, unit: "UN", pricePaidCents: 2400 }]),
+      }),
+    );
+
+    expect(res.ok).toBe(false);
+  });
+
+  it("recusa uma variante que não pertence ao item selecionado", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Refrigerante", unit: "UN", sellable: true, workspaceId: context.workspaceId },
+    });
+    const outroItem = await testDb.item.create({
+      data: { name: "Suco", unit: "UN", sellable: true, workspaceId: context.workspaceId },
+    });
+    const variantDeOutroItem = await testDb.variant.create({
+      data: { name: "Garrafa", itemId: outroItem.id, workspaceId: context.workspaceId },
+    });
+
+    const res = await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-09-15",
+        items: JSON.stringify([
+          { itemId: item.id, variantId: variantDeOutroItem.id, quantity: 12, unit: "UN", pricePaidCents: 2400 },
+        ]),
+      }),
+    );
+
+    expect(res.ok).toBe(false);
+  });
 });
 
 describe("deletePurchase", () => {
@@ -202,5 +272,30 @@ describe("fetchLastPriceForSupplierItem", () => {
 
     const result = await fetchLastPriceForSupplierItem(supplier.id, item.id);
     expect(result).toBeNull();
+  });
+
+  it("lembra o preço por variante, não misturando com o de outra variante do mesmo item", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Refrigerante", unit: "UN", sellable: true, workspaceId: context.workspaceId },
+    });
+    const lata = await testDb.variant.create({
+      data: { name: "Lata", itemId: item.id, workspaceId: context.workspaceId },
+    });
+    const garrafa = await testDb.variant.create({
+      data: { name: "Garrafa", itemId: item.id, workspaceId: context.workspaceId },
+    });
+    const purchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
+    await testDb.purchaseItem.create({
+      data: { purchaseId: purchase.id, itemId: item.id, variantId: lata.id, quantity: 12, unit: "UN", pricePaidCents: 2400, workspaceId: context.workspaceId },
+    });
+    await testDb.purchaseItem.create({
+      data: { purchaseId: purchase.id, itemId: item.id, variantId: garrafa.id, quantity: 6, unit: "UN", pricePaidCents: 1800, workspaceId: context.workspaceId },
+    });
+
+    const resultLata = await fetchLastPriceForSupplierItem(null, item.id, lata.id);
+    expect(resultLata).toMatchObject({ quantity: 12, pricePaidCents: 2400 });
+
+    const resultGarrafa = await fetchLastPriceForSupplierItem(null, item.id, garrafa.id);
+    expect(resultGarrafa).toMatchObject({ quantity: 6, pricePaidCents: 1800 });
   });
 });

@@ -293,6 +293,7 @@ model Variant {
   stockMovements         StockMovement[]
   productionBatches      ProductionBatch[]
   productionVariantLines ProductionVariantLine[]
+  purchaseItems          PurchaseItem[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -493,6 +494,8 @@ model PurchaseItem {
   purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   itemId     String
   item       Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   quantity       Float // quantidade comprada na unidade base do ingrediente
   unit           BaseUnit

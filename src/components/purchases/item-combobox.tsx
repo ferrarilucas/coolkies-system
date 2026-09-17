@@ -19,6 +19,7 @@ export type PurchaseItemOption = {
   name: string;
   unit: string;
   sellable: boolean;
+  variants: { id: string; name: string }[];
 };
 
 function QuickCreateForm({
@@ -58,6 +59,7 @@ function QuickCreateForm({
           name: res.data.name,
           unit: res.data.unit,
           sellable: res.data.sellable,
+          variants: [],
         });
       } else {
         toast.error(res.error ?? "Erro ao criar.");
