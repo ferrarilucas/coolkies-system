@@ -30,8 +30,13 @@ export async function POST(request: NextRequest) {
 
     if (!label) return Response.json({ error: "Descreva o item." }, { status: 400 });
 
+    if (itemId) {
+      const found = await context.db.item.findFirst({ where: { id: itemId } });
+      if (!found) return Response.json({ error: "Item não encontrado." }, { status: 400 });
+    }
+
     const created = await context.db.shoppingListItem.create({
-      data: { itemId, label, quantity, unit },
+      data: { itemId, label, quantity, unit, workspaceId: context.workspaceId },
     });
     return Response.json({ item: created }, { status: 201 });
   } catch (e) {
