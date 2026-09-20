@@ -22,6 +22,8 @@ const eslintConfig = [
       "src/app/(app)/admin/access/page.tsx",
       "src/lib/auth.ts",
       "src/lib/allowlist.ts",
+      "src/app/api/v1/workspaces/route.ts",
+      "src/app/api/v1/workspaces/active/route.ts",
     ],
     rules: {
       "no-restricted-imports": [
