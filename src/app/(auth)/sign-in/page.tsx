@@ -164,7 +164,9 @@ export default function SignInPage() {
           </form>
 
           <p className="text-center text-xs text-muted-foreground">
-            Usamos seus dados só para acessar o app.
+            Ao continuar, você concorda com os{" "}
+            <Link href="/terms" className="underline underline-offset-4">Termos de uso</Link> e a{" "}
+            <Link href="/privacy" className="underline underline-offset-4">Política de privacidade</Link>.
           </p>
         </CardContent>
       </Card>
