@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getScopedDb } from "@/server/tenant/context";
 import { enablePublicLink, disablePublicLink } from "@/server/tenant/public-link";
+import { assertWorkspaceFeature } from "@/server/tenant/features";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -22,6 +23,7 @@ export async function togglePublicLink(
       return { ok: true, data: { token: null } };
     }
 
+    await assertWorkspaceFeature(workspaceId, "publicLink");
     const token = await enablePublicLink(workspaceId);
     revalidatePath("/workspaces/public-link");
     return { ok: true, data: { token } };

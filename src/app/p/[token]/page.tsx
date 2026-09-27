@@ -3,6 +3,7 @@ import { resolveWorkspaceByPublicToken } from "@/server/tenant/public-link";
 import { getWorkspaceRevenueSummary } from "@/server/queries/consolidated-dashboard";
 import { formatBRL } from "@/lib/money";
 import { canWriteInWorkspace } from "@/server/tenant/subscription";
+import { workspaceHasFeature } from "@/server/tenant/features";
 
 function monthRange(): { from: Date; to: Date } {
   const now = new Date();
@@ -22,6 +23,7 @@ export default async function PublicWorkspacePage({
 
   const active = await canWriteInWorkspace(workspace.id);
   if (!active) notFound();
+  if (!(await workspaceHasFeature(workspace.id, "publicLink"))) notFound();
 
   const { from, to } = monthRange();
   const summary = await getWorkspaceRevenueSummary(workspace.id, workspace.name, { from, to });
