@@ -103,6 +103,32 @@ describe("redefinição de senha", () => {
 
     await expect(
       auth.api.resetPassword({ body: { newPassword: "terceira-senha-3", token } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_TOKEN" } });
+
+    await expect(auth.api.signInEmail({ body: { email, password: "outra-senha-2" } })).resolves.toMatchObject({
+      token: expect.any(String),
+    });
+    await expect(
+      auth.api.signInEmail({ body: { email, password: "terceira-senha-3" } }),
     ).rejects.toBeTruthy();
+  });
+
+  it("token expirado é recusado e a senha original continua valendo", async () => {
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "http://localhost:3000/reset-password" },
+    });
+    const token = tokenFromReset(sent.reset[0]);
+
+    await testDb.verification.updateMany({
+      where: { identifier: `reset-password:${token}` },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    await expect(
+      auth.api.resetPassword({ body: { newPassword: "outra-senha-2", token } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_TOKEN" } });
+
+    const ok = await auth.api.signInEmail({ body: { email, password } });
+    expect(ok.token).toBeTruthy();
   });
 });
