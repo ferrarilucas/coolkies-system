@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-const PUBLIC_PATHS = ["/sign-in", "/not-authorized", "/splash-debug", "/p/", "/.well-known/"];
+const PUBLIC_PATHS = [
+  "/sign-in",
+  "/forgot-password",
+  "/reset-password",
+  "/not-authorized",
+  "/splash-debug",
+  "/p/",
+  "/.well-known/",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,6 +32,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   // protege tudo, exceto auth API, assets, .well-known e o próprio sign-in
   matcher: [
-    "/((?!api/auth|api/webhooks|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg|icon-192.png|icon-512.png|apple-icon.png|splash/|p/|sign-in|not-authorized|\\.well-known).*)",
+    "/((?!api/auth|api/webhooks|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg|icon-192.png|icon-512.png|apple-icon.png|splash/|p/|sign-in|forgot-password|reset-password|not-authorized|\\.well-known).*)",
   ],
 };

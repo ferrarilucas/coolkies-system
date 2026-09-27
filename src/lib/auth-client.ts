@@ -25,6 +25,7 @@ export async function signUpWithEmail(input: {
     name: input.name,
     email: input.email,
     password: input.password,
+    callbackURL: "/dashboard",
   });
 }
 
@@ -36,4 +37,15 @@ export async function signInWithEmail(input: {
     email: input.email,
     password: input.password,
   });
+}
+
+export async function requestPasswordReset(email: string) {
+  return authClient.requestPasswordReset({
+    email,
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+}
+
+export async function resetPassword(input: { token: string; newPassword: string }) {
+  return authClient.resetPassword(input);
 }

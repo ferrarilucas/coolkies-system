@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Cookie, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import {
   signInWithEmail,
   signUpWithEmail,
 } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-errors";
 
 type Mode = "signin" | "signup";
 
@@ -24,6 +26,7 @@ export default function SignInPage() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,7 +41,13 @@ export default function SignInPage() {
     setPending(false);
 
     if (result.error) {
-      setError(result.error.message ?? "Não foi possível continuar.");
+      setError(authErrorMessage(result.error));
+      return;
+    }
+
+    if (mode === "signup") {
+      setNotice(`Enviamos um link de confirmação para ${email}. Abra o e-mail para ativar sua conta.`);
+      setPassword("");
       return;
     }
 
@@ -81,6 +90,7 @@ export default function SignInPage() {
             onValueChange={(v) => {
               setMode(v as Mode);
               setError(null);
+              setNotice(null);
             }}
           >
             <TabsList className="grid w-full grid-cols-2">
@@ -129,6 +139,16 @@ export default function SignInPage() {
                 }
               />
             </div>
+
+            {mode === "signin" && (
+              <div className="text-right">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+
+            {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 

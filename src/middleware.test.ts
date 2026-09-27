@@ -22,4 +22,9 @@ describe("middleware", () => {
     const res = middleware(req("/sign-in"));
     expect(res.status).not.toBe(307);
   });
+
+  it.each(["/forgot-password", "/reset-password"])("deixa %s passar sem sessão", (path) => {
+    const res = middleware(req(path));
+    expect(res.status).not.toBe(307);
+  });
 });
