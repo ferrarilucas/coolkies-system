@@ -1,10 +1,12 @@
 import { Building2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { UpgradeNotice } from "@/components/shared/upgrade-notice";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import { activeWorkspaceIds } from "@/server/tenant/subscription";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { getConsolidatedSummary } from "@/server/queries/consolidated-dashboard";
+import { userHasFeature } from "@/server/tenant/features";
 import { formatBRL } from "@/lib/money";
 
 function monthRange(): { from: Date; to: Date } {
@@ -16,6 +18,21 @@ function monthRange(): { from: Date; to: Date } {
 
 export default async function ConsolidatedDashboardPage() {
   const { userId } = await getWorkspaceContext();
+
+  if (!(await userHasFeature(userId, "consolidatedDashboard"))) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Painel consolidado"
+          description="Soma do faturamento pago de todos os seus workspaces neste mês."
+        />
+        <UpgradeNotice
+          title="O painel consolidado faz parte do plano Cresce"
+          description="Com o Cresce, você vê o faturamento de todos os seus workspaces somado numa tela só."
+        />
+      </div>
+    );
+  }
   const [owned, active] = await Promise.all([listUserWorkspaces(), activeWorkspaceIds(userId)]);
   const workspaces = owned.filter((w) => w.role === "OWNER" && active.has(w.id));
 
