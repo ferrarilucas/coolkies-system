@@ -1,0 +1,108 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetDb, testDb } from "@/test/db";
+
+const sent = vi.hoisted(() => ({ verification: [] as string[], reset: [] as string[] }));
+
+vi.mock("./email", () => ({
+  sendVerificationEmail: async ({ url }: { url: string }) => {
+    sent.verification.push(url);
+    return { sent: true };
+  },
+  sendPasswordResetEmail: async ({ url }: { url: string }) => {
+    sent.reset.push(url);
+    return { sent: true };
+  },
+}));
+
+const { auth } = await import("./auth");
+
+const email = "ana@example.com";
+const password = "senha-segura-1";
+
+async function signUp() {
+  return auth.api.signUpEmail({ body: { name: "Ana", email, password } });
+}
+
+function tokenFromVerification(url: string): string {
+  return new URL(url).searchParams.get("token") as string;
+}
+
+function tokenFromReset(url: string): string {
+  return new URL(url).pathname.split("/").pop() as string;
+}
+
+describe("verificação de e-mail", () => {
+  beforeEach(async () => {
+    await resetDb();
+    sent.verification.length = 0;
+    sent.reset.length = 0;
+  });
+
+  it("cadastro envia o link e não abre sessão", async () => {
+    const res = await signUp();
+    expect(res.token).toBeNull();
+    expect(sent.verification).toHaveLength(1);
+    expect(sent.verification[0]).toContain("/api/auth/verify-email?token=");
+  });
+
+  it("login antes de confirmar é recusado com EMAIL_NOT_VERIFIED", async () => {
+    await signUp();
+    await expect(auth.api.signInEmail({ body: { email, password } })).rejects.toMatchObject({
+      body: { code: "EMAIL_NOT_VERIFIED" },
+    });
+  });
+
+  it("depois de confirmar, o login funciona", async () => {
+    await signUp();
+    await auth.api.verifyEmail({ query: { token: tokenFromVerification(sent.verification[0]) } });
+    const res = await auth.api.signInEmail({ body: { email, password } });
+    expect(res.token).toBeTruthy();
+  });
+});
+
+describe("redefinição de senha", () => {
+  beforeEach(async () => {
+    await resetDb();
+    sent.verification.length = 0;
+    sent.reset.length = 0;
+    await signUp();
+    await testDb.user.update({ where: { email }, data: { emailVerified: true } });
+  });
+
+  it("pedido envia o link de redefinição", async () => {
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "http://localhost:3000/reset-password" },
+    });
+    expect(sent.reset).toHaveLength(1);
+    expect(sent.reset[0]).toContain("/api/auth/reset-password/");
+  });
+
+  it("pedido para e-mail inexistente não envia nada e não revela nada", async () => {
+    await auth.api.requestPasswordReset({
+      body: { email: "ninguem@example.com", redirectTo: "http://localhost:3000/reset-password" },
+    });
+    expect(sent.reset).toHaveLength(0);
+  });
+
+  it("troca a senha, derruba as sessões antigas e o token não serve duas vezes", async () => {
+    await auth.api.signInEmail({ body: { email, password } });
+    const user = await testDb.user.findUniqueOrThrow({ where: { email } });
+    expect(await testDb.session.count({ where: { userId: user.id } })).toBe(1);
+
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "http://localhost:3000/reset-password" },
+    });
+    const token = tokenFromReset(sent.reset[0]);
+
+    await auth.api.resetPassword({ body: { newPassword: "outra-senha-2", token } });
+
+    expect(await testDb.session.count({ where: { userId: user.id } })).toBe(0);
+    await expect(auth.api.signInEmail({ body: { email, password } })).rejects.toBeTruthy();
+    const ok = await auth.api.signInEmail({ body: { email, password: "outra-senha-2" } });
+    expect(ok.token).toBeTruthy();
+
+    await expect(
+      auth.api.resetPassword({ body: { newPassword: "terceira-senha-3", token } }),
+    ).rejects.toBeTruthy();
+  });
+});
