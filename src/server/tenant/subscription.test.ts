@@ -810,4 +810,14 @@ describe("recursos por plano", () => {
     const sub = buildSubscription({ plan: "cresce", status: "CANCELED" });
     expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
   });
+
+  it("cancelado ainda dentro do trial mantém o Cresce até o fim do trial", () => {
+    const sub = buildSubscription({ plan: "corre", status: "CANCELED", trialEndsAt: future });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(true);
+  });
+
+  it("cancelado com trial vencido não tem os recursos", () => {
+    const sub = buildSubscription({ plan: "corre", status: "CANCELED", trialEndsAt: past });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
+  });
 });
