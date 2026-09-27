@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { BaseUnit } from "@prisma/client";
 import { getScopedDb, assertCanWrite } from "@/server/tenant/context";
+import { assertWorkspaceFeature } from "@/server/tenant/features";
 import { getShoppingListSuggestions } from "@/server/queries/shopping-list";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -82,6 +83,7 @@ export async function addSuggestedItem(itemId: string): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
     await assertCanWrite();
+    await assertWorkspaceFeature(workspaceId, "autoShoppingList");
 
     const suggestions = await getShoppingListSuggestions();
     const suggestion = suggestions.find((s) => s.itemId === itemId);

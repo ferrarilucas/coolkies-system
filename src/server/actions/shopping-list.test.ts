@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { resetDb, testDb, createWorkspace } from "@/test/db";
 import { scopedDb } from "@/server/tenant/extension";
+import { FEATURE_UNAVAILABLE_MESSAGE } from "@/server/tenant/features";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -20,6 +21,18 @@ vi.mock("@/server/tenant/context", () => ({
   },
 }));
 
+const features = { allowed: true };
+
+vi.mock("@/server/tenant/features", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/tenant/features")>();
+  return {
+    ...actual,
+    assertWorkspaceFeature: async () => {
+      if (!features.allowed) throw new actual.FeatureUnavailableError();
+    },
+  };
+});
+
 const { createShoppingListItem, updateShoppingListItem, deleteShoppingListItem, toggleShoppingListItem, addSuggestedItem } = await import("./shopping-list");
 const { getShoppingListItems, getShoppingListSuggestions } = await import("@/server/queries/shopping-list");
 
@@ -32,6 +45,7 @@ function fd(entries: Record<string, string>) {
 beforeEach(async () => {
   await resetDb();
   context.canWrite = true;
+  features.allowed = true;
 });
 
 describe("createShoppingListItem", () => {
@@ -135,6 +149,19 @@ describe("addSuggestedItem", () => {
 
     const items = await getShoppingListItems();
     expect(items[0]).toMatchObject({ itemId: item.id, quantity: 800 });
+  });
+
+  it("recusa a sugestão quando o plano não tem lista automática", async () => {
+    const ws = await createWorkspace("Loja E2");
+    context.workspaceId = ws.id;
+    features.allowed = false;
+    const item = await testDb.item.create({ data: { name: "Farinha", workspaceId: ws.id, unit: "G", productionInput: true, minStock: 1000 } });
+    await testDb.stockMovement.create({ data: { itemId: item.id, type: "PURCHASE", quantity: 200, workspaceId: ws.id } });
+
+    const res = await addSuggestedItem(item.id);
+
+    expect(res).toEqual({ ok: false, error: FEATURE_UNAVAILABLE_MESSAGE });
+    expect(await getShoppingListItems()).toHaveLength(0);
   });
 });
 
