@@ -28,6 +28,19 @@ describe("email", () => {
     expect(html).toContain('href="https://app.example.com/api/auth/verify-email?token=abc&amp;callbackURL=%2Fdashboard"');
   });
 
+  it("escapa uma única vez no template de ação, não duplica escape", () => {
+    const html = actionEmailHtml({
+      heading: "O'Brien convidou você para Doces & Cia",
+      body: "b",
+      ctaLabel: "c",
+      ctaUrl: "https://x",
+      footer: "f",
+    });
+    expect(html).toContain("O&#39;Brien convidou você para Doces &amp; Cia");
+    expect(html).not.toContain("&amp;amp;");
+    expect(html).not.toContain("&amp;#39;");
+  });
+
   it("sem RESEND_API_KEY, a verificação não envia e imprime o link no console", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const res = await sendVerificationEmail({ to: "ana@example.com", name: "Ana", url: "http://localhost:3000/v?token=1" });

@@ -85,7 +85,7 @@ export async function sendInviteEmail(invite: InviteEmail): Promise<SendResult> 
     to: invite.to,
     subject: `Convite para ${invite.workspaceName} no Coolkies`,
     html: actionEmailHtml({
-      heading: `${escapeHtml(invite.inviterName)} convidou você para ${escapeHtml(invite.workspaceName)}`,
+      heading: `${invite.inviterName} convidou você para ${invite.workspaceName}`,
       body: `Você vai entrar como ${invite.roleLabel}. Use o código abaixo na tela "Entrar com código".`,
       highlight: invite.code,
       ctaLabel: "Abrir o Coolkies",
