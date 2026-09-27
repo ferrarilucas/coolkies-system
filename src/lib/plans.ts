@@ -41,6 +41,7 @@ export const PLANS: PlanDefinition[] = [
       "Receitas com custo real e custo por unidade produzida",
       "Clientes com histórico de compras e pendências",
       "Painel de faturamento, ticket médio e filtros por período",
+      "Exportação dos dados em CSV para contador e sócio",
       "App na tela do celular, sem loja de aplicativos",
       "Suporte por WhatsApp em horário comercial",
     ],
@@ -64,7 +65,6 @@ export const PLANS: PlanDefinition[] = [
       "Comparação de preços entre mercados por unidade base",
       "Lista de compras automática pelo estoque mínimo",
       "Relatórios comparativos por produto, sabor e cliente",
-      "Exportação dos dados em CSV para contador e sócio",
       "Link público do painel para quem precisa só olhar",
       "Parcelado na Palavra incluído assim que for lançado",
       "Suporte prioritário no WhatsApp",
@@ -93,6 +93,26 @@ export const PLANS: PlanDefinition[] = [
     ],
   },
 ];
+
+export type PlanFeature = "consolidatedDashboard" | "publicLink" | "autoShoppingList";
+
+const CRESCE_FEATURES: ReadonlyArray<PlanFeature> = [
+  "consolidatedDashboard",
+  "publicLink",
+  "autoShoppingList",
+];
+
+const PLAN_FEATURES: Record<string, ReadonlyArray<PlanFeature>> = {
+  corre: [],
+  cresce: CRESCE_FEATURES,
+  escala: CRESCE_FEATURES,
+};
+
+export const TRIAL_FEATURE_PLAN = "cresce";
+
+export function planHasFeature(plan: string, feature: PlanFeature): boolean {
+  return PLAN_FEATURES[findPlan(plan).id].includes(feature);
+}
 
 function findPlan(plan: string): PlanDefinition {
   return PLANS.find((p) => p.id === plan) ?? PLANS[0];

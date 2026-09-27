@@ -8,8 +8,10 @@ import {
   activeWorkspaceIds,
   canWriteInWorkspace,
   ensureTrialSubscription,
+  featurePlanFor,
   isSubscriptionUsable,
   recordInterPixSubscription,
+  subscriptionHasFeature,
 } from "./subscription";
 
 function buildSubscription(overrides: Partial<Subscription>): Subscription {
@@ -765,5 +767,47 @@ describe("trial na criacao do primeiro workspace", () => {
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
 
     expect(sub?.trialEndsAt?.toISOString()).toBe(antiga.toISOString());
+  });
+});
+
+describe("recursos por plano", () => {
+  const now = new Date("2026-09-27T12:00:00Z");
+  const future = new Date("2026-10-05T00:00:00Z");
+  const past = new Date("2026-09-20T00:00:00Z");
+
+  it("sem assinatura vale corre e não tem recurso nenhum", () => {
+    expect(featurePlanFor(null, now)).toBe("corre");
+    expect(subscriptionHasFeature(null, "publicLink", now)).toBe(false);
+  });
+
+  it("trial em andamento libera o Cresce mesmo com plano corre gravado", () => {
+    const sub = buildSubscription({ plan: "corre", status: "TRIALING", trialEndsAt: future });
+    expect(featurePlanFor(sub, now)).toBe("cresce");
+    expect(subscriptionHasFeature(sub, "consolidatedDashboard", now)).toBe(true);
+  });
+
+  it("checkout pendente dentro do trial continua com o Cresce", () => {
+    const sub = buildSubscription({ plan: "corre", status: "PENDING_AUTH", trialEndsAt: future });
+    expect(subscriptionHasFeature(sub, "autoShoppingList", now)).toBe(true);
+  });
+
+  it("trial vencido não libera nada", () => {
+    const sub = buildSubscription({ plan: "corre", status: "TRIALING", trialEndsAt: past });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
+  });
+
+  it("corre ativo não tem recursos do Cresce", () => {
+    const sub = buildSubscription({ plan: "corre", status: "ACTIVE" });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
+  });
+
+  it("cresce ativo tem os recursos", () => {
+    const sub = buildSubscription({ plan: "cresce", status: "ACTIVE" });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(true);
+  });
+
+  it("cresce cancelado sem período pago não tem os recursos", () => {
+    const sub = buildSubscription({ plan: "cresce", status: "CANCELED" });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
   });
 });

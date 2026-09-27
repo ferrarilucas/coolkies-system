@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { Subscription, SubscriptionCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { effectiveLimit } from "@/lib/plans";
+import { effectiveLimit, planHasFeature, TRIAL_FEATURE_PLAN, type PlanFeature } from "@/lib/plans";
 import { hasPaidAccess } from "@/lib/period";
 
 const TRIAL_DAYS = 14;
@@ -160,6 +160,25 @@ export function isSubscriptionUsable(
     return sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now;
   }
   return false;
+}
+
+export function featurePlanFor(sub: Subscription | null, now: Date = new Date()): string {
+  if (!sub) return "corre";
+  const trialRunning = sub.trialEndsAt !== null && sub.trialEndsAt > now;
+  if (sub.status === "TRIALING" && (sub.trialEndsAt === null || trialRunning)) {
+    return TRIAL_FEATURE_PLAN;
+  }
+  if (sub.status === "PENDING_AUTH" && trialRunning) return TRIAL_FEATURE_PLAN;
+  return sub.plan;
+}
+
+export function subscriptionHasFeature(
+  sub: Subscription | null,
+  feature: PlanFeature,
+  now: Date = new Date(),
+): boolean {
+  if (!isSubscriptionUsable(sub, now)) return false;
+  return planHasFeature(featurePlanFor(sub, now), feature);
 }
 
 export async function activeWorkspaceIds(userId: string): Promise<Set<string>> {

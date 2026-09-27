@@ -4,9 +4,11 @@ import {
   effectiveLimit,
   isKnownPlan,
   monthlyPriceCents,
+  planHasFeature,
   planLabel,
   planLimit,
   planMemberLimit,
+  PLANS,
 } from "./plans";
 import { isPeriodPaid } from "./period";
 
@@ -136,5 +138,38 @@ describe("limite de usuários por plano", () => {
   it("cresce e escala não limitam usuários", () => {
     expect(planMemberLimit("cresce")).toBe(Number.POSITIVE_INFINITY);
     expect(planMemberLimit("escala")).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("planHasFeature", () => {
+  it("corre não tem nenhum recurso do Cresce", () => {
+    expect(planHasFeature("corre", "consolidatedDashboard")).toBe(false);
+    expect(planHasFeature("corre", "publicLink")).toBe(false);
+    expect(planHasFeature("corre", "autoShoppingList")).toBe(false);
+  });
+
+  it("cresce e escala têm todos os recursos", () => {
+    for (const plan of ["cresce", "escala"]) {
+      expect(planHasFeature(plan, "consolidatedDashboard")).toBe(true);
+      expect(planHasFeature(plan, "publicLink")).toBe(true);
+      expect(planHasFeature(plan, "autoShoppingList")).toBe(true);
+    }
+  });
+
+  it("plano desconhecido cai no corre", () => {
+    expect(planHasFeature("plano-que-nao-existe", "publicLink")).toBe(false);
+  });
+
+  it("todo plano do catálogo tem mapa de recursos", () => {
+    for (const p of PLANS) {
+      expect(() => planHasFeature(p.id, "publicLink")).not.toThrow();
+    }
+  });
+
+  it("CSV é anunciado no Corre, não no Cresce", () => {
+    const corre = PLANS.find((p) => p.id === "corre");
+    const cresce = PLANS.find((p) => p.id === "cresce");
+    expect(corre?.features.some((f) => f.includes("CSV"))).toBe(true);
+    expect(cresce?.features.some((f) => f.includes("CSV"))).toBe(false);
   });
 });
