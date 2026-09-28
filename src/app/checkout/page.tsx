@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import {
   chargeAmountCents,
   isKnownCycle,
@@ -25,6 +26,7 @@ export default async function CheckoutPage({
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
+  if (!(await hasAcceptedCurrentTerms(session.user.id))) redirect("/accept-terms");
 
   const { plan, cycle: rawCycle } = await searchParams;
 

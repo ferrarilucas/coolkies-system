@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { Cookie } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import {
   CreateWorkspaceForm,
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export default async function OnboardingPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
+  if (!(await hasAcceptedCurrentTerms(session.user.id))) redirect("/accept-terms");
 
   const workspaces = await listUserWorkspaces();
   if (workspaces.length > 0) redirect("/dashboard");

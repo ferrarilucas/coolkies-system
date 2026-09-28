@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { AppShell } from "@/components/layout/app-shell";
+import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { getWorkspacePlanState } from "@/server/tenant/subscription";
@@ -15,6 +16,7 @@ export default async function AppLayout({
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
+  if (!(await hasAcceptedCurrentTerms(session.user.id))) redirect("/accept-terms");
 
   const workspaces = await listUserWorkspaces();
   if (workspaces.length === 0) redirect("/onboarding");
