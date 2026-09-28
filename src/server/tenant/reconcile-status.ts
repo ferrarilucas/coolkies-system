@@ -1,4 +1,4 @@
-import { isValidIsoCalendarDate } from "../src/lib/date-validation";
+import { isValidIsoCalendarDate } from "@/lib/date-validation";
 
 export type ReconcileApplyStatus = "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | "AUTH_DENIED";
 

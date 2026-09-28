@@ -14,6 +14,7 @@ const TABLES = [
   "oauth_access_token",
   "oauth_application",
   "processed_webhook_event",
+  "subscription",
   "stock_movement",
   "production_variant_line",
   "production_batch",
