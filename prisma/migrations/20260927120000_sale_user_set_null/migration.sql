@@ -1,0 +1,10 @@
+BEGIN;
+
+ALTER TABLE "sale" ALTER COLUMN "userId" DROP NOT NULL;
+ALTER TABLE "sale" DROP CONSTRAINT "sale_userId_fkey";
+ALTER TABLE "sale"
+  ADD CONSTRAINT "sale_userId_fkey"
+  FOREIGN KEY ("userId") REFERENCES "user"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+COMMIT;

@@ -459,8 +459,8 @@ enum DiscountType {
 
 model Sale {
   id           String     @id @default(cuid())
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   customerId   String?
   customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
   customerName String? // snapshot do nome no momento da venda
