@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware } from "./middleware";
+import { middleware, config } from "./middleware";
 
 function req(pathname: string): NextRequest {
   return new NextRequest(new URL(pathname, "http://localhost:3000"));
@@ -31,5 +31,17 @@ describe("middleware", () => {
   it.each(["/api/v1/items", "/api/cron/reconcile"])("não redireciona %s (a rota autentica sozinha)", (path) => {
     const res = middleware(req(path));
     expect(res.status).not.toBe(307);
+  });
+});
+
+describe("middleware matcher", () => {
+  it("isenta só /api/v1/ e /api/cron/ com barra", () => {
+    const matcher = new RegExp(`^${config.matcher[0]}$`);
+
+    expect(matcher.test("/api/v1/items")).toBe(false);
+    expect(matcher.test("/api/cron/reconcile")).toBe(false);
+    expect(matcher.test("/api/v10/items")).toBe(true);
+    expect(matcher.test("/api/cronograma")).toBe(true);
+    expect(matcher.test("/dashboard")).toBe(true);
   });
 });
