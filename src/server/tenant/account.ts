@@ -4,9 +4,13 @@ import { getSubscription, markSubscriptionCanceled } from "./subscription";
 import { cancelInterPixSubscription } from "./interpix";
 import { cancelStripeSubscription, StripeApiError } from "./stripe";
 
-export async function hasAcceptedCurrentTerms(userId: string): Promise<boolean> {
+export async function getAcceptedTermsVersion(userId: string): Promise<string | null> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { termsVersion: true } });
-  return user?.termsVersion === TERMS_VERSION;
+  return user?.termsVersion ?? null;
+}
+
+export async function hasAcceptedCurrentTerms(userId: string): Promise<boolean> {
+  return (await getAcceptedTermsVersion(userId)) === TERMS_VERSION;
 }
 
 export async function acceptCurrentTerms(userId: string, now: Date = new Date()): Promise<void> {

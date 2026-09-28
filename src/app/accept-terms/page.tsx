@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { TERMS_VERSION } from "@/lib/legal";
 import { Card, CardContent } from "@/components/ui/card";
 import { AcceptTermsForm } from "@/components/legal/accept-terms-form";
-import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
+import { getAcceptedTermsVersion } from "@/server/tenant/account";
 
 export default async function AcceptTermsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
-  if (await hasAcceptedCurrentTerms(session.user.id)) redirect("/dashboard");
+  const acceptedVersion = await getAcceptedTermsVersion(session.user.id);
+  if (acceptedVersion === TERMS_VERSION) redirect("/dashboard");
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-6">
@@ -17,7 +19,9 @@ export default async function AcceptTermsPage() {
           <div className="space-y-1">
             <h1 className="text-lg font-semibold">Antes de continuar</h1>
             <p className="text-sm text-muted-foreground">
-              Atualizamos nossos termos e nossa política de privacidade. Leia e aceite para seguir usando o Coolkies.
+              {acceptedVersion === null
+                ? "Para começar, leia e aceite nossos termos de uso e nossa política de privacidade."
+                : "Atualizamos nossos termos e nossa política de privacidade. Leia e aceite para seguir usando o Coolkies."}
             </p>
           </div>
           <AcceptTermsForm />

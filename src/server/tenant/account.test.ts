@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createWorkspace, resetDb, testDb } from "@/test/db";
 import { TERMS_VERSION } from "@/lib/legal";
-import { acceptCurrentTerms, buildPersonalDataExport, hasAcceptedCurrentTerms } from "./account";
+import {
+  acceptCurrentTerms,
+  buildPersonalDataExport,
+  getAcceptedTermsVersion,
+  hasAcceptedCurrentTerms,
+} from "./account";
 
 describe("aceite dos termos", () => {
   beforeEach(async () => {
@@ -28,6 +33,24 @@ describe("aceite dos termos", () => {
       data: { id: "u1", name: "Ana", email: "ana@example.com", termsVersion: "2020-01-01" },
     });
     expect(await hasAcceptedCurrentTerms("u1")).toBe(false);
+  });
+});
+
+describe("versão dos termos aceita", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("conta nova não tem versão aceita", async () => {
+    await testDb.user.create({ data: { id: "u1", name: "Ana", email: "ana@example.com" } });
+    expect(await getAcceptedTermsVersion("u1")).toBeNull();
+  });
+
+  it("devolve a versão gravada, mesmo antiga", async () => {
+    await testDb.user.create({
+      data: { id: "u1", name: "Ana", email: "ana@example.com", termsVersion: "2020-01-01" },
+    });
+    expect(await getAcceptedTermsVersion("u1")).toBe("2020-01-01");
   });
 });
 
