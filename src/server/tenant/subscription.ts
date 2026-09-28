@@ -168,6 +168,7 @@ export function featurePlanFor(sub: Subscription | null, now: Date = new Date())
   if (sub.status === "TRIALING" && (sub.trialEndsAt === null || trialRunning)) {
     return TRIAL_FEATURE_PLAN;
   }
+  if (trialRunning && sub.plan === "corre") return TRIAL_FEATURE_PLAN;
   if (sub.status === "PENDING_AUTH" && trialRunning) return TRIAL_FEATURE_PLAN;
   if (sub.status === "CANCELED" && trialRunning) return TRIAL_FEATURE_PLAN;
   return sub.plan;

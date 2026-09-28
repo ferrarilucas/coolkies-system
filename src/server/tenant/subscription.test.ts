@@ -796,6 +796,21 @@ describe("recursos por plano", () => {
     expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
   });
 
+  it("quem assina o Corre durante o trial mantém o Cresce até o fim do trial", () => {
+    const sub = buildSubscription({ plan: "corre", status: "ACTIVE", trialEndsAt: future });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(true);
+  });
+
+  it("Corre ativo com trial já encerrado não tem recursos do Cresce", () => {
+    const sub = buildSubscription({ plan: "corre", status: "ACTIVE", trialEndsAt: past });
+    expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
+  });
+
+  it("Escala ativo durante o trial vale o próprio Escala", () => {
+    const sub = buildSubscription({ plan: "escala", status: "ACTIVE", trialEndsAt: future });
+    expect(featurePlanFor(sub, now)).toBe("escala");
+  });
+
   it("corre ativo não tem recursos do Cresce", () => {
     const sub = buildSubscription({ plan: "corre", status: "ACTIVE" });
     expect(subscriptionHasFeature(sub, "publicLink", now)).toBe(false);
