@@ -42,7 +42,7 @@ export async function signInWithEmail(input: {
 export async function requestPasswordReset(email: string) {
   return authClient.requestPasswordReset({
     email,
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: "/reset-password",
   });
 }
 

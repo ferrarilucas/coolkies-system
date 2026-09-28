@@ -84,6 +84,23 @@ describe("redefinição de senha", () => {
     expect(sent.reset[0]).toContain("/api/auth/reset-password/");
   });
 
+  it("redirectTo relativo passa pela checagem de origem e volta para o app", async () => {
+    const res = await auth.handler(
+      new Request("http://localhost:3000/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+        body: JSON.stringify({ email, redirectTo: "/reset-password" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(sent.reset).toHaveLength(1);
+
+    const link = await auth.handler(new Request(sent.reset[0]));
+    const location = new URL(link.headers.get("location") as string);
+    expect(location.origin + location.pathname).toBe("http://localhost:3000/reset-password");
+    expect(location.searchParams.get("token")).toBe(tokenFromReset(sent.reset[0]));
+  });
+
   it("pedido para e-mail inexistente não envia nada e não revela nada", async () => {
     await auth.api.requestPasswordReset({
       body: { email: "ninguem@example.com", redirectTo: "http://localhost:3000/reset-password" },
