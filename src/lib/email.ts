@@ -7,6 +7,8 @@ const resend = apiKey ? new Resend(apiKey) : null;
 
 export type SendResult = { sent: boolean; reason?: string };
 
+export const EMAIL_NOT_CONFIGURED = "Envio de e-mail não configurado.";
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -54,7 +56,7 @@ async function deliver(input: {
 }): Promise<SendResult> {
   if (!resend) {
     console.info(`[email] RESEND_API_KEY ausente. ${input.devFallback}`);
-    return { sent: false, reason: "Envio de e-mail não configurado." };
+    return { sent: false, reason: EMAIL_NOT_CONFIGURED };
   }
 
   try {

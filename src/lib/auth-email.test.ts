@@ -1,16 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDb, testDb } from "@/test/db";
 
-const sent = vi.hoisted(() => ({ verification: [] as string[], reset: [] as string[] }));
+const sent = vi.hoisted(() => ({
+  verification: [] as string[],
+  reset: [] as string[],
+  result: { sent: true } as { sent: boolean; reason?: string },
+}));
 
 vi.mock("./email", () => ({
+  EMAIL_NOT_CONFIGURED: "Envio de e-mail não configurado.",
   sendVerificationEmail: async ({ url }: { url: string }) => {
     sent.verification.push(url);
-    return { sent: true };
+    return sent.result;
   },
   sendPasswordResetEmail: async ({ url }: { url: string }) => {
     sent.reset.push(url);
-    return { sent: true };
+    return sent.result;
   },
 }));
 
@@ -36,6 +41,7 @@ describe("verificação de e-mail", () => {
     await resetDb();
     sent.verification.length = 0;
     sent.reset.length = 0;
+    sent.result = { sent: true };
   });
 
   it("cadastro envia o link e não abre sessão", async () => {
@@ -65,6 +71,7 @@ describe("redefinição de senha", () => {
     await resetDb();
     sent.verification.length = 0;
     sent.reset.length = 0;
+    sent.result = { sent: true };
     await signUp();
     await testDb.user.update({ where: { email }, data: { emailVerified: true } });
   });
@@ -130,5 +137,59 @@ describe("redefinição de senha", () => {
 
     const ok = await auth.api.signInEmail({ body: { email, password } });
     expect(ok.token).toBeTruthy();
+  });
+});
+
+describe("falha no envio dos e-mails de autenticação", () => {
+  beforeEach(async () => {
+    await resetDb();
+    sent.verification.length = 0;
+    sent.reset.length = 0;
+    sent.result = { sent: true };
+  });
+
+  function loggedText(spy: { mock: { calls: unknown[][] } }): string {
+    return spy.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+  }
+
+  it("registra o motivo quando a verificação não sai, sem o link", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    sent.result = { sent: false, reason: "Resend fora do ar" };
+
+    await signUp();
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith("auth: e-mail de verificação não enviado", "Resend fora do ar"));
+
+    const token = tokenFromVerification(sent.verification[0]);
+    expect(loggedText(errorSpy)).not.toContain(token);
+    errorSpy.mockRestore();
+  });
+
+  it("registra o motivo quando a redefinição não sai, sem o link", async () => {
+    await signUp();
+    await testDb.user.update({ where: { email }, data: { emailVerified: true } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    sent.result = { sent: false, reason: "Resend fora do ar" };
+
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "http://localhost:3000/reset-password" },
+    });
+    await vi.waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith("auth: e-mail de redefinição de senha não enviado", "Resend fora do ar"),
+    );
+
+    const token = tokenFromReset(sent.reset[0]);
+    expect(loggedText(errorSpy)).not.toContain(token);
+    errorSpy.mockRestore();
+  });
+
+  it("sem RESEND_API_KEY não registra erro, porque o link já sai no console de dev", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    sent.result = { sent: false, reason: "Envio de e-mail não configurado." };
+
+    await signUp();
+    await vi.waitFor(() => expect(sent.verification).toHaveLength(1));
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

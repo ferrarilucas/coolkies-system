@@ -3,7 +3,12 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { mcp } from "better-auth/plugins";
 import { db } from "./db";
 import { normalizeEmail } from "./allowlist";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./email";
+import { EMAIL_NOT_CONFIGURED, sendPasswordResetEmail, sendVerificationEmail, type SendResult } from "./email";
+
+function reportUnsent(message: string, result: SendResult): void {
+  if (result.sent || result.reason === EMAIL_NOT_CONFIGURED) return;
+  console.error(message, result.reason);
+}
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
@@ -17,7 +22,8 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      await sendPasswordResetEmail({ to: user.email, name: user.name, url });
+      const result = await sendPasswordResetEmail({ to: user.email, name: user.name, url });
+      reportUnsent("auth: e-mail de redefinição de senha não enviado", result);
     },
   },
   emailVerification: {
@@ -26,7 +32,8 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60 * 24,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendVerificationEmail({ to: user.email, name: user.name, url });
+      const result = await sendVerificationEmail({ to: user.email, name: user.name, url });
+      reportUnsent("auth: e-mail de verificação não enviado", result);
     },
   },
   socialProviders: {
