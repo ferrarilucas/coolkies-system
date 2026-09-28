@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { scopedDb } from "./extension";
 import { canWriteInWorkspace } from "./subscription";
 import { NoWorkspaceError } from "./context";
+import { API_RATE_LIMIT, consumeRateLimit } from "./rate-limit";
 
 export class McpAuthError extends Error {
   constructor() {
@@ -27,10 +28,24 @@ export class McpReadOnlyError extends Error {
   }
 }
 
+export class McpRateLimitError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super("Muitas requisições. Espere um pouco e tente de novo.");
+    this.name = "McpRateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export async function requireMcpUserId(request: NextRequest): Promise<string> {
   const session = await auth.api.getMcpSession({ headers: request.headers });
   const userId = (session as { userId?: string } | null)?.userId;
   if (!userId) throw new McpAuthError();
+
+  const limit = await consumeRateLimit(`api:${userId}`, API_RATE_LIMIT);
+  if (!limit.allowed) throw new McpRateLimitError(limit.retryAfterSeconds);
+
   return userId;
 }
 
@@ -77,6 +92,12 @@ export function assertMcpCanWrite(context: McpWorkspaceContext): void {
 
 export function mcpErrorResponse(e: unknown): Response {
   if (e instanceof McpAuthError) return Response.json({ error: e.message }, { status: 401 });
+  if (e instanceof McpRateLimitError) {
+    return Response.json(
+      { error: e.message },
+      { status: 429, headers: { "Retry-After": String(e.retryAfterSeconds) } },
+    );
+  }
   if (e instanceof McpRoleError || e instanceof McpReadOnlyError) {
     return Response.json({ error: e.message }, { status: 403 });
   }

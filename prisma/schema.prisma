@@ -730,3 +730,13 @@ model RateLimit {
 
   @@map("rate_limit")
 }
+
+model ApiRateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("api_rate_limit")
+}

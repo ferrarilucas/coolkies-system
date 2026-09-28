@@ -14,6 +14,7 @@ const {
   McpAuthError,
   McpRoleError,
   McpReadOnlyError,
+  McpRateLimitError,
 } = await import("./mcp-context");
 const { NoWorkspaceError } = await import("./context");
 
@@ -85,6 +86,31 @@ describe("assertMcpCanWrite", () => {
         db: testDb as never,
       }),
     ).toThrow(McpReadOnlyError);
+  });
+});
+
+describe("limite da API", () => {
+  beforeEach(async () => {
+    await resetDb();
+    mcpSessionResult = null;
+  });
+
+  it("recusa com McpRateLimitError quando o usuário estourou a janela", async () => {
+    const user = await testDb.user.create({ data: { id: "u-rl", name: "Ana", email: "rl@example.com" } });
+    const ws = await createWorkspace("Loja RL");
+    await testDb.member.create({ data: { userId: user.id, workspaceId: ws.id, role: "OWNER" } });
+    mcpSessionResult = { userId: user.id };
+    const now = new Date();
+    const windowStart = new Date(Math.floor(now.getTime() / 60000) * 60000);
+    await testDb.apiRateLimit.create({ data: { key: `api:${user.id}`, windowStart, count: 120 } });
+
+    await expect(getMcpWorkspaceContext(fakeRequest())).rejects.toThrow(McpRateLimitError);
+  });
+
+  it("mcpErrorResponse devolve 429 com Retry-After", async () => {
+    const res = mcpErrorResponse(new McpRateLimitError(42));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("42");
   });
 });
 
