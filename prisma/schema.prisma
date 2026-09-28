@@ -721,3 +721,12 @@ model ShoppingListItem {
   @@index([workspaceId])
   @@map("shopping_list_item")
 }
+
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rate_limit")
+}

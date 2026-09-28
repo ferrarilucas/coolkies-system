@@ -50,6 +50,21 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
   },
+  rateLimit: {
+    enabled: process.env.NODE_ENV === "production" || process.env.AUTH_RATE_LIMIT === "on",
+    storage: "database",
+    window: 60,
+    max: 100,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60 * 60, max: 5 },
+      "/request-password-reset": { window: 60 * 60, max: 5 },
+      "/send-verification-email": { window: 60 * 60, max: 5 },
+      "/reset-password": { window: 60 * 60, max: 10 },
+      "/mcp/register": { window: 60 * 60, max: 10 },
+      "/get-session": false,
+    },
+  },
   databaseHooks: {
     user: {
       create: {

@@ -14,6 +14,7 @@ export const UNSCOPED_MODELS = new Set([
   "OauthApplication",
   "OauthAccessToken",
   "OauthConsent",
+  "RateLimit",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 
