@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { TERMS_VERSION } from "@/lib/legal";
-import { getSubscription } from "./subscription";
+import { getSubscription, markSubscriptionCanceled } from "./subscription";
 import { cancelInterPixSubscription } from "./interpix";
-import { cancelStripeSubscription } from "./stripe";
+import { cancelStripeSubscription, StripeApiError } from "./stripe";
 
 export async function hasAcceptedCurrentTerms(userId: string): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { termsVersion: true } });
@@ -112,16 +112,31 @@ export async function listOwnedWorkspaceNames(userId: string): Promise<string[]>
   return owned.map((m) => m.workspace.name);
 }
 
+const SETTLED_STATUSES = new Set(["CANCELED", "AUTH_DENIED"]);
+
+function isStripeResourceMissing(e: unknown): boolean {
+  return e instanceof StripeApiError && e.code === "resource_missing";
+}
+
+async function cancelStripeIfPresent(subscriptionId: string): Promise<void> {
+  try {
+    await cancelStripeSubscription(subscriptionId);
+  } catch (e) {
+    if (isStripeResourceMissing(e)) return;
+    throw e;
+  }
+}
+
 async function cancelBilling(userId: string): Promise<void> {
   const sub = await getSubscription(userId);
-  if (!sub || sub.status === "CANCELED") return;
+  if (!sub || SETTLED_STATUSES.has(sub.status)) return;
 
   try {
     if (sub.provider === "INTERPIX" && sub.interpixSubscriptionId) {
       await cancelInterPixSubscription(sub.interpixSubscriptionId);
     }
     if (sub.provider === "STRIPE" && sub.stripeSubscriptionId) {
-      await cancelStripeSubscription(sub.stripeSubscriptionId);
+      await cancelStripeIfPresent(sub.stripeSubscriptionId);
     }
   } catch (e) {
     console.error(
@@ -131,6 +146,8 @@ async function cancelBilling(userId: string): Promise<void> {
     );
     throw new AccountDeletionError(DELETION_BILLING_ERROR);
   }
+
+  await markSubscriptionCanceled(userId);
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {

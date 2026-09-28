@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDb, testDb, createWorkspace } from "@/test/db";
+import { db } from "@/lib/db";
 
-const billing = vi.hoisted(() => ({ fail: false, interpix: [] as string[], stripe: [] as string[] }));
+const billing = vi.hoisted(() => ({
+  fail: false,
+  stripeMissing: false,
+  interpix: [] as string[],
+  stripe: [] as string[],
+}));
 
 vi.mock("./interpix", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./interpix")>();
@@ -21,6 +27,7 @@ vi.mock("./stripe", async (importOriginal) => {
     ...actual,
     cancelStripeSubscription: async (id: string) => {
       if (billing.fail) throw new Error("stripe fora do ar");
+      if (billing.stripeMissing) throw new actual.StripeApiError("resource_missing", "No such subscription", null);
       billing.stripe.push(id);
     },
   };
@@ -61,6 +68,7 @@ describe("deleteUserAccount", () => {
   beforeEach(async () => {
     await resetDb();
     billing.fail = false;
+    billing.stripeMissing = false;
     billing.interpix.length = 0;
     billing.stripe.length = 0;
   });
@@ -135,5 +143,51 @@ describe("deleteUserAccount", () => {
     await deleteUserAccount("ana");
 
     expect(billing.interpix).toEqual([]);
+  });
+
+  it("checkout da Stripe expirado não chama o provedor e apaga a conta", async () => {
+    await testDb.user.create({ data: { id: "ana", name: "Ana", email: "ana@example.com" } });
+    await testDb.subscription.create({
+      data: { userId: "ana", plan: "cresce", status: "AUTH_DENIED", provider: "STRIPE", stripeSubscriptionId: "sub_exp" },
+    });
+
+    await deleteUserAccount("ana");
+
+    expect(billing.stripe).toEqual([]);
+    expect(await testDb.user.findUnique({ where: { id: "ana" } })).toBeNull();
+  });
+
+  it("assinatura que a Stripe já não conhece não impede a exclusão", async () => {
+    await testDb.user.create({ data: { id: "ana", name: "Ana", email: "ana@example.com" } });
+    await testDb.subscription.create({
+      data: { userId: "ana", plan: "cresce", status: "ACTIVE", provider: "STRIPE", stripeSubscriptionId: "sub_gone" },
+    });
+    billing.stripeMissing = true;
+
+    await deleteUserAccount("ana");
+
+    expect(await testDb.user.findUnique({ where: { id: "ana" } })).toBeNull();
+  });
+
+  it("cancelamento no provedor fica gravado mesmo se a exclusão falhar depois", async () => {
+    await testDb.user.create({ data: { id: "ana", name: "Ana", email: "ana@example.com" } });
+    await testDb.subscription.create({
+      data: { userId: "ana", plan: "cresce", status: "ACTIVE", provider: "STRIPE", stripeSubscriptionId: "sub_2" },
+    });
+    const transaction = db.$transaction.bind(db);
+    vi.spyOn(db, "$transaction")
+      .mockImplementation(transaction as typeof db.$transaction)
+      .mockRejectedValueOnce(new Error("banco fora do ar"));
+
+    await expect(deleteUserAccount("ana")).rejects.toThrow("banco fora do ar");
+
+    const sub = await testDb.subscription.findUnique({ where: { userId: "ana" } });
+    expect(sub?.status).toBe("CANCELED");
+    expect(billing.stripe).toEqual(["sub_2"]);
+
+    await deleteUserAccount("ana");
+
+    expect(billing.stripe).toEqual(["sub_2"]);
+    expect(await testDb.user.findUnique({ where: { id: "ana" } })).toBeNull();
   });
 });
