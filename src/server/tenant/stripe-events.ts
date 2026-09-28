@@ -137,7 +137,7 @@ export async function applyStripeEvent(
   const local = await db.subscription.findUnique({
     where: { stripeSubscriptionId: subscriptionId },
   });
-  if (!local) return "unknown";
+  if (!local) return event.type === "customer.subscription.deleted" ? "ignored" : "unknown";
 
   const readAt = new Date();
   const fresh = await retrieveStripeSubscription(subscriptionId);

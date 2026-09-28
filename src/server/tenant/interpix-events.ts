@@ -16,7 +16,7 @@ export type InterPixEvent =
   | { type: "subscription.suspended"; eventId: string; data: { subscriptionId: string; externalUserId: string } }
   | { type: "subscription.canceled"; eventId: string; data: { subscriptionId: string; externalUserId: string; pendingCycleSeq: number | null } };
 
-export type EventOutcome = "applied" | "duplicate" | "stale" | "conflict" | "unknown" | "invalid";
+export type EventOutcome = "applied" | "duplicate" | "stale" | "conflict" | "unknown" | "invalid" | "ignored";
 
 function isDuplicateEventError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -101,7 +101,7 @@ export async function applyInterPixEvent(event: InterPixEvent): Promise<EventOut
     where: { interpixSubscriptionId: event.data.subscriptionId },
   });
 
-  if (!sub) return "unknown";
+  if (!sub) return event.type === "subscription.canceled" ? "ignored" : "unknown";
 
   if (sub.lastAppliedEventId !== null && incoming <= sub.lastAppliedEventId) {
     await recordOnly(event);

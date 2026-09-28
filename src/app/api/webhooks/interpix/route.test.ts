@@ -132,6 +132,20 @@ describe("POST /api/webhooks/interpix", () => {
     expect(body.outcome).toBe("unknown");
   });
 
+  it("cancelamento de subscription que já não existe aqui devolve 200 para parar a reentrega", async () => {
+    const response = await POST(
+      entrega({
+        type: "subscription.canceled",
+        eventId: "55",
+        data: { subscriptionId: "ipx-conta-excluida", externalUserId: "ex", pendingCycleSeq: null },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.outcome).toBe("ignored");
+  });
+
   it("colisão de escrita concorrente devolve não-2xx para habilitar reentrega, sem descartar o evento", async () => {
     const spy = vi.spyOn(interpixEvents, "applyInterPixEvent").mockResolvedValueOnce("conflict");
 

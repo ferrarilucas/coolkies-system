@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     case "applied":
     case "duplicate":
     case "stale":
+    case "ignored":
       return NextResponse.json({ outcome }, { status: 200 });
     case "conflict":
       return NextResponse.json({ outcome }, { status: 409 });

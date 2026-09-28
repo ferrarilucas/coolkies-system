@@ -164,6 +164,14 @@ describe("applyStripeEvent", () => {
     expect(outcome).toBe("unknown");
   });
 
+  it("cancelamento de assinatura Stripe que já não existe aqui é ignorado", async () => {
+    const outcome = await applyStripeEvent(
+      subEvent("customer.subscription.deleted", "evt_deleted_gone"),
+    );
+    expect(outcome).toBe("ignored");
+    expect(retrieveMock).not.toHaveBeenCalled();
+  });
+
   it("tipo não tratado é ignorado", async () => {
     const outcome = await applyStripeEvent(
       subEvent("customer.subscription.trial_will_end", "evt_ignored"),

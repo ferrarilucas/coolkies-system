@@ -685,4 +685,16 @@ describe("eventos da InterPix", () => {
     expect(await testDb.subscription.count()).toBe(0);
     expect(await testDb.processedWebhookEvent.count()).toBe(0);
   });
+
+  it("cancelamento de assinatura que já não existe aqui é ignorado", async () => {
+    const outcome = await applyInterPixEvent({
+      type: "subscription.canceled",
+      eventId: "41",
+      data: { subscriptionId: "ipx-conta-excluida", externalUserId: "ex", pendingCycleSeq: null },
+    });
+
+    expect(outcome).toBe("ignored");
+    expect(await testDb.subscription.count()).toBe(0);
+    expect(await testDb.processedWebhookEvent.count()).toBe(0);
+  });
 });
