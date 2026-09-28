@@ -19,6 +19,7 @@ const eslintConfig = [
     ignores: [
       "src/server/tenant/**",
       "src/server/actions/allowlist.ts",
+      "src/server/actions/account.ts",
       "src/app/(app)/admin/access/page.tsx",
       "src/lib/auth.ts",
       "src/lib/allowlist.ts",

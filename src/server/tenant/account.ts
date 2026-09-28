@@ -26,6 +26,83 @@ export class AccountDeletionError extends Error {
   }
 }
 
+export type PersonalDataExport = {
+  exportedAt: string;
+  user: {
+    name: string;
+    email: string;
+    emailVerified: boolean;
+    image: string | null;
+    cpf: string | null;
+    createdAt: string;
+    termsVersion: string | null;
+    termsAcceptedAt: string | null;
+  };
+  loginMethods: string[];
+  workspaces: { name: string; role: string; joinedAt: string }[];
+  subscription: {
+    plan: string;
+    status: string;
+    cycle: string;
+    provider: string;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    cardBrand: string | null;
+    cardLast4: string | null;
+  } | null;
+};
+
+function iso(date: Date | null): string | null {
+  return date ? date.toISOString() : null;
+}
+
+export async function buildPersonalDataExport(
+  userId: string,
+  now: Date = new Date(),
+): Promise<PersonalDataExport> {
+  const user = await db.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: {
+      accounts: { select: { providerId: true } },
+      members: { include: { workspace: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+      subscription: true,
+    },
+  });
+  const sub = user.subscription;
+
+  return {
+    exportedAt: now.toISOString(),
+    user: {
+      name: user.name,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      image: user.image,
+      cpf: user.cpf,
+      createdAt: user.createdAt.toISOString(),
+      termsVersion: user.termsVersion,
+      termsAcceptedAt: iso(user.termsAcceptedAt),
+    },
+    loginMethods: user.accounts.map((a) => a.providerId),
+    workspaces: user.members.map((m) => ({
+      name: m.workspace.name,
+      role: m.role,
+      joinedAt: m.createdAt.toISOString(),
+    })),
+    subscription: sub
+      ? {
+          plan: sub.plan,
+          status: sub.status,
+          cycle: sub.cycle,
+          provider: sub.provider,
+          trialEndsAt: iso(sub.trialEndsAt),
+          currentPeriodEnd: iso(sub.currentPeriodEnd),
+          cardBrand: sub.cardBrand,
+          cardLast4: sub.cardLast4,
+        }
+      : null,
+  };
+}
+
 export async function listOwnedWorkspaceNames(userId: string): Promise<string[]> {
   const owned = await db.member.findMany({
     where: { userId, role: "OWNER" },

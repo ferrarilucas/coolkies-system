@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   Store,
   Package,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -69,6 +70,12 @@ export default async function MorePage() {
       label: "Compras",
       description: "Compras de matéria-prima e itens de revenda",
       icon: ShoppingBag,
+    },
+    {
+      href: "/account",
+      label: "Minha conta",
+      description: "Seus dados, exportação e exclusão da conta",
+      icon: UserRound,
     },
     ...(isAdmin(user)
       ? [
