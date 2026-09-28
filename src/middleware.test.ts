@@ -27,4 +27,9 @@ describe("middleware", () => {
     const res = middleware(req(path));
     expect(res.status).not.toBe(307);
   });
+
+  it.each(["/api/v1/items", "/api/cron/reconcile"])("não redireciona %s (a rota autentica sozinha)", (path) => {
+    const res = middleware(req(path));
+    expect(res.status).not.toBe(307);
+  });
 });
