@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const calls = vi.hoisted(() => ({ reconcile: 0, prune: 0, failed: 0 }));
+const calls = vi.hoisted(() => ({ reconcile: 0, prune: 0, pruneAuth: 0, failed: 0 }));
 
 vi.mock("@/server/tenant/reconcile", () => ({
   reconcileInterPixSubscriptions: async () => {
@@ -14,6 +14,10 @@ vi.mock("@/server/tenant/rate-limit", () => ({
   pruneRateLimits: async () => {
     calls.prune += 1;
     return 7;
+  },
+  pruneAuthRateLimits: async () => {
+    calls.pruneAuth += 1;
+    return 4;
   },
 }));
 
@@ -29,6 +33,7 @@ describe("GET /api/cron/reconcile", () => {
   beforeEach(() => {
     calls.reconcile = 0;
     calls.prune = 0;
+    calls.pruneAuth = 0;
     calls.failed = 0;
     process.env.CRON_SECRET = "s3gredo";
   });
@@ -53,8 +58,16 @@ describe("GET /api/cron/reconcile", () => {
   it("com o segredo reconcilia, limpa o rate limit e devolve o resumo", async () => {
     const res = await GET(request("Bearer s3gredo"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ checked: 2, corrected: 1, diverged: 0, failed: 0, prunedRateLimits: 7 });
+    expect(await res.json()).toEqual({
+      checked: 2,
+      corrected: 1,
+      diverged: 0,
+      failed: 0,
+      prunedRateLimits: 7,
+      prunedAuthRateLimits: 4,
+    });
     expect(calls.prune).toBe(1);
+    expect(calls.pruneAuth).toBe(1);
   });
 
   it("responde 500 quando alguma assinatura falhou", async () => {

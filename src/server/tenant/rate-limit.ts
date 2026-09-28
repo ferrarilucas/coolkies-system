@@ -40,3 +40,10 @@ export async function pruneRateLimits(olderThan: Date): Promise<number> {
   const { count } = await db.apiRateLimit.deleteMany({ where: { windowStart: { lt: olderThan } } });
   return count;
 }
+
+export async function pruneAuthRateLimits(olderThan: Date): Promise<number> {
+  const { count } = await db.rateLimit.deleteMany({
+    where: { lastRequest: { lt: BigInt(olderThan.getTime()) } },
+  });
+  return count;
+}

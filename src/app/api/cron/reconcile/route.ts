@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { reconcileInterPixSubscriptions } from "@/server/tenant/reconcile";
-import { pruneRateLimits } from "@/server/tenant/rate-limit";
+import { pruneAuthRateLimits, pruneRateLimits } from "@/server/tenant/rate-limit";
 
 export const maxDuration = 300;
 
@@ -13,12 +13,12 @@ export async function GET(request: NextRequest) {
   }
 
   const summary = await reconcileInterPixSubscriptions();
-  const prunedRateLimits = await pruneRateLimits(new Date(Date.now() - DAY_MS));
+  const cutoff = new Date(Date.now() - DAY_MS);
+  const prunedRateLimits = await pruneRateLimits(cutoff);
+  const prunedAuthRateLimits = await pruneAuthRateLimits(cutoff);
+  const result = { ...summary, prunedRateLimits, prunedAuthRateLimits };
 
-  console.log("cron/reconcile", JSON.stringify({ ...summary, prunedRateLimits }));
+  console.log("cron/reconcile", JSON.stringify(result));
 
-  return Response.json(
-    { ...summary, prunedRateLimits },
-    { status: summary.failed > 0 ? 500 : 200 },
-  );
+  return Response.json(result, { status: summary.failed > 0 ? 500 : 200 });
 }
