@@ -50,8 +50,8 @@ export function DeleteAccountDialog({ email, ownedWorkspaces }: { email: string;
           <div className="space-y-1 rounded-lg border border-destructive/40 p-3 text-sm">
             <p className="font-medium">Estes workspaces também serão apagados, com os dados de todos os membros:</p>
             <ul className="list-disc pl-5 text-muted-foreground">
-              {ownedWorkspaces.map((name) => (
-                <li key={name}>{name}</li>
+              {ownedWorkspaces.map((name, i) => (
+                <li key={`${i}-${name}`}>{name}</li>
               ))}
             </ul>
           </div>
