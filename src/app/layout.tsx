@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Sora } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { startupImages } from "@/lib/startup-images";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const sora = Sora({ subsets: ["latin", "latin-ext"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Coolkies — Gestão de vendas",
-  description: "Gerencie pedidos, receitas e estoque de coolkies.",
+  title: "Cipri — Seu negócio no seu ritmo",
+  description: "Organize vendas, estoque e produção do seu negócio no seu ritmo.",
   appleWebApp: {
     capable: true,
-    title: "Coolkies",
+    title: "Cipri",
     statusBarStyle: "default",
     startupImage: startupImages,
   },
@@ -26,7 +26,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#8B5E3C",
+  themeColor: "#0F3D34",
 };
 
 export default function RootLayout({
@@ -36,7 +36,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${sora.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

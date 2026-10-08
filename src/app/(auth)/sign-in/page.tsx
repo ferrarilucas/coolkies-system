@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Cookie, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -58,12 +59,11 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6">
       <div className="mb-8 flex flex-col items-center text-center">
-        <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10">
-          <Cookie className="size-8 text-primary" />
-        </div>
-        <h1 className="text-2xl font-bold">Coolkies</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Gerencie suas vendas, receitas e estoque.
+        <h1>
+          <Logo className="h-20" />
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Seu negócio no seu ritmo.
         </p>
       </div>
 

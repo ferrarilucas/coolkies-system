@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Cookie, CreditCard, Lock } from "lucide-react";
+import { ArrowLeft, CreditCard, Lock } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { toast } from "sonner";
 import { maskCpf, isCompleteCpf, onlyDigits } from "@/lib/cpf";
 import { formatBRL } from "@/lib/money";
@@ -104,10 +105,7 @@ export function CheckoutClient({
       <div className="relative mx-auto max-w-5xl px-5 py-5">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10">
-              <Cookie className="size-5 text-primary" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Coolkies</span>
+            <Logo className="h-8" />
           </div>
           <Button asChild variant="ghost" size="sm">
             <Link href="/workspaces/plan">

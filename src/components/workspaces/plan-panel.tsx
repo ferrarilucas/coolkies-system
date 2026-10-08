@@ -57,7 +57,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const WARNING_STATUSES = new Set(["PAST_DUE", "CANCELED", "AUTH_DENIED", "SUSPENDED"]);
 
-const CONTACT_EMAIL = "contato@coolkies.com.br";
+const CONTACT_EMAIL = "contato@cipri.com.br";
 
 const GUARANTEES = [
   "14 dias grátis com todos os recursos",
@@ -326,7 +326,7 @@ export function PlanPanel({
         <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>
-            Esta assinatura foi atribuída manualmente pela equipe Coolkies e não é
+            Esta assinatura foi atribuída manualmente pela equipe Cipri e não é
             gerenciada por aqui. Fale com a gente em{" "}
             <a href={`mailto:${CONTACT_EMAIL}`} className="font-medium underline underline-offset-4">
               {CONTACT_EMAIL}
@@ -403,7 +403,7 @@ export function PlanPanel({
               Escolha o seu plano
             </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Todos os planos vêm com os recursos completos do Coolkies — o que
+              Todos os planos vêm com os recursos completos do Cipri — o que
               muda é quantos workspaces e quantas pessoas trabalham com você. O
               plano anual pago com Pix recorrente junta o desconto por assinar o
               ano inteiro com o do Pix; o percentual de cada plano aparece no

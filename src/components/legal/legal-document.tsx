@@ -14,7 +14,7 @@ export function LegalDocument({
     <main className="mx-auto max-w-2xl space-y-8 px-6 py-10">
       <div className="space-y-1">
         <Link href="/sign-in" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-          Coolkies
+          Cipri
         </Link>
         <h1 className="text-2xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">Versão de {version}</p>

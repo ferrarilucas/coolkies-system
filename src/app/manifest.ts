@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Coolkies — Gestão de vendas",
-    short_name: "Coolkies",
-    description: "Gerencie pedidos, receitas e estoque de coolkies.",
+    name: "Cipri — Seu negócio no seu ritmo",
+    short_name: "Cipri",
+    description: "Organize vendas, estoque e produção do seu negócio no seu ritmo.",
     start_url: "/dashboard",
     display: "standalone",
-    background_color: "#FAF7F2",
-    theme_color: "#8B5E3C",
+    background_color: "#F7F7EF",
+    theme_color: "#0F3D34",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

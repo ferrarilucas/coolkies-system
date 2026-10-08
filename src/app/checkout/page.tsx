@@ -16,7 +16,7 @@ import { isStripeEnabled } from "@/server/tenant/stripe";
 import { CheckoutClient } from "@/components/checkout/checkout-client";
 
 export const metadata = {
-  title: "Finalizar assinatura — Coolkies",
+  title: "Finalizar assinatura — Cipri",
 };
 
 export default async function CheckoutPage({

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { Cookie } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { auth } from "@/lib/auth";
 import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
@@ -22,7 +22,7 @@ export default async function OnboardingPage() {
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
-          <Cookie className="mx-auto size-9 text-primary" />
+          <Logo variant="mark" className="mx-auto size-10" />
           <h1 className="text-xl font-semibold">Bem-vinda!</h1>
           <p className="text-sm text-muted-foreground">
             Para começar, crie o workspace do seu negócio ou entre em um

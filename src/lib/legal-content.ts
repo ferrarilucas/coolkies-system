@@ -7,13 +7,13 @@ export function termsSections(e: LegalEntity): LegalSection[] {
     {
       heading: "1. Quem somos",
       paragraphs: [
-        `O Coolkies é oferecido por ${e.name}, inscrita sob o documento ${e.document}. Dúvidas sobre estes termos: ${e.contactEmail}.`,
+        `O Cipri é oferecido por ${e.name}, inscrita sob o documento ${e.document}. Dúvidas sobre estes termos: ${e.contactEmail}.`,
       ],
     },
     {
       heading: "2. O serviço",
       paragraphs: [
-        "O Coolkies é um sistema on-line para pequenos negócios registrarem vendas, clientes, estoque, produção e compras. Cada negócio funciona num workspace separado, e só quem foi convidado para ele enxerga os seus dados.",
+        "O Cipri é um sistema on-line para pequenos negócios registrarem vendas, clientes, estoque, produção e compras. Cada negócio funciona num workspace separado, e só quem foi convidado para ele enxerga os seus dados.",
       ],
     },
     {
@@ -34,14 +34,14 @@ export function termsSections(e: LegalEntity): LegalSection[] {
     {
       heading: "5. Seus dados e os dados dos seus clientes",
       paragraphs: [
-        "Os dados que você registra no Coolkies são seus. Em relação aos dados pessoais dos seus clientes, você é o controlador e nós atuamos como operador, tratando esses dados apenas para prestar o serviço.",
+        "Os dados que você registra no Cipri são seus. Em relação aos dados pessoais dos seus clientes, você é o controlador e nós atuamos como operador, tratando esses dados apenas para prestar o serviço.",
         "Você declara ter base legal para registrar os dados dos seus clientes e se compromete a atender os pedidos deles sobre esses dados.",
       ],
     },
     {
       heading: "6. Uso aceitável",
       paragraphs: [
-        "É proibido usar o Coolkies para atividades ilegais, tentar acessar dados de outros workspaces, sobrecarregar o serviço de propósito ou automatizar acessos fora da API oficial. Podemos suspender contas que violem estas regras.",
+        "É proibido usar o Cipri para atividades ilegais, tentar acessar dados de outros workspaces, sobrecarregar o serviço de propósito ou automatizar acessos fora da API oficial. Podemos suspender contas que violem estas regras.",
       ],
     },
     {

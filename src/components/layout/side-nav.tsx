@@ -1,5 +1,6 @@
 "use client";
 
+import { Logo } from "@/components/brand/logo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -98,10 +99,7 @@ export function SideNav({
         )}
       >
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            <Cookie className="size-5 text-primary" />
-            <span className="font-semibold">Coolkies</span>
-          </div>
+          <Logo className="h-7" />
         )}
         <button
           type="button"

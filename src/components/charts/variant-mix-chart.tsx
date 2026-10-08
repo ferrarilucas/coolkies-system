@@ -15,16 +15,15 @@ type Slice = { label: string; revenueCents: number; qty: number };
 const brl = (cents: number) =>
   (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// Paleta cookie/chocolate/caramelo
 const COLORS = [
-  "hsl(25 45% 38%)",
-  "hsl(33 55% 60%)",
-  "hsl(38 70% 55%)",
-  "hsl(22 40% 28%)",
-  "hsl(15 45% 45%)",
-  "hsl(43 50% 70%)",
-  "hsl(8 40% 35%)",
-  "hsl(30 25% 55%)",
+  "hsl(var(--primary))",
+  "hsl(43 100% 62%)",
+  "hsl(168 40% 32%)",
+  "hsl(38 90% 48%)",
+  "hsl(168 28% 50%)",
+  "hsl(168 45% 24%)",
+  "hsl(168 22% 68%)",
+  "hsl(45 70% 78%)",
 ];
 
 export function VariantMixChart({ data }: { data: Slice[] }) {
@@ -40,7 +39,6 @@ export function VariantMixChart({ data }: { data: Slice[] }) {
     });
   }
 
-  // Abreviar labels longos (ex: "Cookie Chocolate ao leite" → "Choc. ao leite")
   const chartData = slices.map((s) => ({
     ...s,
     shortLabel: s.label.replace(/^Cookie\s+/i, ""),

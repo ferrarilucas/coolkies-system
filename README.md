@@ -1,6 +1,6 @@
-# 🍪 Cookies App
+# Cipri
 
-App **mobile-first** (Next.js + Tailwind + shadcn) para gerenciar vendas, receitas e estoque de cookies. Login social **somente Google** via **BetterAuth**, banco **PostgreSQL** com **Prisma**.
+App **mobile-first** (Next.js + Tailwind + shadcn) para organizar vendas, estoque, produção e compras de pequenos negócios. Login via **BetterAuth**, banco **PostgreSQL** com **Prisma**.
 
 > Veja [`TODO.md`](./TODO.md) para o plano completo de design e módulos.
 

@@ -25,7 +25,7 @@ export default async function AcceptTermsPage() {
             <p className="text-sm text-muted-foreground">
               {acceptedVersion === null
                 ? "Para começar, leia e aceite nossos termos de uso e nossa política de privacidade."
-                : "Atualizamos nossos termos e nossa política de privacidade. Leia e aceite para seguir usando o Coolkies."}
+                : "Atualizamos nossos termos e nossa política de privacidade. Leia e aceite para seguir usando o Cipri."}
             </p>
           </div>
           <AcceptTermsForm />
