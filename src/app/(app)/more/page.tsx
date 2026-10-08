@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { InstallAppItem } from "@/components/pwa/install-app-item";
 
 type MoreLink = {
   href: string;
@@ -146,6 +147,8 @@ export default async function MorePage() {
           </Link>
         ))}
       </div>
+
+      <InstallAppItem />
 
       <div className="space-y-2">
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

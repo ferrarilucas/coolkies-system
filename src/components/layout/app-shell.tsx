@@ -4,6 +4,7 @@ import { SideNav } from "./side-nav";
 import { MainArea } from "./main-area";
 import { PlanBanner } from "./plan-banner";
 import { TrialBanner } from "./trial-banner";
+import { InstallBanner } from "@/components/pwa/install-banner";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
 import type { SessionUser } from "@/lib/session-user";
 import type { TrialState } from "@/lib/trial";
@@ -50,6 +51,7 @@ export function AppShell({
             variant="bar"
           />
         )}
+        <InstallBanner />
         <TrialBanner trial={trial} canManageBilling={canManageBilling} />
         <PlanBanner
           status={planStatus}
