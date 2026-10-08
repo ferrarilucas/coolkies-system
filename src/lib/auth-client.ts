@@ -8,10 +8,10 @@ export const authClient = createAuthClient({
 
 export const { signIn, signOut, useSession } = authClient;
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(next = "/dashboard") {
   await signIn.social({
     provider: "google",
-    callbackURL: "/dashboard",
+    callbackURL: next,
     errorCallbackURL: "/not-authorized",
   });
 }
@@ -20,12 +20,13 @@ export async function signUpWithEmail(input: {
   name: string;
   email: string;
   password: string;
+  next?: string;
 }) {
   return authClient.signUp.email({
     name: input.name,
     email: input.email,
     password: input.password,
-    callbackURL: "/dashboard",
+    callbackURL: input.next ?? "/dashboard",
   });
 }
 

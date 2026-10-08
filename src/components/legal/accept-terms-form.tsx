@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { acceptTerms } from "@/server/actions/account";
 
-export function AcceptTermsForm() {
+export function AcceptTermsForm({ next = "/dashboard" }: { next?: string }) {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -20,7 +20,7 @@ export function AcceptTermsForm() {
         toast.error(res.error ?? "Não foi possível registrar o aceite.");
         return;
       }
-      router.push("/dashboard");
+      router.push(next);
       router.refresh();
     });
   }

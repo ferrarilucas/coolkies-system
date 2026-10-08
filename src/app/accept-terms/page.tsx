@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { TERMS_VERSION } from "@/lib/legal";
+import { safeNextPath } from "@/lib/next-path";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AcceptTermsForm } from "@/components/legal/accept-terms-form";
@@ -9,11 +10,16 @@ import { DeleteAccountDialog } from "@/components/account/delete-account-dialog"
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import { getAcceptedTermsVersion, listOwnedWorkspaceNames } from "@/server/tenant/account";
 
-export default async function AcceptTermsPage() {
+export default async function AcceptTermsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const next = safeNextPath((await searchParams).next);
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   const acceptedVersion = await getAcceptedTermsVersion(session.user.id);
-  if (acceptedVersion === TERMS_VERSION) redirect("/dashboard");
+  if (acceptedVersion === TERMS_VERSION) redirect(next);
   const ownedWorkspaces = await listOwnedWorkspaceNames(session.user.id);
 
   return (
@@ -28,7 +34,7 @@ export default async function AcceptTermsPage() {
                 : "Atualizamos nossos termos e nossa política de privacidade. Leia e aceite para seguir usando o Cipri."}
             </p>
           </div>
-          <AcceptTermsForm />
+          <AcceptTermsForm next={next} />
           <section className="space-y-3 border-t pt-4">
             <div className="space-y-1">
               <h2 className="text-sm font-medium">Não concorda?</h2>

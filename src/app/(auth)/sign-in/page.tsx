@@ -16,8 +16,13 @@ import {
   signUpWithEmail,
 } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { safeNextPath } from "@/lib/next-path";
 
 type Mode = "signin" | "signup";
+
+function nextPath(): string {
+  return safeNextPath(new URLSearchParams(window.location.search).get("next"));
+}
 
 export default function SignInPage() {
   const router = useRouter();
@@ -36,7 +41,7 @@ export default function SignInPage() {
 
     const result =
       mode === "signup"
-        ? await signUpWithEmail({ name, email, password })
+        ? await signUpWithEmail({ name, email, password, next: nextPath() })
         : await signInWithEmail({ email, password });
 
     setPending(false);
@@ -52,7 +57,7 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(nextPath());
     router.refresh();
   }
 
@@ -73,7 +78,7 @@ export default function SignInPage() {
             size="lg"
             variant="outline"
             className="w-full"
-            onClick={() => signInWithGoogle()}
+            onClick={() => signInWithGoogle(nextPath())}
           >
             <GoogleIcon />
             Entrar com Google

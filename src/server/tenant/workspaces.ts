@@ -256,6 +256,30 @@ export async function createInvite(
   throw new Error("Não foi possível gerar um código. Tente de novo.");
 }
 
+export type InvitePreview = {
+  workspaceName: string;
+  inviterName: string;
+  role: MemberRole;
+};
+
+export async function getInvitePreview(rawCode: string): Promise<InvitePreview | null> {
+  const code = normalizeInviteCode(rawCode);
+  if (code.length !== CODE_LENGTH) return null;
+
+  const invite = await db.invitation.findUnique({
+    where: { code },
+    include: { workspace: true },
+  });
+  if (!invite || invite.status !== "PENDING" || invite.expiresAt < new Date()) return null;
+
+  const inviter = await db.user.findUnique({ where: { id: invite.inviterId } });
+  return {
+    workspaceName: invite.workspace.name,
+    inviterName: inviter?.name ?? "Alguém",
+    role: invite.role,
+  };
+}
+
 export async function cancelInvite(workspaceId: string, inviteId: string): Promise<void> {
   await db.invitation.updateMany({
     where: { id: inviteId, workspaceId, status: "PENDING" },

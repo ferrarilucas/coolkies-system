@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/not-authorized",
   "/splash-debug",
   "/p/",
+  "/convite/",
   "/.well-known/",
   "/api/v1/",
   "/api/cron/",
