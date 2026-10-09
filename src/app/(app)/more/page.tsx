@@ -9,6 +9,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
+  Tags,
   Package,
   UserRound,
   type LucideIcon,
@@ -80,6 +81,12 @@ export default async function MorePage() {
     },
     ...(isAdmin(user)
       ? [
+          {
+            href: "/admin/catalog",
+            label: "Catálogo",
+            description: "Produtos, variações e preços de venda",
+            icon: Tags,
+          },
           {
             href: "/admin",
             label: "Configurações",
