@@ -34,7 +34,13 @@ import { resolveForecast, type ForecastPreset } from "@/lib/business-days";
 import type { CustomerSummary } from "@/server/queries/customers";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { buildSchedule, splitAmount, MIN_INSTALLMENTS, MAX_INSTALLMENTS } from "@/lib/installments";
+import {
+  parsePaymentChoice,
+  planPayment,
+  MIN_INSTALLMENTS,
+  MAX_INSTALLMENTS,
+  type InstallmentPlan,
+} from "@/lib/installments";
 import { findVariantByValues, isValueAvailable } from "@/lib/variant-options";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -113,6 +119,7 @@ interface Props {
     forecastDate: string | null;
     installmentCount: number;
     firstDueDate: string | null;
+    installments: InstallmentPlan[];
     discountType: DiscountType | null;
     discountValue: number;
     items: Omit<SaleItemLine, "key">[];
@@ -417,16 +424,24 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     }
   }
 
+  const paymentPlan = (() => {
+    if (paymentMode === "INSTALLMENTS" && !forecastDate) return null;
+    const choice = parsePaymentChoice({
+      mode: paymentMode,
+      status: payStatus === "PAID" ? "PAID" : "PENDING",
+      count: paymentMode === "INSTALLMENTS" ? installmentCount : 1,
+      preset: payStatus !== "PAID" ? payStatus : "",
+      dueDate: forecastDate,
+    });
+    if ("error" in choice) return { ok: false as const, error: choice.error };
+    return planPayment(choice, totalCents, initial?.installments ?? [], new Date());
+  })();
+  const planError = paymentPlan && !paymentPlan.ok ? paymentPlan.error : null;
   const installmentPreview =
-    paymentMode === "INSTALLMENTS" && forecastDate
-      ? (() => {
-          const amounts = splitAmount(totalCents, installmentCount);
-          return buildSchedule(forecastDate, payStatus as ForecastPreset, installmentCount).map((date, idx) => ({
-            date,
-            amountCents: amounts[idx],
-          }));
-        })()
-      : [];
+    paymentMode === "INSTALLMENTS" && paymentPlan?.ok ? paymentPlan.installments : [];
+  const previewTotal = installmentPreview.reduce((max, i) => Math.max(max, i.number), installmentPreview.length);
+  const previewOpen = installmentPreview.filter((i) => i.paidAt === null);
+  const previewHasPaid = previewOpen.length < installmentPreview.length;
 
   function handleSubmit() {
     if (filledLines.length === 0) {
@@ -445,6 +460,11 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
 
     if (paymentMode === "INSTALLMENTS" && !forecastDate) {
       toast.error("Escolha a data da 1ª parcela.");
+      return;
+    }
+
+    if (planError) {
+      toast.error(planError);
       return;
     }
 
@@ -737,17 +757,35 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
           </p>
         )}
 
-        {installmentPreview.length > 0 && (
-          <div className="rounded-lg border p-3 text-sm">
-            <p className="font-medium">
-              {installmentCount}x de {formatBRL(installmentPreview[0].amountCents)}
-              {installmentPreview[installmentPreview.length - 1].amountCents !== installmentPreview[0].amountCents &&
-                ` (última ${formatBRL(installmentPreview[installmentPreview.length - 1].amountCents)})`}
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              {installmentPreview.map((p) => format(p.date, "dd/MM/yy")).join(" · ")}
-            </p>
-          </div>
+        {planError ? (
+          <p className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{planError}</p>
+        ) : previewHasPaid ? (
+          <ul className="space-y-1 rounded-lg border p-3 text-sm">
+            {installmentPreview.map((p) => (
+              <li
+                key={p.number}
+                className={cn("tabular-nums", p.paidAt ? "text-muted-foreground" : "font-medium")}
+              >
+                {p.number}/{previewTotal}{" "}
+                {p.paidAt
+                  ? `paga · ${formatBRL(p.amountCents)}`
+                  : `· ${formatBRL(p.amountCents)}${p.dueDate ? ` · vence ${format(p.dueDate, "dd/MM/yy")}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          installmentPreview.length > 0 && (
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="font-medium">
+                {installmentPreview.length}x de {formatBRL(installmentPreview[0].amountCents)}
+                {installmentPreview[installmentPreview.length - 1].amountCents !== installmentPreview[0].amountCents &&
+                  ` (última ${formatBRL(installmentPreview[installmentPreview.length - 1].amountCents)})`}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {installmentPreview.map((p) => (p.dueDate ? format(p.dueDate, "dd/MM/yy") : "—")).join(" · ")}
+              </p>
+            </div>
+          )
         )}
       </section>
 

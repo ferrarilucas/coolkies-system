@@ -34,6 +34,13 @@ export default async function EditSalePage({
       : null,
     installmentCount: sale.installmentCount,
     firstDueDate: sale.installments[0]?.dueDate ? format(sale.installments[0].dueDate, "yyyy-MM-dd") : null,
+    installments: sale.installments.map(({ number, amountCents, dueDate, forecastPreset, paidAt }) => ({
+      number,
+      amountCents,
+      dueDate,
+      forecastPreset,
+      paidAt,
+    })),
     discountType: (sale.discountType ?? null) as "PERCENTAGE" | "FIXED" | null,
     discountValue: sale.discountValue,
     items: sale.items.map((i) => ({
