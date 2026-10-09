@@ -15,12 +15,13 @@ export async function getWorkspaceRevenueSummary(
 ): Promise<WorkspaceRevenueSummary> {
   const db = scopedDb(workspaceId);
   const sales = await db.sale.findMany({
-    where: { status: "PAID", soldAt: { gte: filters.from, lte: filters.to } },
-    select: { totalCents: true },
+    where: { soldAt: { gte: filters.from, lte: filters.to } },
+    select: { totalCents: true, openCents: true },
   });
 
-  const paidRevenueCents = sales.reduce((sum, s) => sum + s.totalCents, 0);
-  const salesCount = sales.length;
+  const paid = sales.map((s) => s.totalCents - s.openCents).filter((cents) => cents > 0);
+  const paidRevenueCents = paid.reduce((sum, cents) => sum + cents, 0);
+  const salesCount = paid.length;
   const avgTicketCents = salesCount > 0 ? Math.round(paidRevenueCents / salesCount) : 0;
 
   return { workspaceId, workspaceName, paidRevenueCents, salesCount, avgTicketCents };

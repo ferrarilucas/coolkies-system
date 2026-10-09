@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDb, testDb, createWorkspace } from "@/test/db";
+import { resetDb, testDb, createWorkspace, backfillSaleInstallments } from "@/test/db";
+import { seedParceledSale } from "@/test/sales";
 import { scopedDb } from "@/server/tenant/extension";
 
 const context = { workspaceId: "" };
@@ -94,6 +95,7 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       },
     });
 
+    await backfillSaleInstallments();
     const result = await getDashboardData({
       from: new Date("2026-09-01"),
       to: new Date("2026-09-30"),
@@ -146,6 +148,7 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       },
     });
 
+    await backfillSaleInstallments();
     const result = await getDashboardData({
       from: new Date("2026-09-01"),
       to: new Date("2026-09-30"),
@@ -190,6 +193,7 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       },
     });
 
+    await backfillSaleInstallments();
     const result = await getDashboardData({
       from: new Date("2026-09-01"),
       to: new Date("2026-09-30"),
@@ -249,6 +253,7 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       },
     });
 
+    await backfillSaleInstallments();
     const result = await getDashboardData({
       from: new Date("2026-09-01"),
       to: new Date("2026-09-30"),
@@ -259,5 +264,34 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
     expect(result.kpis.netRevenueCents).toBe(1800);
     expect(result.kpis.marginPct).toBe(90);
     expect(result.kpis.paidUncostedUnits).toBe(0);
+  });
+
+  it("venda parcelada entra no realizado pela parcela paga e no previsto mês a mês", async () => {
+    await seedParceledSale({
+      workspaceId: context.workspaceId,
+      soldAt: new Date(2027, 0, 10, 12),
+      parcels: [
+        { amountCents: 10000, dueDate: new Date(2027, 1, 5, 12), paidAt: new Date(2027, 1, 5, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 2, 5, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 3, 5, 12) },
+      ],
+    });
+
+    const result = await getDashboardData({
+      from: new Date(2027, 0, 1),
+      to: new Date(2027, 5, 30),
+      status: "ALL",
+    });
+
+    expect(result.kpis.paidRevenueCents).toBe(10000);
+    expect(result.kpis.forecastRevenueCents).toBe(20000);
+    expect(result.trend.map((b) => [b.realizada, b.prevista])).toEqual([
+      [0, 0],
+      [100, 0],
+      [0, 100],
+      [0, 100],
+      [0, 0],
+      [0, 0],
+    ]);
   });
 });

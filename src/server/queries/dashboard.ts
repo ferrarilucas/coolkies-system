@@ -101,11 +101,11 @@ export async function getDashboardData(filters: DashboardFilters) {
       soldAt: true,
       status: true,
       paidAt: true,
-      paymentForecastDate: true,
       totalCents: true,
       customerId: true,
       customerName: true,
       customer: { select: { sector: true } },
+      installments: { select: { amountCents: true, paidAt: true, dueDate: true } },
       items: {
         select: {
           itemId: true,
@@ -300,15 +300,15 @@ export async function getDashboardData(filters: DashboardFilters) {
     productionCost += saleProductionCost;
     resaleCost += saleResaleCost;
     uncostedUnits += saleUncosted;
-    if (sale.status === "PAID") {
-      paidRevenue += saleRevenue;
-      paidProductionCost += saleProductionCost;
-      paidProductionUnits += saleProductionQty;
-      paidResaleCost += saleResaleCost;
-      paidUncostedUnits += saleUncosted;
-    } else {
-      forecastRevenue += saleRevenue;
-    }
+    const salePaidCents = sale.installments.reduce((s, i) => s + (i.paidAt ? i.amountCents : 0), 0);
+    const paidShare = sale.totalCents > 0 ? salePaidCents / sale.totalCents : sale.status === "PAID" ? 1 : 0;
+    const salePaidRevenue = Math.round(saleRevenue * paidShare);
+    paidRevenue += salePaidRevenue;
+    forecastRevenue += saleRevenue - salePaidRevenue;
+    paidProductionCost += saleProductionCost * paidShare;
+    paidProductionUnits += saleProductionQty * paidShare;
+    paidResaleCost += saleResaleCost * paidShare;
+    paidUncostedUnits += saleUncosted * paidShare;
 
     for (const i of matchedItems) {
       const key = mixKey(i.itemId, i.variantId);
@@ -387,13 +387,17 @@ export async function getDashboardData(filters: DashboardFilters) {
     const discountRatio = rawItemTotal > 0 ? sale.totalCents / rawItemTotal : 1;
     const rev = hasItemFilter ? Math.round(matchedRaw * discountRatio) : sale.totalCents;
 
-    if (sale.status === "PAID") {
-      const e = series.get(bucketKey(sale.paidAt ?? sale.soldAt));
-      if (e) e.realized += rev;
-    } else {
-      const fd = sale.paymentForecastDate ?? sale.soldAt;
-      const e = series.get(bucketKey(fd >= from && fd <= to ? fd : sale.soldAt));
-      if (e) e.forecast += rev;
+    const scale = sale.totalCents > 0 ? rev / sale.totalCents : 0;
+    for (const inst of sale.installments) {
+      const amount = Math.round(inst.amountCents * scale);
+      if (inst.paidAt) {
+        const e = series.get(bucketKey(inst.paidAt));
+        if (e) e.realized += amount;
+      } else {
+        const fd = inst.dueDate ?? sale.soldAt;
+        const e = series.get(bucketKey(fd >= from && fd <= to ? fd : sale.soldAt));
+        if (e) e.forecast += amount;
+      }
     }
   }
   const trend = Array.from(series.values()).map((b) => ({
