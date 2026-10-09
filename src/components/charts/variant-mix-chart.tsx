@@ -17,13 +17,13 @@ const brl = (cents: number) =>
 
 const COLORS = [
   "hsl(var(--primary))",
-  "hsl(43 100% 62%)",
-  "hsl(168 40% 32%)",
-  "hsl(38 90% 48%)",
-  "hsl(168 28% 50%)",
-  "hsl(168 45% 24%)",
-  "hsl(168 22% 68%)",
-  "hsl(45 70% 78%)",
+  "hsl(35 48% 70%)",
+  "hsl(150 30% 34%)",
+  "hsl(32 85% 48%)",
+  "hsl(12 45% 70%)",
+  "hsl(60 9% 30%)",
+  "hsl(150 22% 58%)",
+  "hsl(38 40% 82%)",
 ];
 
 export function VariantMixChart({ data }: { data: Slice[] }) {

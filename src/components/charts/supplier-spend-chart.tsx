@@ -21,10 +21,10 @@ const brl = (cents: number) =>
 
 const COLORS = [
   "hsl(var(--primary))",
-  "hsl(168 40% 32%)",
-  "hsl(38 90% 48%)",
-  "hsl(168 28% 50%)",
-  "hsl(45 70% 78%)",
+  "hsl(35 48% 70%)",
+  "hsl(150 30% 34%)",
+  "hsl(32 85% 48%)",
+  "hsl(12 45% 70%)",
 ];
 
 export function SupplierSpendChart({ data }: { data: Datum[] }) {

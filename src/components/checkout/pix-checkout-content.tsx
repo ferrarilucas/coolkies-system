@@ -78,8 +78,8 @@ export function PixCheckoutContent({
     <div className="space-y-4">
       {previousPendingCharge && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p className="text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
+          <p className="text-warning-text">
             Uma cobrança da sua assinatura anterior já foi enviada ao banco e
             será debitada em {formatDueDate(previousPendingCharge.dueDate)}{" "}
             mesmo com o cancelamento — regra do Banco Central, cancelamento não

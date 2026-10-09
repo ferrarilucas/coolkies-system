@@ -23,9 +23,9 @@ export function PlanBanner({
     return (
       <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
         <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
           <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-warning">
+            <p className="font-medium text-warning-text">
               {canManageBilling
                 ? "Este workspace está além do limite do seu plano. Os mais antigos continuam ativos — faça upgrade para liberar este."
                 : "Este workspace está além do limite do plano de quem o criou. Os mais antigos continuam ativos — só o dono da conta pode fazer o upgrade que libera este."}
@@ -50,9 +50,9 @@ export function PlanBanner({
     return (
       <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
         <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
           <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-warning">{headline}</p>
+            <p className="font-medium text-warning-text">{headline}</p>
             <p className="text-muted-foreground">
               Você continua vendo tudo de {workspaceName}, mas não é possível
               registrar vendas ou alterar dados até que{" "}
@@ -78,9 +78,9 @@ export function PlanBanner({
   return (
     <div className="border-b border-warning/30 bg-warning/10 px-4 py-2.5">
       <div className="mx-auto flex w-full max-w-2xl items-start gap-2.5 md:max-w-5xl">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
         <div className="min-w-0 flex-1 text-sm">
-          <p className="font-medium text-warning">{active.headline}</p>
+          <p className="font-medium text-warning-text">{active.headline}</p>
           {active.body && <p className="text-muted-foreground">{active.body}</p>}
           {canManageBilling && active.cta && (
             <Link

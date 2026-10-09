@@ -29,14 +29,14 @@ export function TrialBanner({
     >
       <div className="mx-auto flex w-full max-w-2xl items-center gap-2 text-xs md:max-w-5xl">
         {expired ? (
-          <AlertTriangle className="size-3.5 shrink-0 text-warning" />
+          <AlertTriangle className="size-3.5 shrink-0 text-warning-text" />
         ) : (
           <Clock className="size-3.5 shrink-0 text-primary" />
         )}
         <span
           className={
             expired
-              ? "min-w-0 flex-1 truncate font-medium text-warning"
+              ? "min-w-0 flex-1 truncate font-medium text-warning-text"
               : "min-w-0 flex-1 truncate text-muted-foreground"
           }
         >

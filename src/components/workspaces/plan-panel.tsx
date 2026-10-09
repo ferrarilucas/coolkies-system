@@ -288,8 +288,8 @@ export function PlanPanel({
 
       {pendingChargeDueAt !== null && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p className="text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
+          <p className="text-warning-text">
             Uma cobrança da sua assinatura anterior já foi enviada ao banco e
             será debitada em {formatDueDate(pendingChargeDueAt)} mesmo com o
             cancelamento — regra do Banco Central, cancelamento não impede a
@@ -300,8 +300,8 @@ export function PlanPanel({
 
       {overLimit > 0 && suggestedPlan && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p className="text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
+          <p className="text-warning-text">
             {overLimit === 1
               ? "1 workspace está em modo somente leitura"
               : `${overLimit} workspaces estão em modo somente leitura`}{" "}

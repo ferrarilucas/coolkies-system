@@ -280,7 +280,7 @@ export default async function DashboardPage({
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="size-4 text-warning" />
+              <AlertTriangle className="size-4 text-warning-text" />
               Estoque baixo
             </CardTitle>
             <Link
@@ -432,7 +432,7 @@ function Kpi({
     tone === "success"
       ? "text-success"
       : tone === "warning"
-        ? "text-warning"
+        ? "text-warning-text"
         : tone === "destructive"
           ? "text-destructive"
           : "";

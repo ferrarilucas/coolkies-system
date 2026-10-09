@@ -38,10 +38,10 @@ function logoUrl(): string {
 
 function highlightHtml(code: string, label: string): string {
   return `<tr><td style="padding:0 0 28px">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF8E1;border:2px dashed #FFC93D;border-radius:16px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5DFD6;border:2px dashed #C94F32;border-radius:16px">
       <tr><td align="center" style="padding:20px 16px 22px">
-        <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#8A6A00;margin:0 0 10px">${escapeHtml(label)}</div>
-        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:6px;color:#0F3D34">${escapeHtml(code)}</div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#8F351E;margin:0 0 10px">${escapeHtml(label)}</div>
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:6px;color:#A63E25">${escapeHtml(code)}</div>
       </td></tr>
     </table>
   </td></tr>`;
@@ -52,9 +52,9 @@ function stepsHtml(steps: string[]): string {
     .map(
       (step, i) => `<tr>
         <td width="36" valign="top" style="padding:0 0 14px">
-          <div style="width:26px;height:26px;line-height:26px;border-radius:13px;background:#0F3D34;color:#FFC93D;font-size:13px;font-weight:700;text-align:center">${i + 1}</div>
+          <div style="width:26px;height:26px;line-height:26px;border-radius:13px;background:#C94F32;color:#F7F4ED;font-size:13px;font-weight:700;text-align:center">${i + 1}</div>
         </td>
-        <td valign="top" style="padding:3px 0 14px;font-size:15px;line-height:1.5;color:#1F2937">${escapeHtml(step)}</td>
+        <td valign="top" style="padding:3px 0 14px;font-size:15px;line-height:1.5;color:#25251F">${escapeHtml(step)}</td>
       </tr>`,
     )
     .join("");
@@ -84,29 +84,29 @@ export function actionEmailHtml({
     <meta name="color-scheme" content="light">
     <title>${escapeHtml(heading)}</title>
   </head>
-  <body style="margin:0;padding:0;background:#F7F7EF;font-family:${FONT};color:#1F2937">
+  <body style="margin:0;padding:0;background:#F7F4ED;font-family:${FONT};color:#25251F">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(body)}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F7EF">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4ED">
       <tr><td align="center" style="padding:32px 16px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
-          <tr><td align="center" style="background:#0F3D34;border-radius:24px 24px 0 0;padding:36px 24px 32px">
-            <img src="${escapeHtml(logoUrl())}" alt="Cipri" width="132" style="display:block;border:0;outline:none;color:#F7F7EF;font-size:28px;font-weight:700">
+          <tr><td align="center" style="background:#C94F32;border-radius:24px 24px 0 0;padding:36px 24px 32px">
+            <img src="${escapeHtml(logoUrl())}" alt="Cipri" width="132" style="display:block;border:0;outline:none;color:#F7F4ED;font-size:28px;font-weight:700">
           </td></tr>
-          <tr><td style="height:6px;background:#FFC93D;font-size:0;line-height:0">&nbsp;</td></tr>
-          <tr><td style="background:#ffffff;border-radius:0 0 24px 24px;padding:40px 36px 32px">
+          <tr><td style="height:6px;background:#D7B98E;font-size:0;line-height:0">&nbsp;</td></tr>
+          <tr><td style="background:#FFFDFA;border-radius:0 0 24px 24px;padding:40px 36px 32px">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr><td style="padding:0 0 14px;font-size:26px;line-height:1.25;font-weight:700;color:#0F3D34">${escapeHtml(heading)}</td></tr>
-              <tr><td style="padding:0 0 28px;font-size:16px;line-height:1.6;color:#4B5563">${escapeHtml(body)}</td></tr>
+              <tr><td style="padding:0 0 14px;font-size:26px;line-height:1.25;font-weight:700;color:#25251F">${escapeHtml(heading)}</td></tr>
+              <tr><td style="padding:0 0 28px;font-size:16px;line-height:1.6;color:#655E53">${escapeHtml(body)}</td></tr>
               ${stepsBlock}
               <tr><td align="center" style="padding:6px 0 30px">
-                <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:16px 36px;background:#FFC93D;color:#0F3D34;border-radius:14px;text-decoration:none;font-size:16px;font-weight:700">${escapeHtml(ctaLabel)}</a>
+                <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:16px 36px;background:#C94F32;color:#FFFFFF;border-radius:14px;text-decoration:none;font-size:16px;font-weight:700">${escapeHtml(ctaLabel)}</a>
               </td></tr>
               ${highlightBlock}
-              <tr><td style="border-top:1px solid #ECECE3;padding:22px 0 0;font-size:13px;line-height:1.6;color:#6B7280">${escapeHtml(footer)}</td></tr>
+              <tr><td style="border-top:1px solid #E3D8C4;padding:22px 0 0;font-size:13px;line-height:1.6;color:#655E53">${escapeHtml(footer)}</td></tr>
             </table>
           </td></tr>
-          <tr><td align="center" style="padding:24px 16px 0;font-size:13px;line-height:1.6;color:#6B7280">
-            <strong style="color:#0F3D34">Cipri</strong> · Seu negócio no seu ritmo.
+          <tr><td align="center" style="padding:24px 16px 0;font-size:13px;line-height:1.6;color:#655E53">
+            <strong style="color:#C94F32">Cipri</strong> · Seu negócio no seu ritmo.
           </td></tr>
         </table>
       </td></tr>

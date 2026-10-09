@@ -34,22 +34,22 @@ const APPEARANCE_BY_THEME: Record<"light" | "dark", Appearance> = {
   light: {
     theme: "stripe",
     variables: {
-      colorPrimary: "hsl(168 61% 15%)",
-      colorBackground: "hsl(0 0% 100%)",
-      colorText: "hsl(215 28% 17%)",
-      colorTextSecondary: "hsl(215 12% 40%)",
-      colorTextPlaceholder: "hsl(215 12% 40%)",
-      colorDanger: "hsl(0 72% 48%)",
+      colorPrimary: "hsl(12 60% 49%)",
+      colorBackground: "hsl(40 100% 99%)",
+      colorText: "hsl(60 9% 14%)",
+      colorTextSecondary: "hsl(37 10% 36%)",
+      colorTextPlaceholder: "hsl(37 10% 36%)",
+      colorDanger: "hsl(0 72% 51%)",
       fontFamily: "system-ui, sans-serif",
       borderRadius: "8px",
     },
     rules: {
-      ".Input": { border: "1px solid hsl(60 12% 85%)", boxShadow: "none" },
-      ".Input:focus": { border: "1px solid hsl(168 61% 15%)", boxShadow: "none" },
-      ".Tab": { border: "1px solid hsl(60 12% 85%)" },
-      ".Tab:hover": { border: "1px solid hsl(168 61% 15%)" },
+      ".Input": { border: "1px solid hsl(38 36% 83%)", boxShadow: "none" },
+      ".Input:focus": { border: "1px solid hsl(12 60% 49%)", boxShadow: "none" },
+      ".Tab": { border: "1px solid hsl(38 36% 83%)" },
+      ".Tab:hover": { border: "1px solid hsl(12 60% 49%)" },
       ".Tab--selected": {
-        border: "1px solid hsl(168 61% 15%)",
+        border: "1px solid hsl(12 60% 49%)",
         boxShadow: "none",
       },
     },
@@ -57,22 +57,22 @@ const APPEARANCE_BY_THEME: Record<"light" | "dark", Appearance> = {
   dark: {
     theme: "night",
     variables: {
-      colorPrimary: "hsl(43 100% 62%)",
-      colorBackground: "hsl(168 38% 10%)",
-      colorText: "hsl(60 33% 95%)",
-      colorTextSecondary: "hsl(60 10% 66%)",
-      colorTextPlaceholder: "hsl(60 10% 66%)",
-      colorDanger: "hsl(0 62% 45%)",
+      colorPrimary: "hsl(12 72% 59%)",
+      colorBackground: "hsl(55 9% 18%)",
+      colorText: "hsl(39 41% 95%)",
+      colorTextSecondary: "hsl(38 14% 70%)",
+      colorTextPlaceholder: "hsl(38 14% 70%)",
+      colorDanger: "hsl(0 91% 71%)",
       fontFamily: "system-ui, sans-serif",
       borderRadius: "8px",
     },
     rules: {
-      ".Input": { border: "1px solid hsl(168 20% 18%)", boxShadow: "none" },
-      ".Input:focus": { border: "1px solid hsl(43 100% 62%)", boxShadow: "none" },
-      ".Tab": { border: "1px solid hsl(168 20% 18%)" },
-      ".Tab:hover": { border: "1px solid hsl(43 100% 62%)" },
+      ".Input": { border: "1px solid hsl(50 8% 27%)", boxShadow: "none" },
+      ".Input:focus": { border: "1px solid hsl(12 72% 59%)", boxShadow: "none" },
+      ".Tab": { border: "1px solid hsl(50 8% 27%)" },
+      ".Tab:hover": { border: "1px solid hsl(12 72% 59%)" },
       ".Tab--selected": {
-        border: "1px solid hsl(43 100% 62%)",
+        border: "1px solid hsl(12 72% 59%)",
         boxShadow: "none",
       },
     },
@@ -87,8 +87,8 @@ function useElementsAppearance(): Appearance {
 function PendingChargeNotice({ charge }: { charge: PendingChargeWarning }) {
   return (
     <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-      <p className="text-warning">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
+      <p className="text-warning-text">
         Uma cobrança da sua assinatura Pix anterior já foi enviada ao banco e
         será debitada em {formatDueDate(charge.dueDate)} mesmo com o
         cancelamento — regra do Banco Central.
