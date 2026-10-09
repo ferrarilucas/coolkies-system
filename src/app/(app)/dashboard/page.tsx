@@ -3,7 +3,7 @@ import {
   TrendingUp,
   Clock,
   Receipt,
-  Cookie,
+  Boxes,
   Percent,
   Wallet,
   AlertTriangle,
@@ -102,75 +102,97 @@ export default async function DashboardPage({
         }}
       />
 
-      {/* ─── KPI total (pago + pendente) ─── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-3">
+      <KpiSection title="Realizado" description="Só vendas pagas">
         <Kpi
-          label="Total geral"
-          value={formatBRL(kpis.totalRevenueCents)}
-          hint="pago + pendente"
+          label="Receita bruta"
+          value={formatBRL(kpis.paidRevenueCents)}
+          hint="vendas pagas"
           icon={Wallet}
           highlight
         />
         <Kpi
-          label="Cookies vendidos"
-          value={String(kpis.soldCookies)}
-          hint={`em ${kpis.salesCount} venda${kpis.salesCount !== 1 ? "s" : ""}`}
-          icon={Cookie}
+          label="Receita líquida"
+          value={money(kpis.netRevenueCents)}
+          hint="bruta − custo de produção e revenda"
+          icon={TrendingUp}
+          tone={signTone(kpis.netRevenueCents)}
           highlight
         />
         <Kpi
-          label="Receita recebida"
-          value={formatBRL(kpis.paidRevenueCents)}
-          hint="vendas pagas"
-          icon={TrendingUp}
-          tone="success"
-        />
-        <Kpi
-          label="A receber"
-          value={formatBRL(kpis.forecastRevenueCents)}
-          hint="pendente"
-          icon={Clock}
-          tone={kpis.forecastRevenueCents > 0 ? "warning" : undefined}
-        />
-      </div>
-
-      {/* ─── KPIs de lucro / CMV ─── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi
-          label="CMV estimado"
-          value={kpis.cogsCents == null ? "—" : formatBRL(kpis.cogsCents)}
-          hint={
-            kpis.unitCostCents == null
-              ? "sem dados de custo"
-              : `${formatBRL(kpis.unitCostCents)}/cookie`
-          }
-          icon={Receipt}
-        />
-        <Kpi
-          label="Lucro bruto"
-          value={kpis.grossProfitCents == null ? "—" : formatBRL(kpis.grossProfitCents)}
-          hint="recebida − CMV"
-          icon={TrendingUp}
-          tone={
-            kpis.grossProfitCents != null && kpis.grossProfitCents < 0
-              ? "destructive"
-              : "success"
-          }
-        />
-        <Kpi
-          label="Margem bruta"
+          label="Margem líquida"
           value={pct(kpis.marginPct)}
-          hint="sobre recebida"
+          hint="sobre a receita bruta"
           icon={Percent}
           tone={kpis.marginPct != null && kpis.marginPct < 0 ? "destructive" : undefined}
         />
         <Kpi
+          label="A receber"
+          value={formatBRL(kpis.forecastRevenueCents)}
+          hint="vendas pendentes"
+          icon={Clock}
+          tone={kpis.forecastRevenueCents > 0 ? "warning" : undefined}
+        />
+      </KpiSection>
+
+      <KpiSection title="Presumido" description="Inclui o que ainda falta receber">
+        <Kpi
+          label="Receita bruta presumida"
+          value={formatBRL(kpis.totalRevenueCents)}
+          hint="pagas + a receber"
+          icon={Wallet}
+        />
+        <Kpi
+          label="Receita líquida presumida"
+          value={money(kpis.presumedNetRevenueCents)}
+          hint="presumida − custo de todas as vendas"
+          icon={TrendingUp}
+          tone={signTone(kpis.presumedNetRevenueCents)}
+        />
+        <Kpi
+          label="Margem presumida"
+          value={pct(kpis.presumedMarginPct)}
+          hint="sobre a receita presumida"
+          icon={Percent}
+          tone={kpis.presumedMarginPct != null && kpis.presumedMarginPct < 0 ? "destructive" : undefined}
+        />
+        <Kpi
+          label="Unidades vendidas"
+          value={String(kpis.soldUnits)}
+          hint={`em ${kpis.salesCount} venda${kpis.salesCount !== 1 ? "s" : ""}`}
+          icon={Boxes}
+        />
+      </KpiSection>
+
+      <KpiSection title="Custos" description="Das vendas pagas no período">
+        <Kpi
+          label="Custo de produção"
+          value={money(kpis.productionCogsCents)}
+          hint={
+            kpis.unitCostCents == null
+              ? "sem dados de custo"
+              : `${formatBRL(kpis.unitCostCents)}/un produzida`
+          }
+          icon={Receipt}
+        />
+        <Kpi
+          label="Custo de revenda"
+          value={formatBRL(kpis.resaleCogsCents)}
+          hint="última compra × qtd. vendida"
+          icon={Receipt}
+        />
+        <Kpi
+          label="CMV total"
+          value={money(kpis.cogsCents)}
+          hint="produção + revenda"
+          icon={Receipt}
+        />
+        <Kpi
           label="Gasto em compras"
           value={formatBRL(supplier.totalSpendCents)}
-          hint="ingredientes no período"
+          hint="insumos no período"
           icon={Store}
         />
-      </div>
+      </KpiSection>
 
       {/* ─── Gráficos ─── */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -191,7 +213,7 @@ export default async function DashboardPage({
 
         <Card className="overflow-visible">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Mix de sabores</CardTitle>
+            <CardTitle className="text-base">Mix de variações</CardTitle>
           </CardHeader>
           <CardContent className="pr-2">
             {mix.length > 0 ? <VariantMixChart data={mix} /> : <ChartEmpty />}
@@ -268,7 +290,7 @@ export default async function DashboardPage({
           <CardContent>
             {lowStock.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Tudo certo — nenhum ingrediente abaixo do mínimo.
+                Tudo certo — nenhum insumo abaixo do mínimo.
               </p>
             ) : (
               <ul className="divide-y">
@@ -325,7 +347,7 @@ export default async function DashboardPage({
           <CardContent>
             {supplier.priceComparison.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Registre o mesmo ingrediente em 2+ fornecedores para comparar.
+                Registre o mesmo insumo em 2+ fornecedores para comparar.
               </p>
             ) : (
               <ul className="divide-y">
@@ -357,6 +379,35 @@ export default async function DashboardPage({
 }
 
 // ─── Auxiliares ──────────────────────────────────────────────────────────────
+
+function money(cents: number | null): string {
+  return cents == null ? "—" : formatBRL(cents);
+}
+
+function signTone(cents: number | null): "success" | "destructive" | undefined {
+  if (cents == null) return undefined;
+  return cents < 0 ? "destructive" : "success";
+}
+
+function KpiSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-4 space-y-2">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>
+    </section>
+  );
+}
 
 function Kpi({
   label,

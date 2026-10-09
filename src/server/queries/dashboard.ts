@@ -113,7 +113,7 @@ export async function getDashboardData(filters: DashboardFilters) {
           quantity: true,
           unitPriceSnapshot: true,
           productNameSnapshot: true,
-          flavorNameSnapshot: true,
+          variantNameSnapshot: true,
         },
       },
     },
@@ -212,7 +212,11 @@ export async function getDashboardData(filters: DashboardFilters) {
   let paidRevenue = 0;
   let forecastRevenue = 0;
   let salesCount = 0;
-  let soldCookies = 0;
+  let soldUnits = 0;
+  let productionUnits = 0;
+  let paidProductionUnits = 0;
+  let resaleCost = 0;
+  let paidResaleCost = 0;
 
   const mixMap = new Map<string, { label: string; revenue: number; qty: number }>();
   const customerMap = new Map<
@@ -222,10 +226,15 @@ export async function getDashboardData(filters: DashboardFilters) {
 
   for (const sale of sales) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
-    const saleQty = matchedItems.reduce(
-      (s, i) => s + (costPerBaseUnit.has(i.itemId) ? 0 : i.quantity),
-      0,
-    );
+    let saleQty = 0;
+    let saleProductionQty = 0;
+    let saleResaleCost = 0;
+    for (const i of matchedItems) {
+      saleQty += i.quantity;
+      const directUnit = costPerBaseUnit.get(i.itemId);
+      if (directUnit == null) saleProductionQty += i.quantity;
+      else saleResaleCost += directUnit * i.quantity;
+    }
 
     // Receita: usa totalCents (já com desconto) quando não há filtro de item.
     // Com filtro de item, aplica proporção do desconto sobre os itens filtrados.
@@ -241,14 +250,21 @@ export async function getDashboardData(filters: DashboardFilters) {
     }
 
     salesCount += 1;
-    soldCookies += saleQty;
-    if (sale.status === "PAID") paidRevenue += saleRevenue;
-    else forecastRevenue += saleRevenue;
+    soldUnits += saleQty;
+    productionUnits += saleProductionQty;
+    resaleCost += saleResaleCost;
+    if (sale.status === "PAID") {
+      paidRevenue += saleRevenue;
+      paidProductionUnits += saleProductionQty;
+      paidResaleCost += saleResaleCost;
+    } else {
+      forecastRevenue += saleRevenue;
+    }
 
     for (const i of matchedItems) {
       const key = mixKey(i.itemId, i.variantId);
-      const label = i.flavorNameSnapshot
-        ? `${i.productNameSnapshot} ${i.flavorNameSnapshot}`
+      const label = i.variantNameSnapshot
+        ? `${i.productNameSnapshot} ${i.variantNameSnapshot}`
         : i.productNameSnapshot;
       const cur = mixMap.get(key) ?? { label, revenue: 0, qty: 0 };
       cur.revenue += i.unitPriceSnapshot * i.quantity;
@@ -272,24 +288,20 @@ export async function getDashboardData(filters: DashboardFilters) {
   const totalRevenue = paidRevenue + forecastRevenue;
   const avgTicket = salesCount > 0 ? Math.round(totalRevenue / salesCount) : 0;
 
-  const productionCogs = unitCost != null ? unitCost * soldCookies : 0;
-  let resaleCogs = 0;
-  for (const sale of sales) {
-    const matched = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
-    for (const item of matched) {
-      const directUnit = costPerBaseUnit.get(item.itemId);
-      if (directUnit == null) continue;
-      resaleCogs += directUnit * item.quantity;
-    }
-  }
-  const cogs = unitCost != null || resaleCogs > 0
-    ? Math.round(productionCogs + resaleCogs)
-    : null;
-  const grossProfit = cogs != null ? paidRevenue - cogs : null;
-  const marginPct =
-    grossProfit != null && paidRevenue > 0
-      ? (grossProfit / paidRevenue) * 100
-      : null;
+  const costOf = (units: number, resale: number) =>
+    unitCost != null || resale > 0 ? Math.round((unitCost ?? 0) * units + resale) : null;
+  const marginOf = (net: number | null, revenue: number) =>
+    net != null && revenue > 0 ? (net / revenue) * 100 : null;
+
+  const productionCogs = unitCost != null ? Math.round(unitCost * paidProductionUnits) : null;
+  const resaleCogs = Math.round(paidResaleCost);
+  const cogs = costOf(paidProductionUnits, paidResaleCost);
+  const netRevenue = cogs != null ? paidRevenue - cogs : null;
+  const marginPct = marginOf(netRevenue, paidRevenue);
+
+  const presumedCogs = costOf(productionUnits, resaleCost);
+  const presumedNetRevenue = presumedCogs != null ? totalRevenue - presumedCogs : null;
+  const presumedMarginPct = marginOf(presumedNetRevenue, totalRevenue);
 
   // ─── Série temporal ──────────────────────────────────────────────────────────
   const spanDays = differenceInCalendarDays(to, from);
@@ -417,11 +429,16 @@ export async function getDashboardData(filters: DashboardFilters) {
       forecastRevenueCents: forecastRevenue,
       totalRevenueCents: totalRevenue,
       salesCount,
-      soldCookies,
+      soldUnits,
       avgTicketCents: avgTicket,
       cogsCents: cogs,
-      grossProfitCents: grossProfit,
+      productionCogsCents: productionCogs,
+      resaleCogsCents: resaleCogs,
+      netRevenueCents: netRevenue,
       marginPct,
+      presumedCogsCents: presumedCogs,
+      presumedNetRevenueCents: presumedNetRevenue,
+      presumedMarginPct,
       unitCostCents: unitCost != null ? Math.round(unitCost) : null,
     },
     granularity,

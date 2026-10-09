@@ -100,10 +100,68 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       status: "ALL",
     });
 
-    expect(result.kpis.soldCookies).toBe(5);
+    expect(result.kpis.soldUnits).toBe(8);
     expect(result.kpis.paidRevenueCents).toBe(2250);
-    // productionCogs = 10 cents/cookie * 5 cookies = 50; custo direto = 200 cents/un * 3 un = 600
+    expect(result.kpis.productionCogsCents).toBe(50);
+    expect(result.kpis.resaleCogsCents).toBe(600);
     expect(result.kpis.cogsCents).toBe(650);
-    expect(result.kpis.grossProfitCents).toBe(1600);
+    expect(result.kpis.netRevenueCents).toBe(1600);
+    expect(result.kpis.presumedCogsCents).toBe(650);
+    expect(result.kpis.presumedNetRevenueCents).toBe(1600);
+  });
+
+  it("receita líquida desconta só o custo das vendas pagas, não o das pendentes", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-dash-2", name: "Dona", email: "dona2@example.com" },
+    });
+    const refri = await testDb.item.create({
+      data: {
+        name: "Refrigerante", unit: "UN", sellable: true, productionInput: false,
+        workspaceId: context.workspaceId,
+      },
+    });
+    const purchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
+    await testDb.purchaseItem.create({
+      data: {
+        purchaseId: purchase.id, itemId: refri.id,
+        quantity: 10, unit: "UN", pricePaidCents: 2000, workspaceId: context.workspaceId,
+      },
+    });
+
+    const soldAt = new Date("2026-09-15T12:00:00.000Z");
+    const line = (quantity: number) => ({
+      itemId: refri.id, quantity, unitPriceSnapshot: 500,
+      productNameSnapshot: "Refrigerante", workspaceId: context.workspaceId,
+    });
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: context.workspaceId, status: "PAID",
+        soldAt, paidAt: soldAt, totalCents: 1000, items: { create: [line(2)] },
+      },
+    });
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: context.workspaceId, status: "PENDING",
+        soldAt, totalCents: 1500, items: { create: [line(3)] },
+      },
+    });
+
+    const result = await getDashboardData({
+      from: new Date("2026-09-01"),
+      to: new Date("2026-09-30"),
+      status: "ALL",
+    });
+
+    expect(result.kpis.soldUnits).toBe(5);
+    expect(result.kpis.paidRevenueCents).toBe(1000);
+    expect(result.kpis.forecastRevenueCents).toBe(1500);
+    expect(result.kpis.resaleCogsCents).toBe(400);
+    expect(result.kpis.cogsCents).toBe(400);
+    expect(result.kpis.netRevenueCents).toBe(600);
+    expect(result.kpis.marginPct).toBe(60);
+    expect(result.kpis.totalRevenueCents).toBe(2500);
+    expect(result.kpis.presumedCogsCents).toBe(1000);
+    expect(result.kpis.presumedNetRevenueCents).toBe(1500);
+    expect(result.kpis.presumedMarginPct).toBe(60);
   });
 });
