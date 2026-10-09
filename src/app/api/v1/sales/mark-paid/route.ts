@@ -1,5 +1,12 @@
 import { NextRequest } from "next/server";
+import { endOfDay } from "date-fns";
+import type { Prisma } from "@prisma/client";
 import { getMcpWorkspaceContext, assertMcpCanWrite, mcpErrorResponse } from "@/server/tenant/mcp-context";
+import { dueByWhere, syncSaleSummary } from "@/server/sales/installments";
+
+function stringList(value: unknown): string[] | null {
+  return Array.isArray(value) ? value.filter((id: unknown): id is string => typeof id === "string") : null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,36 +14,40 @@ export async function POST(request: NextRequest) {
     assertMcpCanWrite(context);
 
     const body = await request.json();
+    const installmentIds = stringList(body.installmentIds);
     const saleId = typeof body.saleId === "string" ? body.saleId : null;
-    const saleIds = Array.isArray(body.saleIds)
-      ? body.saleIds.filter((id: unknown): id is string => typeof id === "string")
-      : null;
+    const saleIds = stringList(body.saleIds);
     const customerId = typeof body.customerId === "string" ? body.customerId : null;
 
-    if (!saleId && !saleIds && !customerId) {
-      return Response.json({ error: "Informe saleId, saleIds ou customerId." }, { status: 400 });
+    if (!installmentIds && !saleId && !saleIds && !customerId) {
+      return Response.json({ error: "Informe installmentIds, saleId, saleIds ou customerId." }, { status: 400 });
     }
 
-    const where = customerId
-      ? { customerId, status: "PENDING" as const }
-      : { id: { in: saleId ? [saleId] : saleIds! }, status: "PENDING" as const };
+    const where: Prisma.SaleInstallmentWhereInput = installmentIds
+      ? { id: { in: installmentIds }, paidAt: null }
+      : {
+          paidAt: null,
+          ...dueByWhere(endOfDay(new Date())),
+          sale: customerId ? { customerId } : { id: { in: saleId ? [saleId] : saleIds! } },
+        };
 
-    const pending = await context.db.sale.aggregate({
+    const open = await context.db.saleInstallment.findMany({
       where,
-      _sum: { totalCents: true },
-      _count: { _all: true },
+      select: { id: true, saleId: true, amountCents: true },
     });
-
-    if (pending._count._all === 0) {
-      return Response.json({ error: "Nenhuma venda pendente encontrada." }, { status: 404 });
+    if (open.length === 0) {
+      return Response.json({ error: "Nenhuma parcela em aberto encontrada." }, { status: 404 });
     }
 
-    await context.db.sale.updateMany({
-      where,
-      data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
+    await context.db.$transaction(async (tx) => {
+      await tx.saleInstallment.updateMany({
+        where: { id: { in: open.map((i) => i.id) }, paidAt: null },
+        data: { paidAt: new Date() },
+      });
+      await syncSaleSummary(tx, [...new Set(open.map((i) => i.saleId))]);
     });
 
-    return Response.json({ count: pending._count._all, totalCents: pending._sum.totalCents ?? 0 });
+    return Response.json({ count: open.length, totalCents: open.reduce((sum, i) => sum + i.amountCents, 0) });
   } catch (e) {
     return mcpErrorResponse(e);
   }

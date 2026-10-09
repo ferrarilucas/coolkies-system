@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { StockMovementType } from "@prisma/client";
 import { getMcpWorkspaceContext, assertMcpCanWrite, mcpErrorResponse } from "@/server/tenant/mcp-context";
-import { buildSalesWhere, type SalesFilters } from "@/server/queries/sales";
+import { parsePaymentChoice, planPayment } from "@/lib/installments";
+import { writeInstallments } from "@/server/sales/installments";
+import { buildSalesWhere, computeSalesSummary, type SalesFilters } from "@/server/queries/sales";
 
 function parseDateOnly(value: string): Date {
   return new Date(`${value}T12:00:00`);
@@ -38,52 +40,30 @@ export async function GET(request: NextRequest) {
     const where = buildSalesWhere(filters);
     const summaryWhere = buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined });
 
-    const [sales, summaryGroups, overdue] = await Promise.all([
+    const [sales, summary] = await Promise.all([
       db.sale.findMany({
         where,
         orderBy: { soldAt: "desc" },
         take: 50,
         include: {
           items: {
-            select: {
-              quantity: true,
-              unitPriceSnapshot: true,
-              productNameSnapshot: true,
-              variantNameSnapshot: true,
-            },
+            select: { quantity: true, unitPriceSnapshot: true, productNameSnapshot: true, variantNameSnapshot: true },
+          },
+          installments: {
+            orderBy: { number: "asc" },
+            select: { id: true, number: true, amountCents: true, dueDate: true, paidAt: true },
           },
         },
       }),
-      db.sale.groupBy({
-        by: ["status"],
-        where: summaryWhere,
-        _sum: { totalCents: true },
-        _count: { _all: true },
-      }),
-      db.sale.aggregate({
-        where: { AND: [summaryWhere, { status: "PENDING", paymentForecastDate: { lt: new Date() } }] },
-        _sum: { totalCents: true },
-        _count: { _all: true },
-      }),
+      computeSalesSummary(db, summaryWhere),
     ]);
-
-    const byStatus = new Map(summaryGroups.map((g) => [g.status, g]));
-    const pending = byStatus.get("PENDING");
-    const paid = byStatus.get("PAID");
 
     return Response.json({
       sales: sales.map((sale) => ({
         ...sale,
         items: sale.items.map((item) => ({ ...item, flavorNameSnapshot: item.variantNameSnapshot })),
       })),
-      summary: {
-        pendingCents: pending?._sum.totalCents ?? 0,
-        pendingCount: pending?._count._all ?? 0,
-        paidCents: paid?._sum.totalCents ?? 0,
-        paidCount: paid?._count._all ?? 0,
-        overdueCents: overdue._sum.totalCents ?? 0,
-        overdueCount: overdue._count._all ?? 0,
-      },
+      summary,
     });
   } catch (e) {
     return mcpErrorResponse(e);
@@ -124,15 +104,22 @@ export async function POST(request: NextRequest) {
     }
 
     const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
-    const status: "PAID" | "PENDING" = body.status === "PENDING" ? "PENDING" : "PAID";
-    const forecastPreset = typeof body.forecastPreset === "string" ? body.forecastPreset : null;
 
-    let paymentForecastDate: Date | null = null;
+    let forecastDate: Date | null = null;
     if (typeof body.forecastDate === "string" && body.forecastDate.trim()) {
       const parsed = parseDateOnly(body.forecastDate.trim());
       if (!isValidDate(parsed)) return Response.json({ error: "Data inválida." }, { status: 400 });
-      paymentForecastDate = parsed;
+      forecastDate = parsed;
     }
+    const count = body.installments === undefined ? 1 : Number(body.installments);
+    const choice = parsePaymentChoice({
+      mode: count > 1 || count < 1 || !Number.isInteger(count) ? "INSTALLMENTS" : "CASH",
+      status: count > 1 ? "PENDING" : body.status === "PENDING" ? "PENDING" : "PAID",
+      count,
+      preset: typeof body.forecastPreset === "string" ? body.forecastPreset : "",
+      dueDate: forecastDate,
+    });
+    if ("error" in choice) return Response.json({ error: choice.error }, { status: 400 });
 
     const discountType: "PERCENTAGE" | "FIXED" | null =
       body.discountType === "PERCENTAGE" || body.discountType === "FIXED" ? body.discountType : null;
@@ -162,49 +149,56 @@ export async function POST(request: NextRequest) {
     const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
     const totalCents = subtotalCents - discountCents;
 
-    const sale = await context.db.sale.create({
-      data: {
-        userId: context.userId,
-        customerId,
-        customerName,
-        soldAt,
-        notes,
-        status,
-        paidAt: status === "PAID" ? new Date() : null,
-        paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
-        forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
-        discountType,
-        discountValue,
-        totalCents,
-        workspaceId: context.workspaceId,
-        items: {
-          create: items.map((item) => ({
-            itemId: item.itemId,
-            productNameSnapshot: item.productName,
-            variantId: item.variantId,
-            variantNameSnapshot: item.variantName ?? item.flavorName ?? null,
-            quantity: item.quantity,
-            unitPriceSnapshot: item.unitPriceCents,
-            workspaceId: context.workspaceId,
-          })),
-        },
-      },
-    });
+    const plan = planPayment(choice, totalCents, [], new Date());
+    if (!plan.ok) return Response.json({ error: plan.error }, { status: 400 });
 
-    for (const item of items) {
-      await context.db.stockMovement.create({
+    const sale = await context.db.$transaction(async (tx) => {
+      const created = await tx.sale.create({
         data: {
-          itemId: item.itemId,
-          variantId: item.variantId,
-          type: StockMovementType.SALE,
-          quantity: -item.quantity,
-          saleId: sale.id,
+          userId: context.userId,
+          customerId,
+          customerName,
+          soldAt,
+          notes,
+          discountType,
+          discountValue,
+          totalCents,
           workspaceId: context.workspaceId,
+          items: {
+            create: items.map((item) => ({
+              itemId: item.itemId,
+              productNameSnapshot: item.productName,
+              variantId: item.variantId,
+              variantNameSnapshot: item.variantName ?? item.flavorName ?? null,
+              quantity: item.quantity,
+              unitPriceSnapshot: item.unitPriceCents,
+              workspaceId: context.workspaceId,
+            })),
+          },
         },
       });
-    }
+      for (const item of items) {
+        await tx.stockMovement.create({
+          data: {
+            itemId: item.itemId,
+            variantId: item.variantId,
+            type: StockMovementType.SALE,
+            quantity: -item.quantity,
+            saleId: created.id,
+            workspaceId: context.workspaceId,
+          },
+        });
+      }
+      await writeInstallments(tx, created.id, context.workspaceId, plan.installments);
+      const installments = await tx.saleInstallment.findMany({
+        where: { saleId: created.id },
+        orderBy: { number: "asc" },
+        select: { id: true, number: true, amountCents: true, dueDate: true, paidAt: true },
+      });
+      return { id: created.id, installments };
+    });
 
-    return Response.json({ sale: { id: sale.id, totalCents } }, { status: 201 });
+    return Response.json({ sale: { id: sale.id, totalCents, installments: sale.installments } }, { status: 201 });
   } catch (e) {
     return mcpErrorResponse(e);
   }

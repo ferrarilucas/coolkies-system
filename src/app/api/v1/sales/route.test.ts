@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { resetDb, testDb, createWorkspace } from "@/test/db";
+import { resetDb, testDb, createWorkspace, backfillSaleInstallments } from "@/test/db";
 
 let mcpSessionResult: { userId: string } | null;
 vi.mock("@/lib/auth", () => ({
@@ -60,6 +60,8 @@ describe("GET /api/v1/sales", () => {
       },
     });
 
+    await backfillSaleInstallments();
+
     const res = await GET(getReq(`?customerId=${customer.id}&status=PENDING`));
     const body = await res.json();
 
@@ -73,6 +75,8 @@ describe("GET /api/v1/sales", () => {
     await testDb.sale.create({
       data: { userId: user.id, workspaceId: ws.id, status: "PAID", totalCents: 1000, soldAt: new Date() },
     });
+
+    await backfillSaleInstallments();
 
     const res = await GET(getReq(`?from=não-é-uma-data&to=também-inválido`));
     const body = await res.json();
@@ -95,6 +99,8 @@ describe("GET /api/v1/sales", () => {
         },
       },
     });
+
+    await backfillSaleInstallments();
 
     const body = await (await GET(getReq())).json();
 
@@ -220,5 +226,43 @@ describe("POST /api/v1/sales", () => {
 
     const sales = await testDb.sale.findMany({ where: { workspaceId: ws.id } });
     expect(sales).toHaveLength(0);
+  });
+
+  it("cria venda parcelada em 3x com vencimentos mensais", async () => {
+    const { ws } = await seedMember();
+    const item = await testDb.item.create({
+      data: { name: "Bolo", unit: "UN", sellable: true, productionInput: false, workspaceId: ws.id },
+    });
+
+    const res = await POST(
+      postReq({
+        installments: 3,
+        forecastPreset: "CUSTOM",
+        forecastDate: "2026-10-20",
+        items: [{ itemId: item.id, productName: "Bolo", variantId: null, quantity: 1, unitPriceCents: 10000 }],
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.sale.installments.map((i: { amountCents: number; dueDate: string }) => [i.amountCents, i.dueDate.slice(0, 10)])).toEqual([
+      [3333, expect.stringMatching(/^2026-10-2/)],
+      [3333, expect.stringMatching(/^2026-11-2/)],
+      [3334, expect.stringMatching(/^2026-12-2/)],
+    ]);
+    const sale = await testDb.sale.findUniqueOrThrow({ where: { id: body.sale.id } });
+    expect([sale.status, sale.openCents, sale.installmentCount]).toEqual(["PENDING", 10000, 3]);
+  });
+
+  it("recusa parcelamento acima de 24", async () => {
+    const { ws } = await seedMember();
+    const item = await testDb.item.create({
+      data: { name: "Bolo", unit: "UN", sellable: true, productionInput: false, workspaceId: ws.id },
+    });
+    const res = await POST(
+      postReq({ installments: 30, items: [{ itemId: item.id, productName: "Bolo", variantId: null, quantity: 1, unitPriceCents: 100 }] }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "O parcelamento deve ter de 2 a 24 parcelas." });
   });
 });
