@@ -124,4 +124,53 @@ describe("POST /api/v1/sales/mark-paid", () => {
 
     expect(await res.json()).toEqual({ count: 1, totalCents: 1500 });
   });
+  async function writerWorkspace(tag: string) {
+    const user = await testDb.user.create({ data: { id: `u${tag}`, name: "Ana", email: `ana${tag}@example.com` } });
+    const owner = await testDb.user.create({ data: { id: `u${tag}o`, name: "Bruno", email: `bruno${tag}@example.com` } });
+    const ws = await createWorkspace(`Loja ${tag}`);
+    await testDb.member.create({ data: { userId: user.id, workspaceId: ws.id, role: "MEMBER" } });
+    await testDb.member.create({ data: { userId: owner.id, workspaceId: ws.id, role: "OWNER" } });
+    await testDb.subscription.create({ data: { userId: owner.id, plan: "corre", status: "TRIALING", provider: "INTERPIX" } });
+    mcpSessionResult = { userId: user.id };
+    return ws;
+  }
+
+  it("retorna 409 com a contagem quando só há parcelas a vencer", async () => {
+    const ws = await writerWorkspace("5");
+    const customer = await testDb.customer.create({ data: { name: "Maria", workspaceId: ws.id } });
+    const sale = await seedParceledSale({
+      workspaceId: ws.id,
+      customerId: customer.id,
+      parcels: [
+        { amountCents: 1000, dueDate: new Date(Date.now() + 25 * 86400000) },
+        { amountCents: 1000, dueDate: new Date(Date.now() + 55 * 86400000) },
+      ],
+    });
+
+    const bySale = await POST(postReq({ saleId: sale.id }));
+    expect(bySale.status).toBe(409);
+    expect(await bySale.json()).toEqual({
+      error: "Só há parcelas a vencer. Informe installmentIds para receber antecipado.",
+      futureCount: 2,
+    });
+
+    const byCustomer = await POST(postReq({ customerId: customer.id }));
+    expect(byCustomer.status).toBe(409);
+    expect((await byCustomer.json()).futureCount).toBe(2);
+
+    const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
+    expect([saved.status, saved.openCents]).toEqual(["PENDING", 2000]);
+  });
+
+  it("retorna 404 quando a venda não tem parcela em aberto", async () => {
+    const ws = await writerWorkspace("6");
+    const sale = await seedParceledSale({
+      workspaceId: ws.id,
+      parcels: [{ amountCents: 1000, dueDate: new Date(Date.now() + 25 * 86400000), paidAt: new Date() }],
+    });
+
+    const res = await POST(postReq({ saleIds: [sale.id] }));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Nenhuma parcela em aberto encontrada." });
+  });
 });

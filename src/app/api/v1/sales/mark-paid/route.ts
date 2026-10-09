@@ -23,19 +23,28 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Informe installmentIds, saleId, saleIds ou customerId." }, { status: 400 });
     }
 
-    const where: Prisma.SaleInstallmentWhereInput = installmentIds
+    const target: Prisma.SaleInstallmentWhereInput = installmentIds
       ? { id: { in: installmentIds }, paidAt: null }
       : {
           paidAt: null,
-          ...dueByWhere(endOfDay(new Date())),
           sale: customerId ? { customerId } : { id: { in: saleId ? [saleId] : saleIds! } },
         };
+    const where: Prisma.SaleInstallmentWhereInput = installmentIds
+      ? target
+      : { ...target, ...dueByWhere(endOfDay(new Date())) };
 
     const open = await context.db.saleInstallment.findMany({
       where,
       select: { id: true, saleId: true, amountCents: true },
     });
     if (open.length === 0) {
+      const futureCount = installmentIds ? 0 : await context.db.saleInstallment.count({ where: target });
+      if (futureCount > 0) {
+        return Response.json(
+          { error: "Só há parcelas a vencer. Informe installmentIds para receber antecipado.", futureCount },
+          { status: 409 },
+        );
+      }
       return Response.json({ error: "Nenhuma parcela em aberto encontrada." }, { status: 404 });
     }
 

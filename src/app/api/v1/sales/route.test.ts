@@ -254,15 +254,16 @@ describe("POST /api/v1/sales", () => {
     expect([sale.status, sale.openCents, sale.installmentCount]).toEqual(["PENDING", 10000, 3]);
   });
 
-  it("recusa parcelamento acima de 24", async () => {
+  it.each([30, 25, 0, -2, 2.5, "abc", null])("recusa installments inválido (%s)", async (installments) => {
     const { ws } = await seedMember();
     const item = await testDb.item.create({
       data: { name: "Bolo", unit: "UN", sellable: true, productionInput: false, workspaceId: ws.id },
     });
     const res = await POST(
-      postReq({ installments: 30, items: [{ itemId: item.id, productName: "Bolo", variantId: null, quantity: 1, unitPriceCents: 100 }] }),
+      postReq({ installments, items: [{ itemId: item.id, productName: "Bolo", variantId: null, quantity: 1, unitPriceCents: 100 }] }),
     );
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "O parcelamento deve ter de 2 a 24 parcelas." });
+    expect(await res.json()).toEqual({ error: "installments deve ser um inteiro de 1 a 24." });
+    expect(await testDb.sale.count({ where: { workspaceId: ws.id } })).toBe(0);
   });
 });

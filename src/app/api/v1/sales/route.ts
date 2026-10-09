@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { StockMovementType } from "@prisma/client";
 import { getMcpWorkspaceContext, assertMcpCanWrite, mcpErrorResponse } from "@/server/tenant/mcp-context";
-import { parsePaymentChoice, planPayment } from "@/lib/installments";
+import { MAX_INSTALLMENTS, parsePaymentChoice, planPayment } from "@/lib/installments";
 import { writeInstallments } from "@/server/sales/installments";
 import { buildSalesWhere, computeSalesSummary, type SalesFilters } from "@/server/queries/sales";
 
@@ -112,8 +112,11 @@ export async function POST(request: NextRequest) {
       forecastDate = parsed;
     }
     const count = body.installments === undefined ? 1 : Number(body.installments);
+    if (!Number.isInteger(count) || count < 1 || count > MAX_INSTALLMENTS) {
+      return Response.json({ error: `installments deve ser um inteiro de 1 a ${MAX_INSTALLMENTS}.` }, { status: 400 });
+    }
     const choice = parsePaymentChoice({
-      mode: count > 1 || count < 1 || !Number.isInteger(count) ? "INSTALLMENTS" : "CASH",
+      mode: count > 1 ? "INSTALLMENTS" : "CASH",
       status: count > 1 ? "PENDING" : body.status === "PENDING" ? "PENDING" : "PAID",
       count,
       preset: typeof body.forecastPreset === "string" ? body.forecastPreset : "",
