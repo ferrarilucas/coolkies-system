@@ -6,7 +6,7 @@ export const ROLE_LABEL: Record<string, string> = {
 
 export const ROLE_DESCRIPTION: Record<string, string> = {
   OWNER: "Acesso total, incluindo assinatura e exclusão do workspace",
-  ADMIN: "Também altera preços, receitas e cadastros",
+  ADMIN: "Também altera preços, fichas técnicas e cadastros",
   MEMBER: "Registra vendas, produção e compras",
 };
 

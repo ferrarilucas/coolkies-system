@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, ChefHat } from "lucide-react";
+import { Plus, ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -20,16 +20,16 @@ export default async function ProductionPage() {
         description="Histórico de produções"
         action={
           <Button asChild size="sm">
-            <Link href="/products/new"><Plus />Registrar produção</Link>
+            <Link href="/production/new"><Plus />Registrar produção</Link>
           </Button>
         }
       />
 
       {batches.length === 0 ? (
         <EmptyState
-          icon={ChefHat}
+          icon={ClipboardList}
           title="Nenhuma produção registrada"
-          action={<Button asChild><Link href="/products/new"><Plus />Registrar produção</Link></Button>}
+          action={<Button asChild><Link href="/production/new"><Plus />Registrar produção</Link></Button>}
         />
       ) : (
         <div className="space-y-2">
@@ -56,7 +56,7 @@ export default async function ProductionPage() {
                 </p>
               </div>
               <RowActions
-                editHref={`/products/${b.id}/edit`}
+                editHref={`/production/${b.id}/edit`}
                 deleteTitle="Excluir produção"
                 deleteDescription="Isso irá reverter o estoque adicionado por esta produção. Não é possível desfazer."
                 deleteSuccessMessage="Produção excluída."

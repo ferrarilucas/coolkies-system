@@ -113,7 +113,7 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
       });
       await writeProductionMovements(tx, workspaceId, batch.id, itemId, recipeId, quantity, variantLines);
     });
-    revalidatePath("/products");
+    revalidatePath("/production");
     revalidatePath("/stock");
     return { ok: true };
   } catch (e) {
@@ -137,7 +137,7 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
       await tx.productionBatch.update({ where: { id }, data: { itemId, recipeId, quantity, notes, producedAt } });
       await writeProductionMovements(tx, workspaceId, id, itemId, recipeId, quantity, variantLines);
     });
-    revalidatePath("/products");
+    revalidatePath("/production");
     revalidatePath("/stock");
     return { ok: true };
   } catch (e) {
@@ -155,7 +155,7 @@ export async function deleteProductionBatch(id: string): Promise<ActionResult> {
       db.productionVariantLine.deleteMany({ where: { productionBatchId: id } }),
       db.productionBatch.delete({ where: { id } }),
     ]);
-    revalidatePath("/products");
+    revalidatePath("/production");
     revalidatePath("/stock");
     return { ok: true };
   } catch {

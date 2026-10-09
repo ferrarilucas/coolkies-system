@@ -9,6 +9,13 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      { source: "/products/:path*", destination: "/production/:path*", permanent: true },
+      { source: "/products", destination: "/production", permanent: true },
+      { source: "/admin/ingredients", destination: "/admin/inputs", permanent: true },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

@@ -13,7 +13,7 @@ export default async function NewProductPage() {
     <div>
       <PageHeader
         title="Novo produto"
-        description="Nome, sabores e preços em um só lugar."
+        description="Nome, variações e preços em um só lugar."
         backHref="/admin/catalog"
       />
       <ProductEditor product={null} recipes={recipes} />

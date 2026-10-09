@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import {
   Building2,
   ChevronRight,
-  Cookie,
+  Factory,
   Palette,
   Settings,
   ShoppingBag,
@@ -55,10 +55,10 @@ export default async function MorePage() {
       icon: Building2,
     },
     {
-      href: "/products",
+      href: "/production",
       label: "Produção",
       description: "Histórico de produções",
-      icon: Cookie,
+      icon: Factory,
     },
     {
       href: "/stock",
@@ -83,7 +83,7 @@ export default async function MorePage() {
           {
             href: "/admin",
             label: "Configurações",
-            description: "Plano, produtos, sabores e receitas",
+            description: "Plano, produtos, variações e fichas técnicas",
             icon: Settings,
           },
         ]

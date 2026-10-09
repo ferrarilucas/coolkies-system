@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 import {
-  ChefHat,
-  Carrot,
+  ClipboardList,
+  Boxes,
   Tags,
   UserCheck,
   CreditCard,
@@ -34,20 +34,20 @@ export default async function AdminPage() {
       : []),
     {
       href: "/admin/recipes",
-      label: "Receitas",
-      description: "Passo a passo, ingredientes e custo estimado.",
-      icon: ChefHat,
+      label: "Fichas técnicas",
+      description: "Passo a passo, materiais e custo estimado.",
+      icon: ClipboardList,
     },
     {
-      href: "/admin/ingredients",
-      label: "Ingredientes",
-      description: "Itens usados nas receitas e estoque mínimo.",
-      icon: Carrot,
+      href: "/admin/inputs",
+      label: "Insumos",
+      description: "Itens usados nas fichas técnicas e estoque mínimo.",
+      icon: Boxes,
     },
     {
       href: "/admin/catalog",
       label: "Catálogo",
-      description: "Produtos, sabores e preços de venda.",
+      description: "Produtos, variações e preços de venda.",
       icon: Tags,
     },
     ...(isPlatformAdmin

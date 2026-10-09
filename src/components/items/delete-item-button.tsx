@@ -53,7 +53,7 @@ export function DeleteItemButton({ id, name }: Props) {
             <DialogTitle>Excluir insumo</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir <strong>{name}</strong>? Esta ação não pode ser
-              desfeita e pode afetar receitas que usam este insumo.
+              desfeita e pode afetar fichas técnicas que usam este insumo.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

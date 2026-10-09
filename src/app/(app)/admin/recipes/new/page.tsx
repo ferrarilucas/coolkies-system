@@ -8,7 +8,7 @@ export default async function NewRecipePage() {
   return (
     <div>
       <PageHeader
-        title="Nova receita"
+        title="Nova ficha técnica"
         backHref="/admin/recipes"
       />
       <RecipeForm availableIngredients={ingredients} />

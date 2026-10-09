@@ -47,7 +47,7 @@ export async function createItem(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "Já existe um item com esse nome." };
   }
 
-  revalidatePath("/admin/ingredients");
+  revalidatePath("/admin/inputs");
   return { ok: true };
 }
 
@@ -72,7 +72,7 @@ export async function updateItem(id: string, formData: FormData): Promise<Action
     return { ok: false, error: "Já existe um item com esse nome." };
   }
 
-  revalidatePath("/admin/ingredients");
+  revalidatePath("/admin/inputs");
   return { ok: true };
 }
 
@@ -84,7 +84,7 @@ export async function deleteItem(id: string): Promise<ActionResult> {
   } catch {
     return { ok: false, error: "Não foi possível excluir. O item pode estar em uso." };
   }
-  revalidatePath("/admin/ingredients");
+  revalidatePath("/admin/inputs");
   return { ok: true };
 }
 
@@ -112,7 +112,7 @@ export async function createItemForPurchase(
 
   try {
     const item = await db.item.create({ data: { name, unit, productionInput, sellable, workspaceId } });
-    revalidatePath("/admin/ingredients");
+    revalidatePath("/admin/inputs");
     return { ok: true, data: { id: item.id, name: item.name, unit: item.unit, productionInput, sellable } };
   } catch {
     return { ok: false, error: "Já existe um item com esse nome." };

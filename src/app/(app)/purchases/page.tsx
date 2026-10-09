@@ -64,7 +64,7 @@ export default async function PurchasesPage() {
               description={
                 items.length === 0
                   ? "Registre sua primeira compra — você pode criar o insumo direto no formulário."
-                  : "Registre sua primeira compra para calcular o custo das receitas e o lucro de itens revendidos."
+                  : "Registre sua primeira compra para calcular o custo das fichas técnicas e o lucro de itens revendidos."
               }
               action={<PurchaseDialog suppliers={suppliers} ingredients={items} />}
             />

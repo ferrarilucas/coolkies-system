@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Plus, Trash2, ChefHat } from "lucide-react";
+import { Plus, Trash2, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +94,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
     if (!itemId) { toast.error("Selecione um item."); return; }
     if (totalQty <= 0) { toast.error("Quantidade deve ser maior que zero."); return; }
     if (variantLinesExceeded) { toast.error("Total de variantes excede a quantidade produzida."); return; }
-    if (variantLinesIncomplete) { toast.error(`Distribua todos os ${totalQty} cookies entre as variantes (faltam ${totalQty - variantLinesTotal}).`); return; }
+    if (variantLinesIncomplete) { toast.error(`Distribua todas as ${totalQty} unidades entre as variações (faltam ${totalQty - variantLinesTotal}).`); return; }
 
     const fd = new FormData();
     fd.set("itemId", itemId);
@@ -113,7 +113,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
 
       if (res.ok) {
         toast.success(batchId ? "Produção atualizada." : "Produção registrada.");
-        router.push("/products");
+        router.push("/production");
         router.refresh();
       } else {
         toast.error(res.error ?? "Erro ao salvar.");
@@ -145,14 +145,14 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
 
           <div className="space-y-2">
             <Label>
-              Receita base <span className="text-muted-foreground">(opcional)</span>
+              Ficha técnica base <span className="text-muted-foreground">(opcional)</span>
             </Label>
             <Select value={recipeId} onValueChange={setRecipeId}>
               <SelectTrigger>
-                <SelectValue placeholder="Selecione a receita…" />
+                <SelectValue placeholder="Selecione a ficha técnica…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_RECIPE}>Sem receita</SelectItem>
+                <SelectItem value={NO_RECIPE}>Sem ficha técnica</SelectItem>
                 {recipes.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name} (rende {r.yieldQty})
@@ -176,7 +176,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
             />
             {selectedRecipe && (
               <p className="text-xs text-muted-foreground">
-                Equivale a {(totalQty / selectedRecipe.yieldQty).toFixed(1)} lote(s) da receita
+                Equivale a {(totalQty / selectedRecipe.yieldQty).toFixed(1)} lote(s) da ficha técnica
               </p>
             )}
           </div>
@@ -283,11 +283,11 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
 
       {/* ── Ações ─────────────────────────────────────────────────────── */}
       <div className="flex justify-end gap-3 pb-8">
-        <Button type="button" variant="outline" onClick={() => router.push("/products")} disabled={saving}>
+        <Button type="button" variant="outline" onClick={() => router.push("/production")} disabled={saving}>
           Cancelar
         </Button>
         <Button type="submit" disabled={saving || !itemId || totalQty <= 0}>
-          <ChefHat className="size-4" />
+          <ClipboardList className="size-4" />
           {saving ? "Salvando…" : batchId ? "Salvar produção" : "Registrar produção"}
         </Button>
       </div>

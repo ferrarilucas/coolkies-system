@@ -1,4 +1,4 @@
-import { Carrot } from "lucide-react";
+import { Boxes } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -16,16 +16,16 @@ export default async function IngredientsPage() {
     <div>
       <PageHeader
         title="Insumos"
-        description="Itens usados nas receitas ou comprados para revenda."
+        description="Itens usados nas fichas técnicas ou comprados para revenda."
         backHref="/admin"
         action={<ItemDialog mode="create" />}
       />
 
       {items.length === 0 ? (
         <EmptyState
-          icon={Carrot}
+          icon={Boxes}
           title="Nenhum insumo"
-          description="Cadastre os insumos que você usa nas receitas."
+          description="Cadastre os insumos que você usa nas fichas técnicas."
           action={<ItemDialog mode="create" />}
         />
       ) : (

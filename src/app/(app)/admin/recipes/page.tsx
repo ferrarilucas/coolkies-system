@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChefHat, Pencil, Plus } from "lucide-react";
+import { ClipboardList, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,14 @@ export default async function RecipesPage() {
   return (
     <div>
       <PageHeader
-        title="Receitas"
-        description="Ingredientes, passo a passo e custo estimado."
+        title="Fichas técnicas"
+        description="Materiais, passo a passo e custo estimado."
         backHref="/admin"
         action={
           <Button size="sm" asChild>
             <Link href="/admin/recipes/new">
               <Plus />
-              Nova receita
+              Nova ficha técnica
             </Link>
           </Button>
         }
@@ -29,14 +29,14 @@ export default async function RecipesPage() {
 
       {recipes.length === 0 ? (
         <EmptyState
-          icon={ChefHat}
-          title="Nenhuma receita"
-          description="Crie sua primeira receita com passo a passo e cálculo de custo."
+          icon={ClipboardList}
+          title="Nenhuma ficha técnica"
+          description="Crie sua primeira ficha técnica com passo a passo e cálculo de custo."
           action={
             <Button asChild>
               <Link href="/admin/recipes/new">
                 <Plus />
-                Nova receita
+                Nova ficha técnica
               </Link>
             </Button>
           }
@@ -57,7 +57,7 @@ export default async function RecipesPage() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
                   <span>
-                    {recipe.ingredientCount} ingrediente{recipe.ingredientCount !== 1 ? "s" : ""}
+                    {recipe.ingredientCount} {recipe.ingredientCount === 1 ? "material" : "materiais"}
                   </span>
                   {recipe.costPerUnitCents != null ? (
                     <span>

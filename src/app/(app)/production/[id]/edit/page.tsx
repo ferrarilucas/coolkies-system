@@ -37,7 +37,7 @@ export default async function EditProductionPage({
 
   return (
     <div>
-      <PageHeader title="Editar produção" backHref="/products" />
+      <PageHeader title="Editar produção" backHref="/production" />
       <ProductionForm
         batchId={id}
         items={items}

@@ -66,7 +66,7 @@ export function DashboardFilters({
   function apply(next: Partial<typeof current>) {
     const params = new URLSearchParams(searchParams.toString());
     const merged = { ...current, ...next };
-    // sabor depende do produto
+    // variação depende do produto
     if (next.itemId !== undefined) merged.variantId = undefined;
 
     const setOrDel = (k: string, v?: string) => {
@@ -218,9 +218,9 @@ export function DashboardFilters({
               items={options.products}
             />
 
-            {/* Sabor */}
+            {/* Variação */}
             <FilterSelect
-              label="Sabor"
+              label="Variação"
               value={current.variantId || ALL}
               onChange={(v) => apply({ variantId: v === ALL ? undefined : v })}
               placeholder={current.itemId ? "Todos" : "Selecione produto"}

@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, ChefHat } from "lucide-react";
+import { Plus, Trash2, ClipboardList } from "lucide-react";
 import type { Block, PartialBlock } from "@blocknote/core";
 
 import { Button } from "@/components/ui/button";
@@ -159,7 +159,7 @@ export function RecipeForm({
   }, []);
 
   function handleSubmit() {
-    if (!name.trim()) { toast.error("Nome da receita obrigatório."); return; }
+    if (!name.trim()) { toast.error("Nome da ficha técnica obrigatório."); return; }
 
     const fd = new FormData();
     if (recipeId) fd.set("id", recipeId);
@@ -184,7 +184,7 @@ export function RecipeForm({
     startSaving(async () => {
       const res = await saveRecipe(fd);
       if (res.ok) {
-        toast.success(recipeId ? "Receita atualizada." : "Receita criada.");
+        toast.success(recipeId ? "Ficha técnica atualizada." : "Ficha técnica criada.");
         router.push("/admin/recipes");
         router.refresh();
       } else {
@@ -203,12 +203,12 @@ export function RecipeForm({
         </h2>
 
         <div className="space-y-2">
-          <Label htmlFor="recipe-name">Nome da receita</Label>
+          <Label htmlFor="recipe-name">Nome da ficha técnica</Label>
           <Input
             id="recipe-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ex.: Cookie de Chocolate"
+            placeholder="Ex.: Camiseta básica"
             required
             autoFocus
           />
@@ -255,7 +255,7 @@ export function RecipeForm({
       {/* ── Ingredientes ─────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Ingredientes
+          Materiais
         </h2>
 
         <div className="space-y-2">
@@ -333,7 +333,7 @@ export function RecipeForm({
 
         <Button type="button" variant="outline" className="w-full gap-2" onClick={addLine}>
           <Plus className="size-4" />
-          Adicionar ingrediente
+          Adicionar material
         </Button>
       </section>
 
@@ -363,8 +363,8 @@ export function RecipeForm({
           Cancelar
         </Button>
         <Button onClick={handleSubmit} disabled={saving}>
-          <ChefHat className="size-4" />
-          {saving ? "Salvando..." : recipeId ? "Salvar receita" : "Criar receita"}
+          <ClipboardList className="size-4" />
+          {saving ? "Salvando..." : recipeId ? "Salvar ficha técnica" : "Criar ficha técnica"}
         </Button>
       </div>
     </div>

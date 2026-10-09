@@ -22,7 +22,7 @@ export function DeleteRecipeButton({ id, name }: { id: string; name: string }) {
     startTransition(async () => {
       const res = await deleteRecipe(id);
       if (res.ok) {
-        toast.success("Receita excluída.");
+        toast.success("Ficha técnica excluída.");
         setOpen(false);
       } else {
         toast.error(res.error ?? "Erro ao excluir.");
@@ -44,7 +44,7 @@ export function DeleteRecipeButton({ id, name }: { id: string; name: string }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir receita</DialogTitle>
+            <DialogTitle>Excluir ficha técnica</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir <strong>{name}</strong>? Esta ação não pode ser
               desfeita.

@@ -41,7 +41,7 @@ export function VariantMixChart({ data }: { data: Slice[] }) {
 
   const chartData = slices.map((s) => ({
     ...s,
-    shortLabel: s.label.replace(/^Cookie\s+/i, ""),
+    shortLabel: s.label,
   }));
 
   const height = Math.max(180, chartData.length * 36);

@@ -30,7 +30,7 @@ const rightItems: NavItem[] = [
     href: "/more",
     label: "Ajustes",
     icon: Menu,
-    extraPrefixes: ["/products", "/stock", "/purchases", "/admin", "/workspaces"],
+    extraPrefixes: ["/production", "/stock", "/purchases", "/admin", "/workspaces"],
   },
 ];
 

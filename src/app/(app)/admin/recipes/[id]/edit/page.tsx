@@ -21,7 +21,7 @@ export default async function EditRecipePage({
     <div>
       <PageHeader
         title={recipe.name}
-        description="Editar receita"
+        description="Editar ficha técnica"
         backHref="/admin/recipes"
       />
       <RecipeForm

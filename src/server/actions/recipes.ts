@@ -115,7 +115,7 @@ export async function createItemInline(formData: FormData): Promise<ActionResult
 
   try {
     const item = await db.item.create({ data: { name, unit, productionInput: true, workspaceId } });
-    revalidatePath("/admin/ingredients");
+    revalidatePath("/admin/inputs");
     return { ok: true, data: { id: item.id, name: item.name, unit: item.unit } };
   } catch {
     return { ok: false, error: "Já existe um item com esse nome." };

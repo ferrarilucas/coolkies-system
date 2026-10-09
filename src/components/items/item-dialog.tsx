@@ -150,7 +150,7 @@ export function ItemDialog({ mode, item }: Props) {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Label htmlFor="item-production-input">Matéria-prima</Label>
-                <p className="text-xs text-muted-foreground">Entra em receitas e produção.</p>
+                <p className="text-xs text-muted-foreground">Entra em fichas técnicas e produção.</p>
               </div>
               <Switch
                 id="item-production-input"

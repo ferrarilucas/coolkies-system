@@ -22,7 +22,7 @@ export default async function EditProductPage({
     <div>
       <PageHeader
         title={product.name}
-        description="Sabores e preços deste produto."
+        description="Variações e preços deste produto."
         backHref="/admin/catalog"
       />
       <ProductEditor product={product} recipes={recipes} />

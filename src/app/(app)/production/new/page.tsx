@@ -17,7 +17,7 @@ export default async function NewProductionPage() {
 
   return (
     <div>
-      <PageHeader title="Registrar produção" backHref="/products" />
+      <PageHeader title="Registrar produção" backHref="/production" />
       <ProductionForm items={items} variants={variants} recipes={recipes} />
     </div>
   );
