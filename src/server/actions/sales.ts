@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
+import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
+import { toPlans, writeInstallments } from "@/server/sales/installments";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -32,6 +34,29 @@ function parseDiscount(formData: FormData): { discountType: DiscountType | null;
   return { discountType, discountValue };
 }
 
+function readPaymentFields(formData: FormData): PaymentFields {
+  const dateRaw = String(formData.get("forecastDate") ?? "").trim();
+  return {
+    mode: String(formData.get("paymentMode") ?? "CASH"),
+    status: String(formData.get("status") ?? "PAID"),
+    count: parseInt(String(formData.get("installmentCount") ?? "1"), 10) || 1,
+    preset: String(formData.get("forecastPreset") ?? ""),
+    dueDate: dateRaw ? new Date(`${dateRaw}T12:00:00`) : null,
+  };
+}
+
+function saleItemsCreate(items: SaleItemInput[], workspaceId: string) {
+  return items.map((item) => ({
+    itemId: item.itemId,
+    productNameSnapshot: item.productName,
+    variantId: item.variantId,
+    variantNameSnapshot: item.variantName,
+    quantity: item.quantity,
+    unitPriceSnapshot: item.unitPriceCents,
+    workspaceId,
+  }));
+}
+
 // ─── Criar venda ─────────────────────────────────────────────────────────────
 
 export async function createSale(formData: FormData): Promise<ActionResult<{ id: string }>> {
@@ -43,11 +68,9 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
   const soldAtRaw = String(formData.get("soldAt") ?? "").trim();
   const soldAt = soldAtRaw ? new Date(`${soldAtRaw}T12:00:00`) : new Date();
   const notes = String(formData.get("notes") ?? "").trim() || null;
-  const status = String(formData.get("status") ?? "PAID") as "PAID" | "PENDING";
-  const forecastPreset =
-    (String(formData.get("forecastPreset") ?? "") as "DAY_FIVE" | "FIFTH_BUSINESS_DAY" | "CUSTOM" | "") || null;
-  const forecastDateRaw = String(formData.get("forecastDate") ?? "").trim();
-  const paymentForecastDate = forecastDateRaw ? new Date(`${forecastDateRaw}T12:00:00`) : null;
+
+  const choice = parsePaymentChoice(readPaymentFields(formData));
+  if ("error" in choice) return { ok: false, error: choice.error };
 
   const { discountType, discountValue } = parseDiscount(formData);
 
@@ -65,48 +88,40 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
   const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
   const totalCents = subtotalCents - discountCents;
 
-  try {
-    const sale = await db.sale.create({
-      data: {
-        userId,
-        customerId,
-        customerName,
-        soldAt,
-        notes,
-        status,
-        paidAt: status === "PAID" ? new Date() : null,
-        paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
-        forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
-        discountType,
-        discountValue,
-        totalCents,
-        workspaceId,
-        items: {
-          create: items.map((item) => ({
-            itemId: item.itemId,
-            productNameSnapshot: item.productName,
-            variantId: item.variantId,
-            variantNameSnapshot: item.variantName,
-            quantity: item.quantity,
-            unitPriceSnapshot: item.unitPriceCents,
-            workspaceId,
-          })),
-        },
-      },
-    });
+  const plan = planPayment(choice, totalCents, [], new Date());
+  if (!plan.ok) return { ok: false, error: plan.error };
 
-    for (const item of items) {
-      await db.stockMovement.create({
+  try {
+    const sale = await db.$transaction(async (tx) => {
+      const created = await tx.sale.create({
         data: {
-          itemId: item.itemId,
-          variantId: item.variantId,
-          type: StockMovementType.SALE,
-          quantity: -item.quantity,
-          saleId: sale.id,
+          userId,
+          customerId,
+          customerName,
+          soldAt,
+          notes,
+          discountType,
+          discountValue,
+          totalCents,
           workspaceId,
+          items: { create: saleItemsCreate(items, workspaceId) },
         },
       });
-    }
+      for (const item of items) {
+        await tx.stockMovement.create({
+          data: {
+            itemId: item.itemId,
+            variantId: item.variantId,
+            type: StockMovementType.SALE,
+            quantity: -item.quantity,
+            saleId: created.id,
+            workspaceId,
+          },
+        });
+      }
+      await writeInstallments(tx, created.id, workspaceId, plan.installments);
+      return created;
+    });
 
     revalidatePath("/sales");
     revalidatePath("/stock");
@@ -128,11 +143,9 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const soldAtRaw = String(formData.get("soldAt") ?? "").trim();
   const soldAt = soldAtRaw ? new Date(`${soldAtRaw}T12:00:00`) : new Date();
   const notes = String(formData.get("notes") ?? "").trim() || null;
-  const status = String(formData.get("status") ?? "PAID") as "PAID" | "PENDING";
-  const forecastPreset =
-    (String(formData.get("forecastPreset") ?? "") as "DAY_FIVE" | "FIFTH_BUSINESS_DAY" | "CUSTOM" | "") || null;
-  const forecastDateRaw = String(formData.get("forecastDate") ?? "").trim();
-  const paymentForecastDate = forecastDateRaw ? new Date(`${forecastDateRaw}T12:00:00`) : null;
+
+  const choice = parsePaymentChoice(readPaymentFields(formData));
+  if ("error" in choice) return { ok: false, error: choice.error };
 
   const { discountType, discountValue } = parseDiscount(formData);
 
@@ -149,50 +162,41 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
   const totalCents = subtotalCents - discountCents;
 
+  const existing = await db.saleInstallment.findMany({ where: { saleId: id }, orderBy: { number: "asc" } });
+  const plan = planPayment(choice, totalCents, toPlans(existing), new Date());
+  if (!plan.ok) return { ok: false, error: plan.error };
+
   try {
-    await db.stockMovement.deleteMany({ where: { saleId: id } });
-    await db.saleItem.deleteMany({ where: { saleId: id } });
-
-    await db.sale.update({
-      where: { id },
-      data: {
-        customerId,
-        customerName,
-        soldAt,
-        notes,
-        status,
-        paidAt: status === "PAID" ? new Date() : null,
-        paymentForecastDate: status === "PENDING" ? paymentForecastDate : null,
-        forecastPreset: status === "PENDING" && forecastPreset ? forecastPreset : null,
-        discountType,
-        discountValue,
-        totalCents,
-        items: {
-          create: items.map((item) => ({
-            itemId: item.itemId,
-            productNameSnapshot: item.productName,
-            variantId: item.variantId,
-            variantNameSnapshot: item.variantName,
-            quantity: item.quantity,
-            unitPriceSnapshot: item.unitPriceCents,
-            workspaceId,
-          })),
-        },
-      },
-    });
-
-    for (const item of items) {
-      await db.stockMovement.create({
+    await db.$transaction(async (tx) => {
+      await tx.stockMovement.deleteMany({ where: { saleId: id } });
+      await tx.saleItem.deleteMany({ where: { saleId: id } });
+      await tx.sale.update({
+        where: { id },
         data: {
-          itemId: item.itemId,
-          variantId: item.variantId,
-          type: StockMovementType.SALE,
-          quantity: -item.quantity,
-          saleId: id,
-          workspaceId,
+          customerId,
+          customerName,
+          soldAt,
+          notes,
+          discountType,
+          discountValue,
+          totalCents,
+          items: { create: saleItemsCreate(items, workspaceId) },
         },
       });
-    }
+      for (const item of items) {
+        await tx.stockMovement.create({
+          data: {
+            itemId: item.itemId,
+            variantId: item.variantId,
+            type: StockMovementType.SALE,
+            quantity: -item.quantity,
+            saleId: id,
+            workspaceId,
+          },
+        });
+      }
+      await writeInstallments(tx, id, workspaceId, plan.installments);
+    });
 
     revalidatePath("/sales");
     revalidatePath("/stock");
@@ -202,6 +206,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
     return { ok: false, error: "Erro ao atualizar venda." };
   }
 }
+
 
 // ─── Marcar como pago ────────────────────────────────────────────────────────
 
