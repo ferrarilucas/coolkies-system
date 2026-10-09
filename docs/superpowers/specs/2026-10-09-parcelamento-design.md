@@ -45,6 +45,14 @@ R$ 66,67 em aberto.
     `paidAt`. Previsto: cada parcela em aberto no bucket do seu `dueDate`.
     Uma venda de R$ 300 em 3x entra no previsto R$ 100 por mês, não R$ 300 no
     mês da venda. "Vencidas" passa a significar parcela vencida.
+11. **À vista é sempre regravada a partir do formulário.** "Pago agora" vira
+    uma parcela paga (preservando a data de pagamento anterior se a venda já
+    estava quitada); "Pendente" vira uma parcela em aberto. Mudar uma venda
+    parcelada com parcela paga para "à vista pendente" é recusado.
+12. **"Receber tudo de X" (tela de vendas filtrada por cliente) abre o mesmo
+    diálogo de cobrança por parcela** em vez de quitar direto. O diálogo já
+    vem com as parcelas vencidas até hoje marcadas; as futuras aparecem
+    desmarcadas.
 
 ## Modelo de dados
 
@@ -71,7 +79,8 @@ model SaleInstallment {
 }
 ```
 
-`Sale` ganha `installmentCount Int @default(1)` e a relação `installments`.
+`Sale` ganha `installmentCount Int @default(1)`, `openCents Int @default(0)`
+(soma das parcelas em aberto, também resumo) e a relação `installments`.
 
 `dueDate` é nulo apenas em parcela única paga no ato (venda à vista "Pago
 agora").
@@ -80,8 +89,9 @@ agora").
 
 1. Cria `sale_installment` e `sale.installment_count`.
 2. Backfill: uma parcela `number = 1` por venda existente, com
-   `amount_cents = total_cents`, `due_date = payment_forecast_date`,
-   `forecast_preset = forecast_preset`, `paid_at = paid_at`.
+   `amountCents = totalCents`, `dueDate = paymentForecastDate`,
+   `forecastPreset = forecastPreset`, `paidAt = paidAt`; e
+   `openCents = totalCents` nas vendas `PENDING`.
 3. Aplicada em `cookies` e `cookies_test` via docker psql.
 
 ## Regras de cálculo (`src/lib/installments.ts`)
@@ -93,8 +103,8 @@ Funções puras, testadas isoladamente:
 - `redistribute(installments, newTotalCents, newCount)` → parcelas pagas
   preservadas, saldo redividido nas em aberto, vencimentos das novas parcelas
   continuando a sequência.
-- `summarize(installments)` → `{ status, paidAt, paymentForecastDate }` para
-  gravar na `Sale`.
+- `summarize(installments)` → `{ status, paidAt, paymentForecastDate,
+  forecastPreset, openCents, installmentCount }` para gravar na `Sale`.
 
 Toda escrita em parcelas acontece em transação junto com a atualização do
 resumo na `Sale`.
@@ -111,7 +121,8 @@ resumo na `Sale`.
   Resumo "pendente" e "vencido" somam parcelas em aberto, não `totalCents`.
 - **Cobrança do cliente (`customer-collect-dialog.tsx`):** uma linha por
   parcela em aberto ("Venda 09/10 · parcela 2/3 · vence 05/12"), com seleção
-  individual. "Receber tudo" marca só as parcelas listadas pelo filtro de data.
+  individual. Abre com as parcelas vencidas até hoje (ou sem vencimento)
+  marcadas.
 - **Painel:** conforme decisão 10.
 - **PDF do cliente e exportação CSV:** uma linha por parcela em aberto; a
   exportação ganha colunas de parcelas pagas/total e valor em aberto.
