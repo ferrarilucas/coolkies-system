@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { testDb, resetDb, createWorkspace } from "@/test/db";
+import { testDb, resetDb, createWorkspace, backfillSaleInstallments } from "@/test/db";
+import { seedParceledSale } from "@/test/sales";
 import { scopedDb } from "@/server/tenant/extension";
 
 const context = { workspaceId: "", userId: "" };
@@ -8,7 +9,7 @@ vi.mock("@/server/tenant/context", () => ({
   getWorkspaceDb: async () => scopedDb(context.workspaceId),
 }));
 
-const { getCustomersWithBalance, getPendingSalesByCustomer, getCustomerSectors } =
+const { getCustomersWithBalance, getOpenInstallmentsByCustomer, getCustomerSectors } =
   await import("./customers");
 
 const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -27,7 +28,7 @@ async function seedSale(
   customerId: string,
   data: { totalCents: number; status?: "PAID" | "PENDING"; forecast?: Date; soldAt?: Date },
 ) {
-  return testDb.sale.create({
+  const sale = await testDb.sale.create({
     data: {
       workspaceId: context.workspaceId,
       userId: context.userId,
@@ -38,6 +39,8 @@ async function seedSale(
       paymentForecastDate: data.forecast ?? null,
     },
   });
+  await backfillSaleInstallments();
+  return sale;
 }
 
 describe("getCustomersWithBalance", () => {
@@ -149,7 +152,7 @@ describe("getCustomersWithBalance", () => {
   });
 });
 
-describe("getPendingSalesByCustomer", () => {
+describe("getOpenInstallmentsByCustomer", () => {
   let ana = "";
 
   beforeEach(async () => {
@@ -168,10 +171,10 @@ describe("getPendingSalesByCustomer", () => {
     const antiga = await seedSale(ana, { totalCents: 200, soldAt: new Date("2026-08-01T10:00:00Z") });
     await seedSale(ana, { totalCents: 300, status: "PAID" });
 
-    const result = await getPendingSalesByCustomer(ana);
+    const result = await getOpenInstallmentsByCustomer(ana);
 
-    expect(result.map((s) => s.id)).toEqual([antiga.id, nova.id]);
-    expect(result[0].totalCents).toBe(200);
+    expect(result.map((s) => s.sale.id)).toEqual([antiga.id, nova.id]);
+    expect(result[0].amountCents).toBe(200);
   });
 
   it("lista só as vendas previstas até a data do filtro, incluindo as sem previsão", async () => {
@@ -179,9 +182,40 @@ describe("getPendingSalesByCustomer", () => {
     const proxima = await seedSale(ana, { totalCents: 200, forecast: TOMORROW });
     await seedSale(ana, { totalCents: 300, forecast: NEXT_MONTH });
 
-    const result = await getPendingSalesByCustomer(ana, isoDay(TOMORROW));
+    const result = await getOpenInstallmentsByCustomer(ana, isoDay(TOMORROW));
 
-    expect(new Set(result.map((s) => s.id))).toEqual(new Set([semPrevisao.id, proxima.id]));
+    expect(new Set(result.map((s) => s.sale.id))).toEqual(new Set([semPrevisao.id, proxima.id]));
+  });
+});
+
+describe("getOpenInstallmentsByCustomer parcelada", () => {
+  let ana = "";
+
+  beforeEach(async () => {
+    await resetDb();
+    const workspace = await createWorkspace("Cookies");
+    const user = await testDb.user.create({
+      data: { id: `user-${workspace.id}`, name: "Dono", email: `dono-${workspace.id}@ex.com` },
+    });
+    context.workspaceId = workspace.id;
+    context.userId = user.id;
+    ana = (await testDb.customer.create({ data: { name: "Ana", workspaceId: workspace.id } })).id;
+  });
+
+  it("lista parcelas em aberto de venda parcelada, respeitando o corte de data", async () => {
+    const sale = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      customerId: ana,
+      parcels: [
+        { amountCents: 3333, dueDate: new Date(2026, 10, 5, 12), paidAt: new Date(2026, 10, 5, 12) },
+        { amountCents: 3333, dueDate: new Date(2026, 11, 5, 12) },
+        { amountCents: 3334, dueDate: new Date(2027, 0, 5, 12) },
+      ],
+    });
+
+    const rows = await getOpenInstallmentsByCustomer(ana, "2026-12-31");
+
+    expect(rows.filter((r) => r.sale.id === sale.id).map((r) => [r.number, r.amountCents])).toEqual([[2, 3333]]);
   });
 });
 

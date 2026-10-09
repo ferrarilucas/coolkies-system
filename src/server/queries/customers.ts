@@ -1,10 +1,11 @@
 "use server";
 
 import { getWorkspaceDb } from "@/server/tenant/context";
+import { dueByWhere } from "@/server/sales/installments";
 import {
+  aggregateOpenInstallments,
   buildCustomerBalances,
   parseForecastCutoff,
-  type CustomerPendingRow,
   type CustomerSituation,
   type WithBalance,
 } from "@/lib/customer-balance";
@@ -85,16 +86,9 @@ export type CustomerBalanceQuery = {
   forecastTo?: string;
 };
 
-/**
- * Recorte das vendas pendentes por data prevista de pagamento.
- * Vendas sem previsão entram no recorte: não há data futura a esperar.
- */
-function pendingForecastWhere(forecastTo?: string) {
+function openInstallmentsWhere(forecastTo?: string) {
   const cutoff = parseForecastCutoff(forecastTo);
-  if (!cutoff) return {};
-  return {
-    OR: [{ paymentForecastDate: { lte: cutoff } }, { paymentForecastDate: null }],
-  };
+  return { paidAt: null, ...(cutoff ? dueByWhere(cutoff) : {}) };
 }
 
 export type CustomerWithBalance = WithBalance<
@@ -126,42 +120,37 @@ export async function getCustomersWithBalance(
     include: { _count: { select: { sales: true } } },
   });
 
-  const grouped = await db.sale.groupBy({
-    by: ["customerId"],
+  const open = await db.saleInstallment.findMany({
     where: {
-      status: "PENDING",
-      customerId: { in: customers.map((c) => c.id) },
-      ...pendingForecastWhere(filters.forecastTo),
+      ...openInstallmentsWhere(filters.forecastTo),
+      sale: { customerId: { in: customers.map((c) => c.id) } },
     },
-    _sum: { totalCents: true },
-    _count: { _all: true },
-    _min: { paymentForecastDate: true },
+    select: { saleId: true, amountCents: true, dueDate: true, sale: { select: { customerId: true } } },
   });
 
-  const pendingRows: CustomerPendingRow[] = grouped
-    .filter((row): row is typeof row & { customerId: string } => row.customerId !== null)
-    .map((row) => ({
-      customerId: row.customerId,
-      pendingCents: row._sum.totalCents ?? 0,
-      pendingCount: row._count._all,
-      oldestForecastDate: row._min.paymentForecastDate,
-    }));
+  const pendingRows = aggregateOpenInstallments(
+    open.map((row) => ({
+      saleId: row.saleId,
+      customerId: row.sale.customerId,
+      amountCents: row.amountCents,
+      dueDate: row.dueDate,
+    })),
+  );
 
   return buildCustomerBalances(customers, pendingRows, filters);
 }
 
-/** Vendas pendentes de um cliente, da mais antiga para a mais recente. */
-export async function getPendingSalesByCustomer(customerId: string, forecastTo?: string) {
+export async function getOpenInstallmentsByCustomer(customerId: string, forecastTo?: string) {
   const db = await getWorkspaceDb();
-  return db.sale.findMany({
-    where: { customerId, status: "PENDING", ...pendingForecastWhere(forecastTo) },
-    orderBy: { soldAt: "asc" },
+  return db.saleInstallment.findMany({
+    where: { ...openInstallmentsWhere(forecastTo), sale: { customerId } },
+    orderBy: [{ sale: { soldAt: "asc" } }, { number: "asc" }],
     select: {
       id: true,
-      soldAt: true,
-      totalCents: true,
-      paymentForecastDate: true,
-      notes: true,
+      number: true,
+      amountCents: true,
+      dueDate: true,
+      sale: { select: { id: true, soldAt: true, installmentCount: true, notes: true } },
     },
   });
 }
@@ -183,6 +172,8 @@ export type CustomerReportSale = {
   soldAt: Date;
   status: "PAID" | "PENDING";
   totalCents: number;
+  installmentCount: number;
+  openInstallments: { number: number; amountCents: number; dueDate: Date | null }[];
   items: {
     id: string;
     quantity: number;
@@ -220,6 +211,13 @@ export async function getCustomerReport(
       soldAt: true,
       status: true,
       totalCents: true,
+      installmentCount: true,
+      openCents: true,
+      installments: {
+        where: { paidAt: null },
+        orderBy: { number: "asc" },
+        select: { number: true, amountCents: true, dueDate: true },
+      },
       items: {
         select: {
           id: true,
@@ -233,9 +231,21 @@ export async function getCustomerReport(
   });
 
   const totalCents = sales.reduce((sum, s) => sum + s.totalCents, 0);
-  const paidCents = sales
-    .filter((s) => s.status === "PAID")
-    .reduce((sum, s) => sum + s.totalCents, 0);
+  const pendingCents = sales.reduce((sum, s) => sum + s.openCents, 0);
 
-  return { customer, sales, totalCents, paidCents, pendingCents: totalCents - paidCents };
+  return {
+    customer,
+    sales: sales.map((s) => ({
+      id: s.id,
+      soldAt: s.soldAt,
+      status: s.status,
+      totalCents: s.totalCents,
+      installmentCount: s.installmentCount,
+      items: s.items,
+      openInstallments: s.installments,
+    })),
+    totalCents,
+    paidCents: totalCents - pendingCents,
+    pendingCents,
+  };
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDb, testDb, createWorkspace } from "@/test/db";
+import { resetDb, testDb, createWorkspace, backfillSaleInstallments } from "@/test/db";
 import { scopedDb } from "@/server/tenant/extension";
 
 const context = { workspaceId: "" };
@@ -46,6 +46,8 @@ describe("getSalesForExport", () => {
       },
     });
 
+    await backfillSaleInstallments();
+
     const rows = await getSalesForExport();
 
     expect(rows).toEqual([
@@ -55,6 +57,8 @@ describe("getSalesForExport", () => {
         status: "Pago",
         totalCents: 5000,
         paymentForecastDate: "",
+        installments: "",
+        openCents: 0,
       },
       {
         soldAt: "2026-09-06",
@@ -62,6 +66,8 @@ describe("getSalesForExport", () => {
         status: "Pendente",
         totalCents: 2000,
         paymentForecastDate: "2026-09-20",
+        installments: "",
+        openCents: 2000,
       },
     ]);
   });

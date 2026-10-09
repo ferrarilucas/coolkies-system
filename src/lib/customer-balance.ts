@@ -56,3 +56,23 @@ export function buildCustomerBalances<T extends { id: string }>(
     return customer.pendingCents >= minDueCents;
   });
 }
+
+export function aggregateOpenInstallments(
+  rows: { saleId: string; customerId: string | null; amountCents: number; dueDate: Date | null }[],
+): CustomerPendingRow[] {
+  const byCustomer = new Map<string, { pendingCents: number; sales: Set<string>; oldest: Date | null }>();
+  for (const row of rows) {
+    if (!row.customerId) continue;
+    const entry = byCustomer.get(row.customerId) ?? { pendingCents: 0, sales: new Set<string>(), oldest: null };
+    entry.pendingCents += row.amountCents;
+    entry.sales.add(row.saleId);
+    if (row.dueDate && (!entry.oldest || row.dueDate < entry.oldest)) entry.oldest = row.dueDate;
+    byCustomer.set(row.customerId, entry);
+  }
+  return [...byCustomer].map(([customerId, e]) => ({
+    customerId,
+    pendingCents: e.pendingCents,
+    pendingCount: e.sales.size,
+    oldestForecastDate: e.oldest,
+  }));
+}

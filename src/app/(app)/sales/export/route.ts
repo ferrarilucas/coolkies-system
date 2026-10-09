@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
       { key: "status", label: "Status" },
       { key: "totalReais", label: "Total" },
       { key: "totalCents", label: "Total (centavos)" },
+      { key: "installments", label: "Parcelas" },
+      { key: "openCents", label: "Em aberto (centavos)" },
       { key: "paymentForecastDate", label: "Previsão de recebimento" },
     ],
   );

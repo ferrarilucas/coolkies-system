@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateOpenInstallments,
   buildCustomerBalances,
   parseForecastCutoff,
   type CustomerPendingRow,
@@ -166,5 +167,20 @@ describe("parseForecastCutoff", () => {
     expect(parseForecastCutoff("  ")).toBeUndefined();
     expect(parseForecastCutoff("04/09/2026")).toBeUndefined();
     expect(parseForecastCutoff("2026-13-45")).toBeUndefined();
+  });
+});
+
+describe("aggregateOpenInstallments", () => {
+  it("soma por cliente, conta vendas distintas e guarda o vencimento mais antigo", () => {
+    const a = new Date(2026, 10, 5);
+    const b = new Date(2026, 11, 5);
+    expect(
+      aggregateOpenInstallments([
+        { saleId: "s1", customerId: "c1", amountCents: 100, dueDate: b },
+        { saleId: "s1", customerId: "c1", amountCents: 100, dueDate: a },
+        { saleId: "s2", customerId: "c1", amountCents: 50, dueDate: null },
+        { saleId: "s3", customerId: null, amountCents: 999, dueDate: a },
+      ]),
+    ).toEqual([{ customerId: "c1", pendingCents: 250, pendingCount: 2, oldestForecastDate: a }]);
   });
 });

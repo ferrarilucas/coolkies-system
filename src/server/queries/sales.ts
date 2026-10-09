@@ -1,5 +1,5 @@
 import { getWorkspaceDb } from "@/server/tenant/context";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 // ─── Lista de vendas (paginada) ───────────────────────────────────────────────
 
@@ -77,6 +77,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
       take: SALES_PAGE_SIZE,
       include: {
         customer: { select: { sector: true } },
+        _count: { select: { installments: { where: { paidAt: null } } } },
         items: {
           select: {
             quantity: true,
@@ -108,38 +109,45 @@ export async function getSalesCounts(filters: Omit<SalesFilters, "status" | "ove
 
 // ─── Resumo do conjunto filtrado (big numbers) ───────────────────────────────
 
-export type SalesSummary = Awaited<ReturnType<typeof getSalesSummary>>;
+export type SalesSummary = Awaited<ReturnType<typeof computeSalesSummary>>;
 
-export async function getSalesSummary(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
-  const db = await getWorkspaceDb();
-  const base = buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined });
-
-  const groups = await db.sale.groupBy({
-    by: ["status"],
-    where: base,
-    _sum: { totalCents: true },
-    _count: { _all: true },
-  });
-  const overdue = await db.sale.aggregate({
-    where: {
-      AND: [base, { status: "PENDING", paymentForecastDate: { lt: new Date() } }],
-    },
-    _sum: { totalCents: true },
-    _count: { _all: true },
-  });
+export async function computeSalesSummary(db: PrismaClient, base: Prisma.SaleWhereInput) {
+  const now = new Date();
+  const [groups, overdue, overdueCount] = await Promise.all([
+    db.sale.groupBy({
+      by: ["status"],
+      where: base,
+      _sum: { totalCents: true, openCents: true },
+      _count: { _all: true },
+    }),
+    db.saleInstallment.aggregate({
+      where: { paidAt: null, dueDate: { lt: now }, sale: base },
+      _sum: { amountCents: true },
+    }),
+    db.sale.count({
+      where: { AND: [base, { installments: { some: { paidAt: null, dueDate: { lt: now } } } }] },
+    }),
+  ]);
 
   const byStatus = new Map(groups.map((g) => [g.status, g]));
   const pending = byStatus.get("PENDING");
   const paid = byStatus.get("PAID");
+  const pendingTotal = pending?._sum.totalCents ?? 0;
+  const pendingOpen = pending?._sum.openCents ?? 0;
 
   return {
-    pendingCents: pending?._sum.totalCents ?? 0,
+    pendingCents: pendingOpen,
     pendingCount: pending?._count._all ?? 0,
-    paidCents: paid?._sum.totalCents ?? 0,
+    paidCents: (paid?._sum.totalCents ?? 0) + (pendingTotal - pendingOpen),
     paidCount: paid?._count._all ?? 0,
-    overdueCents: overdue._sum.totalCents ?? 0,
-    overdueCount: overdue._count._all ?? 0,
+    overdueCents: overdue._sum.amountCents ?? 0,
+    overdueCount,
   };
+}
+
+export async function getSalesSummary(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {
+  const db = await getWorkspaceDb();
+  return computeSalesSummary(db, buildSalesWhere({ ...filters, status: undefined, overdueOnly: undefined }));
 }
 
 // ─── Detalhe de uma venda (para edição) ──────────────────────────────────────
@@ -162,6 +170,10 @@ export async function getSaleById(id: string) {
           quantity: true,
           unitPriceSnapshot: true,
         },
+      },
+      installments: {
+        orderBy: { number: "asc" },
+        select: { id: true, number: true, amountCents: true, dueDate: true, forecastPreset: true, paidAt: true },
       },
     },
   });
@@ -219,6 +231,8 @@ export type SaleExportRow = {
   status: string;
   totalCents: number;
   paymentForecastDate: string;
+  installments: string;
+  openCents: number;
 };
 
 export async function getSalesForExport(filters: SalesFilters = {}): Promise<SaleExportRow[]> {
@@ -228,7 +242,10 @@ export async function getSalesForExport(filters: SalesFilters = {}): Promise<Sal
   const sales = await db.sale.findMany({
     where,
     orderBy: { soldAt: "asc" },
-    include: { customer: { select: { name: true } } },
+    include: {
+      customer: { select: { name: true } },
+      _count: { select: { installments: { where: { paidAt: null } } } },
+    },
   });
 
   return sales.map((sale) => ({
@@ -239,5 +256,10 @@ export async function getSalesForExport(filters: SalesFilters = {}): Promise<Sal
     paymentForecastDate: sale.paymentForecastDate
       ? sale.paymentForecastDate.toISOString().slice(0, 10)
       : "",
+    installments:
+      sale.installmentCount > 1
+        ? `${sale.installmentCount - sale._count.installments}/${sale.installmentCount} pagas`
+        : "",
+    openCents: sale.openCents,
   }));
 }
