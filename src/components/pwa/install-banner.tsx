@@ -43,10 +43,10 @@ export function InstallBanner() {
   return (
     <>
       {!dismissed && (
-        <div className="border-b bg-accent/60 px-4 py-1.5 md:hidden">
+        <div className="border-b bg-soft px-4 py-1.5 md:hidden">
           <div className="mx-auto flex w-full max-w-2xl items-center gap-2 text-xs">
-            <Smartphone className="size-3.5 shrink-0 text-accent-foreground" />
-            <span className="min-w-0 flex-1 truncate text-accent-foreground">
+            <Smartphone className="size-3.5 shrink-0 text-soft-foreground" />
+            <span className="min-w-0 flex-1 truncate text-soft-foreground">
               {platform === "ios"
                 ? "Use o Cipri como app no iPhone"
                 : "Use o Cipri como app no Android"}
