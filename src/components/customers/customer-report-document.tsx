@@ -53,7 +53,7 @@ export function CustomerReportDocument({
                     <li key={item.id}>
                       <span className="tabular-nums">{item.quantity}x</span>{" "}
                       {item.productNameSnapshot}
-                      {item.flavorNameSnapshot ? ` — ${item.flavorNameSnapshot}` : ""}
+                      {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
                     </li>
                   ))}
                 </ul>

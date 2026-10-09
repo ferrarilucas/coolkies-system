@@ -34,6 +34,7 @@ import { resolveForecast, type ForecastPreset } from "@/lib/business-days";
 import type { CustomerSummary } from "@/server/queries/customers";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { findVariantByValues, isValueAvailable } from "@/lib/variant-options";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,8 @@ export type CatalogProduct = {
   id: string;
   name: string;
   genericPriceCents: number | null;
-  flavors: { id: string; name: string; priceCents: number | null }[];
+  options: { id: string; name: string; values: { id: string; name: string }[] }[];
+  variants: { id: string; name: string; priceCents: number | null; valueIds: string[] }[];
 };
 
 type SaleItemLine = {
@@ -49,30 +51,45 @@ type SaleItemLine = {
   itemId: string;
   productName: string;
   variantId: string | null;
-  flavorName: string | null;
+  variantName: string | null;
   quantity: number;
   unitPriceCents: number;
+  pickedValueIds?: Record<string, string>;
 };
 
 type DiscountType = "PERCENTAGE" | "FIXED";
 type PayStatus = "PAID" | ForecastPreset;
 
-function defaultFlavor(product: CatalogProduct | null | undefined) {
-  return product?.flavors.length === 1 ? product.flavors[0] : null;
+function defaultVariant(product: CatalogProduct | null | undefined) {
+  return product?.variants.length === 1 ? product.variants[0] : null;
 }
 
 function blankLine(catalog: CatalogProduct[]): SaleItemLine {
   const only = catalog.length === 1 ? catalog[0] : null;
-  const flavor = defaultFlavor(only);
+  const variant = defaultVariant(only);
   return {
     key: crypto.randomUUID(),
     itemId: only?.id ?? "",
     productName: only?.name ?? "",
-    variantId: flavor?.id ?? null,
-    flavorName: flavor?.name ?? null,
+    variantId: variant?.id ?? null,
+    variantName: variant?.name ?? null,
     quantity: 1,
-    unitPriceCents: flavor?.priceCents ?? only?.genericPriceCents ?? 0,
+    unitPriceCents: variant?.priceCents ?? only?.genericPriceCents ?? 0,
   };
+}
+
+function pickedFromVariant(
+  product: CatalogProduct | undefined,
+  variantId: string | null,
+): Record<string, string> {
+  const variant = product?.variants.find((v) => v.id === variantId);
+  if (!product || !variant) return {};
+  const picked: Record<string, string> = {};
+  for (const option of product.options) {
+    const value = option.values.find((v) => variant.valueIds.includes(v.id));
+    if (value) picked[option.id] = value.id;
+  }
+  return picked;
 }
 
 function calcDiscountCents(subtotal: number, type: DiscountType | null, value: number): number {
@@ -150,27 +167,44 @@ function ItemRow({
   showTotal: boolean;
 }) {
   const product = catalog.find((p) => p.id === line.itemId);
-  const flavors = product?.flavors ?? [];
+  const variants = product?.variants ?? [];
+  const options = product?.options ?? [];
+  const byAxis = options.length > 1;
+  const picked = line.pickedValueIds ?? pickedFromVariant(product, line.variantId);
 
-  function handleProductChange(pid: string) {
-    const p = catalog.find((x) => x.id === pid);
-    const flavor = defaultFlavor(p);
+  function handleAxisChange(optionId: string, valueId: string) {
+    const nextPicked = { ...picked, [optionId]: valueId };
+    const variant = findVariantByValues(variants, nextPicked, options.length);
     onChange({
-      itemId: pid,
-      productName: p?.name ?? "",
-      variantId: flavor?.id ?? null,
-      flavorName: flavor?.name ?? null,
-      unitPriceCents: flavor?.priceCents ?? p?.genericPriceCents ?? 0,
+      pickedValueIds: nextPicked,
+      variantId: variant?.id ?? null,
+      variantName: variant?.name ?? null,
+      unitPriceCents: variant
+        ? variant.priceCents ?? product?.genericPriceCents ?? line.unitPriceCents
+        : line.unitPriceCents,
     });
   }
 
-  function handleFlavorChange(fid: string) {
-    const flavor = product?.flavors.find((f) => f.id === fid);
+  function handleProductChange(pid: string) {
+    const p = catalog.find((x) => x.id === pid);
+    const variant = defaultVariant(p);
+    onChange({
+      itemId: pid,
+      productName: p?.name ?? "",
+      variantId: variant?.id ?? null,
+      variantName: variant?.name ?? null,
+      unitPriceCents: variant?.priceCents ?? p?.genericPriceCents ?? 0,
+      pickedValueIds: undefined,
+    });
+  }
+
+  function handleVariantChange(fid: string) {
+    const variant = product?.variants.find((f) => f.id === fid);
     onChange({
       variantId: fid,
-      flavorName: flavor?.name ?? null,
+      variantName: variant?.name ?? null,
       unitPriceCents:
-        flavor?.priceCents ?? product?.genericPriceCents ?? line.unitPriceCents,
+        variant?.priceCents ?? product?.genericPriceCents ?? line.unitPriceCents,
     });
   }
 
@@ -190,13 +224,36 @@ function ItemRow({
           </SelectContent>
         </Select>
 
-        {flavors.length > 0 && (
-          <Select value={line.variantId ?? ""} onValueChange={handleFlavorChange}>
-            <SelectTrigger className={cn(!line.variantId && "text-muted-foreground")}>
-              <SelectValue placeholder="Sabor…" />
+        {byAxis && options.map((option) => (
+          <Select
+            key={option.id}
+            value={picked[option.id] ?? ""}
+            onValueChange={(valueId) => handleAxisChange(option.id, valueId)}
+          >
+            <SelectTrigger className={cn(!picked[option.id] && "text-muted-foreground")}>
+              <SelectValue placeholder={`${option.name}…`} />
             </SelectTrigger>
             <SelectContent>
-              {flavors.map((f) => (
+              {option.values.map((value) => (
+                <SelectItem
+                  key={value.id}
+                  value={value.id}
+                  disabled={!isValueAvailable(variants, picked, option.id, value.id)}
+                >
+                  {value.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ))}
+
+        {!byAxis && variants.length > 0 && (
+          <Select value={line.variantId ?? ""} onValueChange={handleVariantChange}>
+            <SelectTrigger className={cn(!line.variantId && "text-muted-foreground")}>
+              <SelectValue placeholder="Variação…" />
+            </SelectTrigger>
+            <SelectContent>
+              {variants.map((f) => (
                 <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
               ))}
             </SelectContent>
@@ -326,12 +383,12 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
       return;
     }
 
-    const missingFlavor = filledLines.find((l) => {
+    const missingVariant = filledLines.find((l) => {
       const p = catalog.find((x) => x.id === l.itemId);
-      return (p?.flavors.length ?? 0) > 0 && !l.variantId;
+      return (p?.variants.length ?? 0) > 0 && !l.variantId;
     });
-    if (missingFlavor) {
-      toast.error(`Escolha o sabor de ${missingFlavor.productName}.`);
+    if (missingVariant) {
+      toast.error(`Escolha a variação de ${missingVariant.productName}.`);
       return;
     }
 
@@ -348,8 +405,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     fd.set(
       "items",
       JSON.stringify(
-        filledLines.map(({ itemId, productName, variantId, flavorName, quantity, unitPriceCents }) => ({
-          itemId, productName, variantId, flavorName, quantity, unitPriceCents,
+        filledLines.map(({ itemId, productName, variantId, variantName, quantity, unitPriceCents }) => ({
+          itemId, productName, variantId, variantName, quantity, unitPriceCents,
         })),
       ),
     );

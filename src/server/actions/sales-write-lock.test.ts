@@ -40,7 +40,7 @@ describe("createSale bloqueada por assinatura inutilizável", () => {
           itemId: "p1",
           productName: "Cookie",
           variantId: null,
-          flavorName: null,
+          variantName: null,
           quantity: 1,
           unitPriceCents: 500,
         },

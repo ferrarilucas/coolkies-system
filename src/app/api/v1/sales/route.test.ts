@@ -80,12 +80,58 @@ describe("GET /api/v1/sales", () => {
     expect(res.status).toBe(200);
     expect(body.sales).toHaveLength(1);
   });
+
+  it("devolve o nome da variação com o campo novo e o antigo, para clientes que ainda leem flavorNameSnapshot", async () => {
+    const { user, ws } = await seedMember();
+    const item = await testDb.item.create({ data: { name: "Camiseta", unit: "UN", sellable: true, workspaceId: ws.id } });
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: ws.id, status: "PAID", totalCents: 5000, soldAt: new Date(),
+        items: {
+          create: [{
+            itemId: item.id, quantity: 1, unitPriceSnapshot: 5000,
+            productNameSnapshot: "Camiseta", variantNameSnapshot: "Azul", workspaceId: ws.id,
+          }],
+        },
+      },
+    });
+
+    const body = await (await GET(getReq())).json();
+
+    expect(body.sales[0].items[0].variantNameSnapshot).toBe("Azul");
+    expect(body.sales[0].items[0].flavorNameSnapshot).toBe("Azul");
+  });
 });
 
 describe("POST /api/v1/sales", () => {
   beforeEach(async () => {
     await resetDb();
     mcpSessionResult = null;
+  });
+
+  it("grava o nome da variação vindo de variantName ou do campo antigo flavorName", async () => {
+    const { ws } = await seedMember();
+    const item = await testDb.item.create({ data: { name: "Camiseta", unit: "UN", sellable: true, workspaceId: ws.id } });
+    const azul = await testDb.variant.create({ data: { name: "Azul", itemId: item.id, workspaceId: ws.id } });
+    const verde = await testDb.variant.create({ data: { name: "Verde", itemId: item.id, workspaceId: ws.id } });
+
+    const res = await POST(
+      postReq({
+        items: [
+          { itemId: item.id, productName: "Camiseta", variantId: azul.id, variantName: "Azul", quantity: 1, unitPriceCents: 5000 },
+          { itemId: item.id, productName: "Camiseta", variantId: verde.id, flavorName: "Verde", quantity: 1, unitPriceCents: 5000 },
+        ],
+      }),
+    );
+    const body = await res.json();
+    expect(res.status).toBe(201);
+
+    const names = await testDb.saleItem.findMany({
+      where: { saleId: body.sale.id },
+      select: { variantNameSnapshot: true },
+      orderBy: { variantNameSnapshot: "asc" },
+    });
+    expect(names.map((n) => n.variantNameSnapshot)).toEqual(["Azul", "Verde"]);
   });
 
   it("cria uma venda com itens e desconta do estoque", async () => {

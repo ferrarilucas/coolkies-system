@@ -12,7 +12,7 @@ type SaleItemInput = {
   itemId: string;
   productName: string;
   variantId: string | null;
-  flavorName: string | null;
+  variantName: string | null;
   quantity: number;
   unitPriceCents: number;
 };
@@ -86,7 +86,7 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
             itemId: item.itemId,
             productNameSnapshot: item.productName,
             variantId: item.variantId,
-            flavorNameSnapshot: item.flavorName,
+            variantNameSnapshot: item.variantName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
             workspaceId,
@@ -172,7 +172,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
             itemId: item.itemId,
             productNameSnapshot: item.productName,
             variantId: item.variantId,
-            flavorNameSnapshot: item.flavorName,
+            variantNameSnapshot: item.variantName,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
             workspaceId,

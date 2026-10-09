@@ -37,7 +37,7 @@ export default async function EditSalePage({
       itemId: i.itemId,
       productName: i.productNameSnapshot,
       variantId: i.variantId,
-      flavorName: i.flavorNameSnapshot,
+      variantName: i.variantNameSnapshot,
       quantity: i.quantity,
       unitPriceCents: i.unitPriceSnapshot,
     })),

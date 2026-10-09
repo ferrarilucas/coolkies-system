@@ -163,7 +163,7 @@ export async function buildCustomerReportPdf({
       const itemLines = sale.items.flatMap((item) =>
         wrap(
           `${item.quantity}x ${item.productNameSnapshot}${
-            item.flavorNameSnapshot ? ` - ${item.flavorNameSnapshot}` : ""
+            item.variantNameSnapshot ? ` - ${item.variantNameSnapshot}` : ""
           }`,
           regular,
           9.5,

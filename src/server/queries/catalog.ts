@@ -10,6 +10,7 @@ export async function getItemsWithVariantsAndPrices() {
     where: { sellable: true },
     orderBy: { name: "asc" },
     include: {
+      options: { orderBy: { position: "asc" }, select: { name: true } },
       variants: {
         orderBy: { name: "asc" },
         include: {
@@ -47,11 +48,16 @@ export async function getItemForEdit(id: string) {
   const item = await db.item.findUnique({
     where: { id },
     include: {
+      options: {
+        orderBy: { position: "asc" },
+        include: { values: { orderBy: { position: "asc" }, select: { id: true, name: true } } },
+      },
       variants: {
         orderBy: { name: "asc" },
         include: {
           priceListItems: { select: { priceCents: true } },
-          _count: { select: { saleItems: true, productionBatches: true } },
+          optionValues: { select: { optionValueId: true } },
+          _count: { select: { saleItems: true, productionBatches: true, stockMovements: true } },
         },
       },
       priceListItems: {
@@ -67,13 +73,15 @@ export async function getItemForEdit(id: string) {
     name: item.name,
     active: item.active,
     genericPriceCents: item.priceListItems[0]?.priceCents ?? null,
+    options: item.options.map((o) => ({ id: o.id, name: o.name, values: o.values })),
     variants: item.variants.map((v) => ({
       id: v.id,
       name: v.name,
       active: v.active,
       recipeId: v.recipeId,
       priceCents: v.priceListItems[0]?.priceCents ?? null,
-      inUse: v._count.saleItems > 0 || v._count.productionBatches > 0,
+      valueIds: v.optionValues.map((ov) => ov.optionValueId),
+      inUse: v._count.saleItems > 0 || v._count.productionBatches > 0 || v._count.stockMovements > 0,
     })),
   };
 }
@@ -87,6 +95,7 @@ export async function getCatalogOverview() {
     active: i.active,
     genericPriceCents:
       i.priceListItems.find((p) => p.variantId === null)?.priceCents ?? null,
+    optionNames: i.options.map((o) => o.name),
     variants: i.variants.map((v) => ({
       id: v.id,
       name: v.name,

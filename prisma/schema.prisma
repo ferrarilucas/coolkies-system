@@ -1,4 +1,4 @@
-// Cookies App — Prisma schema
+// Cipri — Prisma schema
 // Dinheiro sempre em CENTAVOS (Int). Snapshots de preço garantem métricas históricas.
 
 generator client {
@@ -35,13 +35,13 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  sessions          Session[]
-  accounts          Account[]
-  sales             Sale[]
-  productionBatches ProductionBatch[]
-  purchases         Purchase[]
-  members           Member[]
-  subscription      Subscription?
+  sessions            Session[]
+  accounts            Account[]
+  sales               Sale[]
+  productionBatches   ProductionBatch[]
+  purchases           Purchase[]
+  members             Member[]
+  subscription        Subscription?
   mcpWorkspaceContext McpWorkspaceContext?
   oauthApplications   OauthApplication[]
   oauthAccessTokens   OauthAccessToken[]
@@ -271,6 +271,9 @@ model Workspace {
 
   items                  Item[]
   variants               Variant[]
+  itemOptions            ItemOption[]
+  itemOptionValues       ItemOptionValue[]
+  variantOptionValues    VariantOptionValue[]
   priceListItems         PriceListItem[]
   priceHistories         PriceHistory[]
   customers              Customer[]
@@ -320,7 +323,7 @@ model Invitation {
 }
 
 // ─────────────────────────────────────────────
-// CATÁLOGO ("Valores"): produtos, sabores, preços
+// CATÁLOGO ("Valores"): produtos, variações, preços
 // ─────────────────────────────────────────────
 
 model Item {
@@ -335,6 +338,7 @@ model Item {
   updatedAt       DateTime @updatedAt
 
   variants          Variant[]
+  options           ItemOption[]
   priceListItems    PriceListItem[]
   saleItems         SaleItem[]
   stockMovements    StockMovement[]
@@ -369,6 +373,7 @@ model Variant {
   productionBatches      ProductionBatch[]
   productionVariantLines ProductionVariantLine[]
   purchaseItems          PurchaseItem[]
+  optionValues           VariantOptionValue[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -378,7 +383,54 @@ model Variant {
   @@map("variant")
 }
 
-// Preço de venda ATUAL por produto+sabor.
+model ItemOption {
+  id       String            @id @default(cuid())
+  itemId   String
+  item     Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name     String
+  position Int
+  values   ItemOptionValue[]
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, name])
+  @@index([workspaceId])
+  @@map("item_option")
+}
+
+model ItemOptionValue {
+  id       String               @id @default(cuid())
+  optionId String
+  option   ItemOption           @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  name     String
+  position Int
+  variants VariantOptionValue[]
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, name])
+  @@index([workspaceId])
+  @@map("item_option_value")
+}
+
+model VariantOptionValue {
+  variantId     String
+  variant       Variant         @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  optionValueId String
+  optionValue   ItemOptionValue @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, optionValueId])
+  @@index([workspaceId])
+  @@index([optionValueId])
+  @@map("variant_option_value")
+}
+
+// Preço de venda ATUAL por produto+variação.
 model PriceListItem {
   id         String   @id @default(cuid())
   itemId     String
@@ -506,7 +558,7 @@ model SaleItem {
 
   // SNAPSHOTS — congelados no momento da venda
   unitPriceSnapshot   Int // centavos
-  flavorNameSnapshot  String?
+  variantNameSnapshot String? @map("flavorNameSnapshot")
   productNameSnapshot String
 
   workspaceId String
@@ -517,7 +569,7 @@ model SaleItem {
 }
 
 // ─────────────────────────────────────────────
-// INGREDIENTES, MERCADOS E COMPRAS
+// INSUMOS, FORNECEDORES E COMPRAS
 // ─────────────────────────────────────────────
 
 enum BaseUnit {
@@ -572,7 +624,7 @@ model PurchaseItem {
   variantId  String?
   variant    Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
-  quantity       Float // quantidade comprada na unidade base do ingrediente
+  quantity       Float // quantidade comprada na unidade base do insumo
   unit           BaseUnit
   pricePaidCents Int // valor pago em centavos por esta linha
   createdAt      DateTime @default(now())
@@ -591,7 +643,7 @@ model PurchaseItem {
 model Recipe {
   id        String   @id @default(cuid())
   name      String
-  yieldQty  Int      @default(1) // quantos cookies a receita rende (para receitas base)
+  yieldQty  Int      @default(1) // quantas unidades a ficha técnica rende
   steps     Json? // blocos do editor (BlockNote), estilo Notion
   notes     String?
   createdAt DateTime @default(now())
@@ -637,11 +689,11 @@ model ProductionBatch {
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
 
-  // Receita base usada (para dedução de ingredientes e cálculo de custo)
+  // Ficha técnica usada (para dedução de insumos e cálculo de custo)
   recipeId String?
   recipe   Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
 
-  quantity   Int // quantos cookies foram feitos (base)
+  quantity   Int // quantas unidades foram produzidas
   notes      String?
   producedAt DateTime @default(now())
   createdAt  DateTime @default(now())

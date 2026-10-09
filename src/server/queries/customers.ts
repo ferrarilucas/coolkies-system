@@ -188,7 +188,7 @@ export type CustomerReportSale = {
     quantity: number;
     unitPriceSnapshot: number;
     productNameSnapshot: string;
-    flavorNameSnapshot: string | null;
+    variantNameSnapshot: string | null;
   }[];
 };
 
@@ -226,7 +226,7 @@ export async function getCustomerReport(
           quantity: true,
           unitPriceSnapshot: true,
           productNameSnapshot: true,
-          flavorNameSnapshot: true,
+          variantNameSnapshot: true,
         },
       },
     },

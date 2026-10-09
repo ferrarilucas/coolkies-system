@@ -54,7 +54,7 @@ export function buildSalesWhere(f: SalesFilters): Prisma.SaleWhereInput {
             {
               items: {
                 some: {
-                  flavorNameSnapshot: { contains: search, mode: "insensitive" as const },
+                  variantNameSnapshot: { contains: search, mode: "insensitive" as const },
                 },
               },
             },
@@ -82,7 +82,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
             quantity: true,
             unitPriceSnapshot: true,
             productNameSnapshot: true,
-            flavorNameSnapshot: true,
+            variantNameSnapshot: true,
           },
         },
       },
@@ -158,7 +158,7 @@ export async function getSaleById(id: string) {
           itemId: true,
           productNameSnapshot: true,
           variantId: true,
-          flavorNameSnapshot: true,
+          variantNameSnapshot: true,
           quantity: true,
           unitPriceSnapshot: true,
         },
@@ -177,10 +177,15 @@ export async function getCatalogForSale() {
     where: { active: true, sellable: true },
     orderBy: { name: "asc" },
     include: {
+      options: {
+        orderBy: { position: "asc" },
+        include: { values: { orderBy: { position: "asc" }, select: { id: true, name: true } } },
+      },
       variants: {
         where: { active: true },
         orderBy: { name: "asc" },
         include: {
+          optionValues: { select: { optionValueId: true } },
           priceListItems: {
             where: { active: true },
             select: { priceCents: true },
@@ -198,9 +203,11 @@ export async function getCatalogForSale() {
     id: item.id,
     name: item.name,
     genericPriceCents: item.priceListItems[0]?.priceCents ?? null,
-    flavors: item.variants.map((v) => ({
+    options: item.options.map((o) => ({ id: o.id, name: o.name, values: o.values })),
+    variants: item.variants.map((v) => ({
       id: v.id,
       name: v.name,
+      valueIds: v.optionValues.map((ov) => ov.optionValueId),
       priceCents: v.priceListItems[0]?.priceCents ?? item.priceListItems[0]?.priceCents ?? null,
     })),
   }));

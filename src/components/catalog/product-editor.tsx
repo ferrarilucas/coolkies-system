@@ -3,55 +3,45 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { MoneyInput } from "@/components/shared/money-input";
+import { OptionsEditor } from "@/components/catalog/options-editor";
+import { CombinationsList, type CombinationEntry } from "@/components/catalog/combinations-list";
 import { saveItem } from "@/server/actions/catalog";
 import type { ItemForEdit } from "@/server/queries/catalog";
-import { cn } from "@/lib/utils";
+import {
+  allCombinations,
+  combinationKey,
+  rebaseCombinations,
+  type KeyedOption,
+} from "@/lib/variant-options";
 
-const NO_RECIPE = "__none__";
-
-type VariantLine = {
-  key: string;
-  id: string | null;
-  name: string;
-  priceCents: number;
-  recipeId: string | null;
-  active: boolean;
-};
-
-function toLine(variant: ItemForEdit["variants"][number]): VariantLine {
-  return {
-    key: variant.id,
-    id: variant.id,
-    name: variant.name,
-    priceCents: variant.priceCents ?? 0,
-    recipeId: variant.recipeId,
-    active: variant.active,
-  };
+function initialOptions(product: ItemForEdit | null): KeyedOption[] {
+  return (product?.options ?? []).map((o) => ({
+    key: o.id,
+    id: o.id,
+    name: o.name,
+    values: o.values.map((v) => ({ key: v.id, id: v.id, name: v.name })),
+  }));
 }
 
-function blankLine(): VariantLine {
-  return {
-    key: crypto.randomUUID(),
-    id: null,
-    name: "",
-    priceCents: 0,
-    recipeId: null,
-    active: true,
-  };
+function initialEntries(product: ItemForEdit | null, options: KeyedOption[]): CombinationEntry[] {
+  if (!product || options.length === 0) return [];
+  return product.variants.flatMap((variant) => {
+    const ids = new Set(variant.valueIds);
+    const valueKeys = options.map((o) => o.values.find((v) => ids.has(v.key))?.key);
+    if (valueKeys.some((k) => !k)) return [];
+    return [{
+      id: variant.id,
+      valueKeys: valueKeys as string[],
+      priceCents: variant.priceCents ?? 0,
+      recipeId: variant.recipeId,
+      active: variant.active,
+    }];
+  });
 }
 
 export function ProductEditor({
@@ -63,41 +53,71 @@ export function ProductEditor({
 }) {
   const router = useRouter();
   const [name, setName] = useState(product?.name ?? "");
-  const [genericPriceCents, setGenericPriceCents] = useState(
-    product?.genericPriceCents ?? 0,
-  );
-  const [variants, setVariants] = useState<VariantLine[]>(
-    product?.variants.map(toLine) ?? [],
-  );
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [genericPriceCents, setGenericPriceCents] = useState(product?.genericPriceCents ?? 0);
+  const [options, setOptions] = useState<KeyedOption[]>(() => initialOptions(product));
+  const [entries, setEntries] = useState<CombinationEntry[]>(() => initialEntries(product, options));
+  const [originals] = useState(() => new Map(entries.map((e) => [combinationKey(e.valueKeys), e])));
   const [saving, startSave] = useTransition();
 
-  const hasVariants = variants.length > 0;
+  const hasVariants = options.length > 0;
 
-  function updateVariant(key: string, patch: Partial<VariantLine>) {
-    setVariants((prev) =>
-      prev.map((v) => (v.key === key ? { ...v, ...patch } : v)),
-    );
+  function changeOptions(next: KeyedOption[]) {
+    setEntries((prev) => rebaseCombinations(options, next, prev));
+    setOptions(next);
   }
 
-  function removeVariant(line: VariantLine) {
-    setVariants((prev) => prev.filter((v) => v.key !== line.key));
-    if (line.id) setRemovedIds((prev) => [...prev, line.id!]);
+  function blankEntry(valueKeys: string[]): CombinationEntry {
+    return originals.get(combinationKey(valueKeys)) ?? {
+      id: null,
+      valueKeys,
+      priceCents: 0,
+      recipeId: null,
+      active: true,
+    };
+  }
+
+  function toggle(valueKeys: string[], checked: boolean) {
+    const key = combinationKey(valueKeys);
+    setEntries((prev) => {
+      const rest = prev.filter((e) => combinationKey(e.valueKeys) !== key);
+      return checked ? [...rest, blankEntry(valueKeys)] : rest;
+    });
+  }
+
+  function toggleAll(checked: boolean) {
+    if (!checked) {
+      setEntries([]);
+      return;
+    }
+    setEntries((prev) => {
+      const byKey = new Map(prev.map((e) => [combinationKey(e.valueKeys), e]));
+      return allCombinations(options).map((keys) => byKey.get(combinationKey(keys)) ?? blankEntry(keys));
+    });
+  }
+
+  function update(key: string, patch: Partial<CombinationEntry>) {
+    setEntries((prev) => prev.map((e) => (combinationKey(e.valueKeys) === key ? { ...e, ...patch } : e)));
   }
 
   function handleSubmit() {
+    const keptIds = new Set(entries.map((e) => e.id).filter(Boolean));
+    const removedVariantIds = [...originals.values()]
+      .map((e) => e.id!)
+      .filter((id) => !keptIds.has(id));
+
     startSave(async () => {
       const res = await saveItem(product?.id ?? null, {
         name,
         genericPriceCents: genericPriceCents > 0 ? genericPriceCents : null,
-        variants: variants.map((v) => ({
-          id: v.id,
-          name: v.name,
-          priceCents: v.priceCents > 0 ? v.priceCents : null,
-          recipeId: v.recipeId,
-          active: v.active,
+        options: options.map(({ id, name: optionName, values }) => ({ id, name: optionName, values })),
+        combinations: entries.map((e) => ({
+          id: e.id,
+          valueKeys: e.valueKeys,
+          priceCents: e.priceCents > 0 ? e.priceCents : null,
+          recipeId: e.recipeId,
+          active: e.active,
         })),
-        removedVariantIds: removedIds,
+        removedVariantIds,
       });
 
       if (!res.ok) {
@@ -108,7 +128,7 @@ export function ProductEditor({
       const deactivated = res.data?.deactivated ?? [];
       if (deactivated.length > 0) {
         toast.success(
-          `Produto salvo. ${deactivated.join(", ")} ${deactivated.length === 1 ? "foi desativado" : "foram desativados"} por já ter histórico.`,
+          `Produto salvo. ${deactivated.join(", ")} ${deactivated.length === 1 ? "foi desativada" : "foram desativadas"} por já ter histórico.`,
         );
       } else {
         toast.success(product ? "Produto atualizado." : "Produto criado.");
@@ -132,7 +152,7 @@ export function ProductEditor({
               id="product-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Cookie"
+              placeholder="Ex.: Camiseta"
               autoFocus
             />
           </div>
@@ -147,7 +167,7 @@ export function ProductEditor({
             />
             <p className="text-xs text-muted-foreground">
               {hasVariants
-                ? "Usado nos sabores que não tiverem preço próprio."
+                ? "Usado nas combinações que não tiverem preço próprio."
                 : "Preço cobrado por unidade deste produto."}
             </p>
           </div>
@@ -157,99 +177,30 @@ export function ProductEditor({
       <Separator />
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Sabores
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Opcional. Cada sabor pode ter seu próprio preço.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setVariants((prev) => [...prev, blankLine()])}
-          >
-            <Plus />
-            Adicionar sabor
-          </Button>
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Variações
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Opcional. Crie até 3 eixos, como Tamanho e Cor, e marque as combinações que você vende.
+          </p>
         </div>
 
-        {!hasVariants ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center">
-            <Palette className="size-6 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Nenhum sabor — o produto será vendido pelo preço de venda acima.
-            </p>
-          </div>
+        <OptionsEditor options={options} onChange={changeOptions} />
+
+        {hasVariants ? (
+          <CombinationsList
+            options={options}
+            entries={entries}
+            recipes={recipes}
+            onToggle={toggle}
+            onToggleAll={toggleAll}
+            onUpdate={update}
+          />
         ) : (
-          <div className="space-y-3">
-            {variants.map((variant) => (
-              <div
-                key={variant.key}
-                className={cn(
-                  "space-y-3 rounded-lg border bg-card p-3",
-                  !variant.active && "opacity-60",
-                )}
-              >
-                <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
-                  <Input
-                    value={variant.name}
-                    onChange={(e) => updateVariant(variant.key, { name: e.target.value })}
-                    placeholder="Nome do sabor"
-                  />
-                  <MoneyInput
-                    valueCents={variant.priceCents}
-                    onChangeCents={(cents) => updateVariant(variant.key, { priceCents: cents })}
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {recipes.length > 0 && (
-                    <Select
-                      value={variant.recipeId ?? NO_RECIPE}
-                      onValueChange={(value) =>
-                        updateVariant(variant.key, {
-                          recipeId: value === NO_RECIPE ? null : value,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-9 flex-1 min-w-40">
-                        <SelectValue placeholder="Recheio…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_RECIPE}>Sem recheio</SelectItem>
-                        {recipes.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Switch
-                      checked={variant.active}
-                      onCheckedChange={(checked) =>
-                        updateVariant(variant.key, { active: checked })
-                      }
-                    />
-                    Ativo
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => removeVariant(variant)}
-                    className="ml-auto flex size-9 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10"
-                    aria-label={`Remover ${variant.name || "sabor"}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Sem variações, o produto é vendido pelo preço de venda acima.
+          </p>
         )}
       </section>
 

@@ -248,7 +248,7 @@ function SaleCard({ sale }: { sale: Sale }) {
   const isPending = sale.status === "PENDING";
   const itemsSummary = sale.items
     .map((i) =>
-      `${i.quantity}× ${i.productNameSnapshot}${i.flavorNameSnapshot ? ` ${i.flavorNameSnapshot}` : ""}`,
+      `${i.quantity}× ${i.productNameSnapshot}${i.variantNameSnapshot ? ` ${i.variantNameSnapshot}` : ""}`,
     )
     .join(", ");
 

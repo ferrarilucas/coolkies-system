@@ -29,7 +29,7 @@ export default async function CatalogPage() {
     <div>
       <PageHeader
         title="Valores"
-        description="Produtos, sabores e preços de venda."
+        description="Produtos, variações e preços de venda."
         backHref="/admin"
         action={
           <Button asChild size="sm">
@@ -45,7 +45,7 @@ export default async function CatalogPage() {
         <EmptyState
           icon={Tags}
           title="Nenhum produto"
-          description="Cadastre o primeiro produto com seus sabores e preços."
+          description="Cadastre o primeiro produto com suas variações e preços."
           action={
             <Button asChild size="sm">
               <Link href="/admin/catalog/new">
@@ -76,9 +76,7 @@ export default async function CatalogPage() {
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {activeVariants.length > 0
-                        ? `${activeVariants.length} ${activeVariants.length === 1 ? "sabor" : "sabores"} · ${activeVariants.map((v) => v.name).join(", ")}`
-                        : "Sem sabores"}
+                      {variantSummary(product.optionNames, activeVariants.map((v) => v.name))}
                     </p>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
@@ -94,4 +92,12 @@ export default async function CatalogPage() {
       )}
     </div>
   );
+}
+
+function variantSummary(optionNames: string[], names: string[]): string {
+  if (names.length === 0) return "Sem variações";
+  if (optionNames.length > 1) {
+    return `${names.length} ${names.length === 1 ? "combinação" : "combinações"} · ${optionNames.join(" × ")}`;
+  }
+  return `${names.length} ${names.length === 1 ? "variação" : "variações"} · ${names.join(", ")}`;
 }

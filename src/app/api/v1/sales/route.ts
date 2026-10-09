@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
               quantity: true,
               unitPriceSnapshot: true,
               productNameSnapshot: true,
-              flavorNameSnapshot: true,
+              variantNameSnapshot: true,
             },
           },
         },
@@ -72,7 +72,10 @@ export async function GET(request: NextRequest) {
     const paid = byStatus.get("PAID");
 
     return Response.json({
-      sales,
+      sales: sales.map((sale) => ({
+        ...sale,
+        items: sale.items.map((item) => ({ ...item, flavorNameSnapshot: item.variantNameSnapshot })),
+      })),
       summary: {
         pendingCents: pending?._sum.totalCents ?? 0,
         pendingCount: pending?._count._all ?? 0,
@@ -91,7 +94,8 @@ type SaleItemInput = {
   itemId: string;
   productName: string;
   variantId: string | null;
-  flavorName: string | null;
+  variantName?: string | null;
+  flavorName?: string | null;
   quantity: number;
   unitPriceCents: number;
 };
@@ -178,7 +182,7 @@ export async function POST(request: NextRequest) {
             itemId: item.itemId,
             productNameSnapshot: item.productName,
             variantId: item.variantId,
-            flavorNameSnapshot: item.flavorName,
+            variantNameSnapshot: item.variantName ?? item.flavorName ?? null,
             quantity: item.quantity,
             unitPriceSnapshot: item.unitPriceCents,
             workspaceId: context.workspaceId,

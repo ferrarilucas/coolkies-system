@@ -17,6 +17,7 @@ interface MoneyInputBaseProps {
   autoFocus?: boolean;
   id?: string;
   disabled?: boolean;
+  "aria-label"?: string;
 }
 
 // Modo não-controlado: submete via FormData com campo oculto
@@ -46,6 +47,7 @@ export function MoneyInput({
   autoFocus,
   id,
   disabled,
+  "aria-label": ariaLabel,
 }: MoneyInputProps) {
   const isControlled = valueCents !== undefined;
   const [internalCents, setInternalCents] = useState(defaultValueCents);
@@ -86,6 +88,7 @@ export function MoneyInput({
       {!isControlled && <input type="hidden" name={name} value={internalCents} />}
       <input
         id={id}
+        aria-label={ariaLabel}
         type="text"
         inputMode="numeric"
         autoComplete="off"
