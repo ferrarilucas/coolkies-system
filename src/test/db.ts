@@ -61,6 +61,31 @@ export async function backfillSaleInstallments() {
     WHERE NOT EXISTS (SELECT 1 FROM "sale_installment" i WHERE i."saleId" = s."id")
   `);
   await testDb.$executeRawUnsafe(`
+    UPDATE "sale_installment" i
+    SET "paidAt" = COALESCE(s."paidAt", s."soldAt"), "updatedAt" = CURRENT_TIMESTAMP
+    FROM "sale" s
+    WHERE i."saleId" = s."id" AND s."installmentCount" = 1 AND s."status" = 'PAID' AND i."paidAt" IS NULL
+  `);
+  await testDb.$executeRawUnsafe(`
+    UPDATE "sale_installment" i
+    SET "paidAt" = NULL, "updatedAt" = CURRENT_TIMESTAMP
+    FROM "sale" s
+    WHERE i."saleId" = s."id" AND s."installmentCount" = 1 AND s."status" = 'PENDING' AND i."paidAt" IS NOT NULL
+  `);
+  await testDb.$executeRawUnsafe(`
+    UPDATE "sale_installment" i
+    SET "amountCents" = s."totalCents", "updatedAt" = CURRENT_TIMESTAMP
+    FROM "sale" s
+    WHERE i."saleId" = s."id" AND s."installmentCount" = 1 AND i."amountCents" <> s."totalCents"
+  `);
+  await testDb.$executeRawUnsafe(`
+    UPDATE "sale_installment" i
+    SET "dueDate" = s."paymentForecastDate", "forecastPreset" = s."forecastPreset", "updatedAt" = CURRENT_TIMESTAMP
+    FROM "sale" s
+    WHERE i."saleId" = s."id" AND s."installmentCount" = 1 AND s."status" = 'PENDING'
+      AND (i."dueDate" IS DISTINCT FROM s."paymentForecastDate" OR i."forecastPreset" IS DISTINCT FROM s."forecastPreset")
+  `);
+  await testDb.$executeRawUnsafe(`
     UPDATE "sale" SET "openCents" = CASE WHEN "status" = 'PENDING' THEN "totalCents" ELSE 0 END
     WHERE "installmentCount" = 1
   `);

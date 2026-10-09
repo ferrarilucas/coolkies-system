@@ -28,6 +28,33 @@ describe("parcelas no banco", () => {
     expect(sales.map((s) => s.openCents)).toEqual([0, 5000]);
   });
 
+  it("backfill reconcilia parcela única de venda alterada pelo código antigo e pode rodar de novo", async () => {
+    const forecast = new Date(2026, 10, 5, 12);
+    const paidAt = new Date(2026, 9, 1, 12);
+    const flippedPaid = await testDb.sale.create({ data: { workspaceId, totalCents: 4000, status: "PENDING" } });
+    const flippedPending = await testDb.sale.create({ data: { workspaceId, totalCents: 6000, status: "PAID", paidAt } });
+    await backfillSaleInstallments();
+
+    await testDb.sale.update({ where: { id: flippedPaid.id }, data: { status: "PAID", paidAt, totalCents: 4500 } });
+    await testDb.sale.update({
+      where: { id: flippedPending.id },
+      data: { status: "PENDING", paidAt: null, paymentForecastDate: forecast, forecastPreset: "DAY_FIVE" },
+    });
+    const created = await testDb.sale.create({ data: { workspaceId, totalCents: 1000, status: "PENDING" } });
+
+    await backfillSaleInstallments();
+    await backfillSaleInstallments();
+
+    const rows = await testDb.saleInstallment.findMany({ orderBy: { amountCents: "asc" } });
+    expect(rows.map((r) => [r.saleId, r.number, r.amountCents, r.dueDate, r.forecastPreset, r.paidAt])).toEqual([
+      [created.id, 1, 1000, null, null, null],
+      [flippedPaid.id, 1, 4500, null, null, paidAt],
+      [flippedPending.id, 1, 6000, forecast, "DAY_FIVE", null],
+    ]);
+    const sales = await testDb.sale.findMany({ orderBy: { totalCents: "asc" }, select: { openCents: true } });
+    expect(sales.map((s) => s.openCents)).toEqual([1000, 0, 6000]);
+  });
+
   it("writeInstallments troca as parcelas e grava o resumo; syncSaleSummary recalcula após pagamento", async () => {
     const sale = await testDb.sale.create({ data: { workspaceId, totalCents: 10000 } });
     const due = (m: number) => new Date(2026, m, 5, 12);
