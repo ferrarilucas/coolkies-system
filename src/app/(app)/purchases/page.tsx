@@ -9,6 +9,7 @@ import { PurchaseDialog } from "@/components/purchases/purchase-dialog";
 import { SupplierDialog } from "@/components/purchases/supplier-dialog";
 import { PurchasesList } from "@/components/purchases/purchases-list";
 import { SuppliersList } from "@/components/purchases/suppliers-list";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 export default async function PurchasesPage() {
   const db = await getWorkspaceDb();
@@ -33,7 +34,7 @@ export default async function PurchasesPage() {
       <PageHeader
         title="Compras"
         description="Registre compras de matéria-prima ou itens para revenda."
-        action={<PurchaseDialog suppliers={suppliers} ingredients={items} />}
+        action={<WriteGate><PurchaseDialog suppliers={suppliers} ingredients={items} /></WriteGate>}
       />
 
       <Tabs defaultValue="purchases">
@@ -66,7 +67,7 @@ export default async function PurchasesPage() {
                   ? "Registre sua primeira compra — você pode criar o insumo direto no formulário."
                   : "Registre sua primeira compra para calcular o custo das fichas técnicas e o lucro de itens revendidos."
               }
-              action={<PurchaseDialog suppliers={suppliers} ingredients={items} />}
+              action={<WriteGate><PurchaseDialog suppliers={suppliers} ingredients={items} /></WriteGate>}
             />
           ) : (
             <PurchasesList purchases={purchases} />
@@ -75,7 +76,9 @@ export default async function PurchasesPage() {
 
         <TabsContent value="suppliers">
           <div className="flex justify-end mb-3">
-            <SupplierDialog />
+            <WriteGate>
+              <SupplierDialog />
+            </WriteGate>
           </div>
           <SuppliersList suppliers={suppliers} />
         </TabsContent>

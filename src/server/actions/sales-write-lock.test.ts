@@ -47,9 +47,10 @@ describe("createSale bloqueada por assinatura inutilizável", () => {
       ]),
     );
 
-    await expect(createSale(formData)).rejects.toThrow(
-      "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
-    );
+    await expect(createSale(formData)).resolves.toEqual({
+      ok: false,
+      error: "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
+    });
 
     const saleCount = await testDb.sale.count({ where: { workspaceId: ws.id } });
     expect(saleCount).toBe(0);

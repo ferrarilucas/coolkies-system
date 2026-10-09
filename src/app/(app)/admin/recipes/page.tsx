@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getRecipesWithCost } from "@/server/queries/recipes";
 import { DeleteRecipeButton } from "@/components/recipes/delete-recipe-button";
 import { formatBRL } from "@/lib/money";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 export default async function RecipesPage() {
   const recipes = await getRecipesWithCost();
@@ -18,12 +19,14 @@ export default async function RecipesPage() {
         description="Materiais, passo a passo e custo estimado."
         backHref="/admin"
         action={
-          <Button size="sm" asChild>
-            <Link href="/admin/recipes/new">
-              <Plus />
-              Nova ficha técnica
-            </Link>
-          </Button>
+          <WriteGate>
+            <Button size="sm" asChild>
+              <Link href="/admin/recipes/new">
+                <Plus />
+                Nova ficha técnica
+              </Link>
+            </Button>
+          </WriteGate>
         }
       />
 
@@ -33,12 +36,14 @@ export default async function RecipesPage() {
           title="Nenhuma ficha técnica"
           description="Crie sua primeira ficha técnica com passo a passo e cálculo de custo."
           action={
-            <Button asChild>
-              <Link href="/admin/recipes/new">
-                <Plus />
-                Nova ficha técnica
-              </Link>
-            </Button>
+            <WriteGate>
+              <Button asChild>
+                <Link href="/admin/recipes/new">
+                  <Plus />
+                  Nova ficha técnica
+                </Link>
+              </Button>
+            </WriteGate>
           }
         />
       ) : (

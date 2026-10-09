@@ -9,7 +9,7 @@ const context = { workspaceId: "", userId: "" };
 
 vi.mock("@/server/tenant/context", () => ({
   getScopedDb: async () => ({ ...context, role: "OWNER", db: scopedDb(context.workspaceId) }),
-  assertCanWrite: async () => {},
+  writeBlocked: async () => null,
 }));
 
 const { payInstallments, unpayInstallments, payNextInstallment } = await import("./sales");

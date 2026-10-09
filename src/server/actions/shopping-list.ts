@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { BaseUnit } from "@prisma/client";
-import { getScopedDb, assertCanWrite } from "@/server/tenant/context";
+import { getScopedDb, writeBlocked } from "@/server/tenant/context";
 import { assertWorkspaceFeature } from "@/server/tenant/features";
 import { getShoppingListSuggestions } from "@/server/queries/shopping-list";
 
@@ -15,7 +15,8 @@ function messageOf(e: unknown): string {
 export async function createShoppingListItem(formData: FormData): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
-    await assertCanWrite();
+    const blocked = await writeBlocked();
+    if (blocked) return blocked;
 
     const itemId = String(formData.get("itemId") ?? "").trim() || null;
     const label = String(formData.get("label") ?? "").trim();
@@ -37,7 +38,8 @@ export async function createShoppingListItem(formData: FormData): Promise<Action
 export async function updateShoppingListItem(id: string, formData: FormData): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
-    await assertCanWrite();
+    const blocked = await writeBlocked();
+    if (blocked) return blocked;
 
     const label = String(formData.get("label") ?? "").trim();
     const quantityRaw = String(formData.get("quantity") ?? "").trim();
@@ -58,7 +60,8 @@ export async function updateShoppingListItem(id: string, formData: FormData): Pr
 export async function deleteShoppingListItem(id: string): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
-    await assertCanWrite();
+    const blocked = await writeBlocked();
+    if (blocked) return blocked;
     await db.shoppingListItem.deleteMany({ where: { id, workspaceId } });
     revalidatePath("/stock/shopping-list");
     return { ok: true };
@@ -70,7 +73,8 @@ export async function deleteShoppingListItem(id: string): Promise<ActionResult> 
 export async function toggleShoppingListItem(id: string, done: boolean): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
-    await assertCanWrite();
+    const blocked = await writeBlocked();
+    if (blocked) return blocked;
     await db.shoppingListItem.updateMany({ where: { id, workspaceId }, data: { done } });
     revalidatePath("/stock/shopping-list");
     return { ok: true };
@@ -82,7 +86,8 @@ export async function toggleShoppingListItem(id: string, done: boolean): Promise
 export async function addSuggestedItem(itemId: string): Promise<ActionResult> {
   try {
     const { db, workspaceId } = await getScopedDb();
-    await assertCanWrite();
+    const blocked = await writeBlocked();
+    if (blocked) return blocked;
     await assertWorkspaceFeature(workspaceId, "autoShoppingList");
 
     const suggestions = await getShoppingListSuggestions();

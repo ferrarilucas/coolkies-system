@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { getCatalogOverview } from "@/server/queries/catalog";
 import { ActiveToggle } from "@/components/catalog/active-toggle";
 import { formatBRL } from "@/lib/money";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 function priceLabel(product: Awaited<ReturnType<typeof getCatalogOverview>>[number]) {
   const variantPrices = product.variants
@@ -32,12 +33,14 @@ export default async function CatalogPage() {
         description="Produtos, variações e preços de venda."
         backHref="/admin"
         action={
-          <Button asChild size="sm">
-            <Link href="/admin/catalog/new">
-              <Plus />
-              Novo produto
-            </Link>
-          </Button>
+          <WriteGate>
+            <Button asChild size="sm">
+              <Link href="/admin/catalog/new">
+                <Plus />
+                Novo produto
+              </Link>
+            </Button>
+          </WriteGate>
         }
       />
 
@@ -47,12 +50,14 @@ export default async function CatalogPage() {
           title="Nenhum produto"
           description="Cadastre o primeiro produto com suas variações e preços."
           action={
-            <Button asChild size="sm">
-              <Link href="/admin/catalog/new">
-                <Plus />
-                Novo produto
-              </Link>
-            </Button>
+            <WriteGate>
+              <Button asChild size="sm">
+                <Link href="/admin/catalog/new">
+                  <Plus />
+                  Novo produto
+                </Link>
+              </Button>
+            </WriteGate>
           }
         />
       ) : (

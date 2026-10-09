@@ -17,6 +17,7 @@ import { deleteSale } from "@/server/actions/sales";
 import { SalesFilters } from "@/components/sales/sales-filters";
 import { CustomerName } from "@/components/customers/customer-name";
 import { CustomerCollectDialog } from "@/components/customers/customer-collect-dialog";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -101,12 +102,14 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
         title="Vendas"
         description="Cadastre e acompanhe seus pedidos."
         action={
-          <Button asChild size="sm">
-            <Link href="/sales/new">
-              <Plus />
-              Nova venda
-            </Link>
-          </Button>
+          <WriteGate>
+            <Button asChild size="sm">
+              <Link href="/sales/new">
+                <Plus />
+                Nova venda
+              </Link>
+            </Button>
+          </WriteGate>
         }
       />
 
@@ -196,7 +199,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
                 "Cadastre sua primeira venda."
               }
               action={tab === "all" && !hasFilters ? (
-                <Button asChild><Link href="/sales/new"><Plus />Nova venda</Link></Button>
+                <WriteGate><Button asChild><Link href="/sales/new"><Plus />Nova venda</Link></Button></WriteGate>
               ) : undefined}
             />
           ) : (

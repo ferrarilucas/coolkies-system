@@ -6,6 +6,7 @@ import { getItemsWithLastCost } from "@/server/queries/items";
 import { ItemDialog } from "@/components/items/item-dialog";
 import { DeleteItemButton } from "@/components/items/delete-item-button";
 import { formatBRL } from "@/lib/money";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 const UNIT_ABBR: Record<string, string> = { G: "g", ML: "ml", UN: "un" };
 
@@ -18,7 +19,7 @@ export default async function IngredientsPage() {
         title="Insumos"
         description="Itens usados nas fichas técnicas ou comprados para revenda."
         backHref="/admin"
-        action={<ItemDialog mode="create" />}
+        action={<WriteGate><ItemDialog mode="create" /></WriteGate>}
       />
 
       {items.length === 0 ? (
@@ -26,7 +27,7 @@ export default async function IngredientsPage() {
           icon={Boxes}
           title="Nenhum insumo"
           description="Cadastre os insumos que você usa nas fichas técnicas."
-          action={<ItemDialog mode="create" />}
+          action={<WriteGate><ItemDialog mode="create" /></WriteGate>}
         />
       ) : (
         <div className="space-y-2">

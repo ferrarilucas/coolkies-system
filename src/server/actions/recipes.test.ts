@@ -15,8 +15,9 @@ vi.mock("@/server/tenant/context", () => ({
     canWrite: context.canWrite,
   }),
   getWorkspaceDb: async () => scopedDb(context.workspaceId),
-  assertCanWrite: async () => {
-    if (!context.canWrite) throw new Error("Este workspace está em modo somente leitura.");
+  writeBlocked: async () => {
+    if (!context.canWrite) return { ok: false, error: "Este workspace está em modo somente leitura." };
+    return null;
   },
 }));
 

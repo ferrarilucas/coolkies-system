@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { StockMovementType, type BaseUnit } from "@prisma/client";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 import { toBaseUnit, type InputUnit } from "@/lib/units";
 import { getLastPurchase } from "@/server/queries/purchase-cost";
@@ -15,7 +15,8 @@ export async function createSupplierInline(
   formData: FormData,
 ): Promise<ActionResult<{ id: string; name: string }>> {
   const { db, workspaceId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
@@ -30,7 +31,8 @@ export async function createSupplierInline(
 
 export async function updateSupplier(id: string, formData: FormData): Promise<ActionResult> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   const name = normalizeName(String(formData.get("name") ?? ""));
   if (!name) return { ok: false, error: "Nome é obrigatório." };
 
@@ -45,7 +47,8 @@ export async function updateSupplier(id: string, formData: FormData): Promise<Ac
 
 export async function deleteSupplier(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   try {
     await db.supplier.delete({ where: { id } });
     revalidatePath("/purchases");
@@ -67,7 +70,8 @@ type PurchaseItemInput = {
 
 export async function createPurchase(formData: FormData): Promise<ActionResult> {
   const { db, workspaceId, userId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const supplierId = String(formData.get("supplierId") ?? "").trim() || null;
   const purchasedAtRaw = String(formData.get("purchasedAt") ?? "").trim();
@@ -155,7 +159,8 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
 
 export async function deletePurchase(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   await db.stockMovement.deleteMany({ where: { purchaseId: id } });
   await db.purchase.delete({ where: { id } });
   revalidatePath("/purchases");

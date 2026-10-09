@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WriteGate } from "./read-only-context";
 
 type NavItem = {
   href: string;
@@ -85,16 +86,18 @@ export function BottomNav() {
         ))}
 
         <li className="flex-1">
-          <Link
-            href="/sales/new"
-            aria-label="Nova venda"
-            className="-mt-6 flex flex-col items-center gap-1 pb-2.5 text-[11px] font-medium text-primary"
-          >
-            <span className="flex size-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95">
-              <Plus className="size-6" />
-            </span>
-            Vender
-          </Link>
+          <WriteGate className="flex justify-center">
+            <Link
+              href="/sales/new"
+              aria-label="Nova venda"
+              className="-mt-6 flex flex-col items-center gap-1 pb-2.5 text-[11px] font-medium text-primary"
+            >
+              <span className="flex size-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95">
+                <Plus className="size-6" />
+              </span>
+              Vender
+            </Link>
+          </WriteGate>
         </li>
 
         {rightItems.map((item) => (

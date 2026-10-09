@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { normalizeName } from "@/lib/text";
 import { BaseUnit } from "@prisma/client";
 
@@ -28,7 +28,8 @@ function validateRoles(productionInput: boolean, sellable: boolean, unit: BaseUn
 
 export async function createItem(formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const unit = parseUnit(String(formData.get("unit") ?? "G"));
@@ -53,7 +54,8 @@ export async function createItem(formData: FormData): Promise<ActionResult> {
 
 export async function updateItem(id: string, formData: FormData): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const unit = parseUnit(String(formData.get("unit") ?? "G"));
@@ -78,7 +80,8 @@ export async function updateItem(id: string, formData: FormData): Promise<Action
 
 export async function deleteItem(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   try {
     await db.item.delete({ where: { id } });
   } catch {
@@ -100,7 +103,8 @@ export async function createItemForPurchase(
   formData: FormData,
 ): Promise<ActionResult<ItemInlineData>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const name = normalizeName(String(formData.get("name") ?? ""));
   const unit = parseUnit(String(formData.get("unit") ?? "G"));

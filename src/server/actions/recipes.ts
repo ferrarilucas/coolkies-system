@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { BaseUnit, Prisma } from "@prisma/client";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -12,7 +12,8 @@ type ItemLine = { itemId: string; quantity: number };
 
 export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const name = String(formData.get("name") ?? "").trim();
@@ -89,7 +90,8 @@ export async function saveRecipe(formData: FormData): Promise<ActionResult<{ id:
 
 export async function deleteRecipe(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   try {
     await db.recipe.delete({ where: { id } });
   } catch {
@@ -105,7 +107,8 @@ type ItemData = { id: string; name: string; unit: string };
 
 export async function createItemInline(formData: FormData): Promise<ActionResult<ItemData>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const name = String(formData.get("name") ?? "").trim();
   const unitRaw = String(formData.get("unit") ?? "G");

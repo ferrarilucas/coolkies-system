@@ -10,6 +10,7 @@ import { CustomerCreateDialog } from "@/components/customers/customer-create-dia
 import { CustomersFilters } from "@/components/customers/customers-filters";
 import { formatBRL } from "@/lib/money";
 import { parseForecastCutoff, type CustomerSituation } from "@/lib/customer-balance";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 type SearchParams = Promise<{
   q?: string;
@@ -62,7 +63,7 @@ export default async function CustomersPage({
       <PageHeader
         title="Clientes"
         description="Gerencie sua base de clientes."
-        action={<CustomerCreateDialog />}
+        action={<WriteGate><CustomerCreateDialog /></WriteGate>}
       />
 
       <CustomersFilters
@@ -102,7 +103,7 @@ export default async function CustomersPage({
               ? "Ajuste os filtros para ver outros clientes."
               : "Adicione clientes para vincular às suas vendas."
           }
-          action={hasFilters ? undefined : <CustomerCreateDialog />}
+          action={hasFilters ? undefined : <WriteGate><CustomerCreateDialog /></WriteGate>}
         />
       ) : (
         <CustomerList customers={customers} forecastTo={forecastTo || undefined} />

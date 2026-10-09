@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
 import { syncSaleSummary, toPlans, writeInstallments } from "@/server/sales/installments";
@@ -61,7 +61,8 @@ function saleItemsCreate(items: SaleItemInput[], workspaceId: string) {
 
 export async function createSale(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const { db, workspaceId, userId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -136,7 +137,8 @@ export async function createSale(formData: FormData): Promise<ActionResult<{ id:
 
 export async function updateSale(id: string, formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
   const customerName = String(formData.get("customerName") ?? "").trim() || null;
@@ -220,7 +222,8 @@ export async function payInstallments(
   if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const open = await db.saleInstallment.findMany({
     where: { id: { in: installmentIds }, paidAt: null },
@@ -250,7 +253,8 @@ export async function unpayInstallments(installmentIds: string[]): Promise<Actio
   if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const paid = await db.saleInstallment.findMany({
     where: { id: { in: installmentIds }, paidAt: { not: null } },
@@ -274,7 +278,8 @@ export async function payNextInstallment(
   saleId: string,
 ): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number; amountCents: number }>> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const next = await db.saleInstallment.findFirst({
     where: { saleId, paidAt: null },
@@ -300,7 +305,8 @@ export async function payNextInstallment(
 
 export async function deleteSale(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   try {
     await db.stockMovement.deleteMany({ where: { saleId: id } });
     await db.sale.delete({ where: { id } });

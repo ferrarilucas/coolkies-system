@@ -30,6 +30,7 @@ import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
 import { VariantMixChart } from "@/components/charts/variant-mix-chart";
 import { SupplierSpendChart } from "@/components/charts/supplier-spend-chart";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 export const dynamic = "force-dynamic";
 
@@ -80,12 +81,14 @@ export default async function DashboardPage({
         title="Painel"
         description="Visão geral do negócio"
         action={
-          <Button asChild size="sm" className="hidden md:inline-flex">
-            <Link href="/sales/new">
-              <Plus />
-              Nova venda
-            </Link>
-          </Button>
+          <WriteGate className="hidden md:inline-flex">
+            <Button asChild size="sm">
+              <Link href="/sales/new">
+                <Plus />
+                Nova venda
+              </Link>
+            </Button>
+          </WriteGate>
         }
       />
 
@@ -429,7 +432,7 @@ function Kpi({
     tone === "success"
       ? "text-success"
       : tone === "warning"
-        ? "text-warning-text"
+        ? "text-warning"
         : tone === "destructive"
           ? "text-destructive"
           : "";

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { getProductionBatches } from "@/server/queries/production";
 import { RowActions } from "@/components/shared/row-actions";
 import { deleteProductionBatch } from "@/server/actions/production";
+import { WriteGate } from "@/components/layout/read-only-context";
 
 export default async function ProductionPage() {
   const batches = await getProductionBatches();
@@ -19,9 +20,11 @@ export default async function ProductionPage() {
         title="Produção"
         description="Histórico de produções"
         action={
-          <Button asChild size="sm">
-            <Link href="/production/new"><Plus />Registrar produção</Link>
-          </Button>
+          <WriteGate>
+            <Button asChild size="sm">
+              <Link href="/production/new"><Plus />Registrar produção</Link>
+            </Button>
+          </WriteGate>
         }
       />
 
@@ -29,7 +32,7 @@ export default async function ProductionPage() {
         <EmptyState
           icon={ClipboardList}
           title="Nenhuma produção registrada"
-          action={<Button asChild><Link href="/production/new"><Plus />Registrar produção</Link></Button>}
+          action={<WriteGate><Button asChild><Link href="/production/new"><Plus />Registrar produção</Link></Button></WriteGate>}
         />
       ) : (
         <div className="space-y-2">

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import type { MemberRole, PrismaClient } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { READ_ONLY_MESSAGE } from "@/lib/read-only";
 import { scopedDb } from "./extension";
 import { canWriteInWorkspace } from "./subscription";
 
@@ -73,11 +74,7 @@ export async function getScopedDb(...allowedRoles: MemberRole[]): Promise<Scoped
   return { ...context, db: scopedDb(context.workspaceId) };
 }
 
-export async function assertCanWrite(): Promise<void> {
+export async function writeBlocked(): Promise<{ ok: false; error: string } | null> {
   const { canWrite } = await getWorkspaceContext();
-  if (!canWrite) {
-    throw new Error(
-      "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
-    );
-  }
+  return canWrite ? null : { ok: false, error: READ_ONLY_MESSAGE };
 }

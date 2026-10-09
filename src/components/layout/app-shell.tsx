@@ -3,6 +3,7 @@ import { BottomNav } from "./bottom-nav";
 import { SideNav } from "./side-nav";
 import { MainArea } from "./main-area";
 import { PlanBanner } from "./plan-banner";
+import { ReadOnlyProvider } from "./read-only-context";
 import { TrialBanner } from "./trial-banner";
 import { InstallBanner } from "@/components/pwa/install-banner";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
@@ -37,34 +38,36 @@ export function AppShell({
   const showMobileBar = workspaces.length > 1;
 
   return (
-    <div className="flex h-dvh overflow-hidden">
-      <SideNav
-        user={user}
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId}
-      />
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {showMobileBar && (
-          <WorkspaceSwitcher
-            workspaces={workspaces}
-            activeId={activeWorkspaceId}
-            variant="bar"
-          />
-        )}
-        <InstallBanner />
-        <TrialBanner trial={trial} canManageBilling={canManageBilling} />
-        <PlanBanner
-          status={planStatus}
-          isOverLimit={isOverLimit}
-          isReadOnly={isReadOnly}
-          workspaceName={active?.name ?? "este workspace"}
-          canManageBilling={canManageBilling}
-          hasAuthorized={hasAuthorized}
-          lastFailureReason={lastFailureReason}
+    <ReadOnlyProvider readOnly={isReadOnly}>
+      <div className="flex h-dvh overflow-hidden">
+        <SideNav
+          user={user}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
         />
-        <MainArea>{children}</MainArea>
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          {showMobileBar && (
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeId={activeWorkspaceId}
+              variant="bar"
+            />
+          )}
+          <InstallBanner />
+          <TrialBanner trial={trial} canManageBilling={canManageBilling} />
+          <PlanBanner
+            status={planStatus}
+            isOverLimit={isOverLimit}
+            isReadOnly={isReadOnly}
+            workspaceName={active?.name ?? "este workspace"}
+            canManageBilling={canManageBilling}
+            hasAuthorized={hasAuthorized}
+            lastFailureReason={lastFailureReason}
+          />
+          <MainArea>{children}</MainArea>
+        </div>
+        <BottomNav />
       </div>
-      <BottomNav />
-    </div>
+    </ReadOnlyProvider>
   );
 }

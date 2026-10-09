@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import type { Prisma } from "@prisma/client";
 
 type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -100,7 +100,8 @@ function validate(itemId: string, quantity: number, variantLines: VariantLineInp
 
 export async function createProductionBatch(formData: FormData): Promise<ActionResult> {
   const { db, workspaceId, userId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const { itemId, recipeId, quantity, notes, producedAt, variantLines } = parseForm(formData);
   const error = validate(itemId, quantity, variantLines);
@@ -124,7 +125,8 @@ export async function createProductionBatch(formData: FormData): Promise<ActionR
 
 export async function updateProductionBatch(id: string, formData: FormData): Promise<ActionResult> {
   const { db, workspaceId } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const { itemId, recipeId, quantity, notes, producedAt, variantLines } = parseForm(formData);
   const error = validate(itemId, quantity, variantLines);
@@ -148,7 +150,8 @@ export async function updateProductionBatch(id: string, formData: FormData): Pro
 
 export async function deleteProductionBatch(id: string): Promise<ActionResult> {
   const { db } = await getScopedDb();
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   try {
     await db.$transaction([
       db.stockMovement.deleteMany({ where: { productionBatchId: id } }),

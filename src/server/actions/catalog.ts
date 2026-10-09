@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
+import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import type { Prisma } from "@prisma/client";
 import { normalizeName } from "@/lib/text";
 import {
@@ -17,7 +17,8 @@ export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: 
 
 export async function toggleItemActive(id: string, active: boolean): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   await db.item.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -25,7 +26,8 @@ export async function toggleItemActive(id: string, active: boolean): Promise<Act
 
 export async function toggleVariantActive(id: string, active: boolean): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   await db.variant.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -33,7 +35,8 @@ export async function toggleVariantActive(id: string, active: boolean): Promise<
 
 export async function togglePriceActive(id: string, active: boolean): Promise<ActionResult> {
   const { db } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
   await db.priceListItem.update({ where: { id }, data: { active } });
   revalidatePath("/admin/catalog");
   return { ok: true };
@@ -144,7 +147,8 @@ export async function saveItem(
   input: SaveItemInput,
 ): Promise<ActionResult<{ id: string; deactivated: string[] }>> {
   const { db, workspaceId } = await getScopedDb("OWNER", "ADMIN");
-  await assertCanWrite();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
 
   const name = normalizeName(input.name);
   if (!name) return { ok: false, error: "Nome do produto é obrigatório." };

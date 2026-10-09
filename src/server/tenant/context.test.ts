@@ -15,9 +15,9 @@ vi.mock("./subscription", () => ({
   canWriteInWorkspace: async () => canWriteResult,
 }));
 
-const { assertCanWrite } = await import("./context");
+const { writeBlocked } = await import("./context");
 
-describe("assertCanWrite", () => {
+describe("writeBlocked", () => {
   beforeEach(async () => {
     await resetDb();
   });
@@ -38,19 +38,20 @@ describe("assertCanWrite", () => {
     };
   }
 
-  it("lança quando o contexto não permite escrita", async () => {
+  it("retorna o erro de somente leitura quando o contexto não permite escrita", async () => {
     await seedActiveMembership();
     canWriteResult = false;
 
-    await expect(assertCanWrite()).rejects.toThrow(
-      "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
-    );
+    await expect(writeBlocked()).resolves.toEqual({
+      ok: false,
+      error: "Este workspace está em modo somente leitura. Ative um plano para voltar a registrar.",
+    });
   });
 
-  it("passa quando o contexto permite escrita", async () => {
+  it("retorna null quando o contexto permite escrita", async () => {
     await seedActiveMembership();
     canWriteResult = true;
 
-    await expect(assertCanWrite()).resolves.toBeUndefined();
+    await expect(writeBlocked()).resolves.toBeNull();
   });
 });
