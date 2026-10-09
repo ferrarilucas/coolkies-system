@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testDb, resetDb, createWorkspace } from "@/test/db";
+import { seedParceledSale } from "@/test/sales";
 import { scopedDb } from "@/server/tenant/extension";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -7,123 +8,82 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 const context = { workspaceId: "", userId: "" };
 
 vi.mock("@/server/tenant/context", () => ({
-  getScopedDb: async () => ({
-    ...context,
-    role: "OWNER",
-    db: scopedDb(context.workspaceId),
-  }),
+  getScopedDb: async () => ({ ...context, role: "OWNER", db: scopedDb(context.workspaceId) }),
   assertCanWrite: async () => {},
 }));
 
-const { markSalesAsPaid } = await import("./sales");
+const { payInstallments, unpayInstallments, payNextInstallment } = await import("./sales");
 
-async function seedUser(suffix: string) {
-  return testDb.user.create({
-    data: {
-      id: `user-${suffix}`,
-      name: "Dono",
-      email: `dono-${suffix}@example.com`,
-    },
-  });
-}
+const due = (m: number) => new Date(2026, m, 5, 12);
 
-async function seedSale(
-  workspaceId: string,
-  userId: string,
-  customerId: string,
-  data: { totalCents: number; status?: "PAID" | "PENDING"; forecast?: Date },
-) {
-  return testDb.sale.create({
-    data: {
-      workspaceId,
-      userId,
-      customerId,
-      totalCents: data.totalCents,
-      status: data.status ?? "PENDING",
-      paidAt: data.status === "PAID" ? new Date("2026-01-01T00:00:00Z") : null,
-      paymentForecastDate: data.forecast ?? null,
-    },
-  });
-}
-
-describe("markSalesAsPaid", () => {
-  let customerId = "";
-  let userId = "";
-
+describe("pagamento por parcela", () => {
   beforeEach(async () => {
     await resetDb();
-    const workspace = await createWorkspace("Cookies");
-    const user = await seedUser(workspace.id);
-    context.workspaceId = workspace.id;
-    context.userId = user.id;
-    userId = user.id;
-    const customer = await testDb.customer.create({
-      data: { name: "Ana", workspaceId: workspace.id },
-    });
-    customerId = customer.id;
+    context.workspaceId = (await createWorkspace("Cookies")).id;
   });
 
-  it("quita apenas as vendas selecionadas", async () => {
-    const a = await seedSale(context.workspaceId, userId, customerId, { totalCents: 1000 });
-    const b = await seedSale(context.workspaceId, userId, customerId, { totalCents: 2500 });
-    const c = await seedSale(context.workspaceId, userId, customerId, { totalCents: 700 });
-
-    const res = await markSalesAsPaid([a.id, b.id]);
-
-    expect(res).toEqual({ ok: true, data: { count: 2, totalCents: 3500 } });
-
-    const statuses = await testDb.sale.findMany({
-      where: { id: { in: [a.id, b.id, c.id] } },
-      orderBy: { totalCents: "asc" },
-      select: { status: true },
+  async function threeParcels() {
+    return seedParceledSale({
+      workspaceId: context.workspaceId,
+      parcels: [
+        { amountCents: 3333, dueDate: due(10) },
+        { amountCents: 3333, dueDate: due(11) },
+        { amountCents: 3334, dueDate: due(12) },
+      ],
     });
-    expect(statuses.map((s) => s.status)).toEqual(["PENDING", "PAID", "PAID"]);
+  }
+
+  it("pagar uma parcela não quita a venda", async () => {
+    const sale = await threeParcels();
+    const res = await payInstallments([sale.installments[0].id]);
+    expect(res).toEqual({ ok: true, data: { count: 1, totalCents: 3333 } });
+    const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
+    expect([saved.status, saved.openCents, saved.paymentForecastDate]).toEqual(["PENDING", 6667, due(11)]);
   });
 
-  it("registra a data de pagamento e limpa a previsão", async () => {
-    const sale = await seedSale(context.workspaceId, userId, customerId, {
-      totalCents: 1000,
-      forecast: new Date("2026-09-05T00:00:00Z"),
-    });
-
-    await markSalesAsPaid([sale.id]);
-
-    const updated = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
-    expect(updated.paidAt).toBeInstanceOf(Date);
-    expect(updated.paymentForecastDate).toBeNull();
+  it("pagar todas quita a venda", async () => {
+    const sale = await threeParcels();
+    await payInstallments(sale.installments.map((i) => i.id));
+    const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
+    expect([saved.status, saved.openCents, saved.paidAt !== null]).toEqual(["PAID", 0, true]);
   });
 
-  it("ignora venda que já estava paga", async () => {
-    const paid = await seedSale(context.workspaceId, userId, customerId, {
-      totalCents: 5000,
-      status: "PAID",
-    });
-    const pending = await seedSale(context.workspaceId, userId, customerId, { totalCents: 1000 });
-
-    const res = await markSalesAsPaid([paid.id, pending.id]);
-
-    expect(res.data).toEqual({ count: 1, totalCents: 1000 });
-    const untouched = await testDb.sale.findUniqueOrThrow({ where: { id: paid.id } });
-    expect(untouched.paidAt).toEqual(new Date("2026-01-01T00:00:00Z"));
+  it("pagar de novo a mesma parcela não muda a data nem soma valor", async () => {
+    const sale = await threeParcels();
+    await payInstallments([sale.installments[0].id]);
+    const first = await testDb.saleInstallment.findUniqueOrThrow({ where: { id: sale.installments[0].id } });
+    const res = await payInstallments([sale.installments[0].id]);
+    expect(res).toEqual({ ok: false, error: "Nenhuma parcela em aberto selecionada." });
+    const again = await testDb.saleInstallment.findUniqueOrThrow({ where: { id: sale.installments[0].id } });
+    expect(again.paidAt).toEqual(first.paidAt);
   });
 
-  it("não quita venda de outro workspace", async () => {
-    const other = await createWorkspace("Outro");
-    const otherUser = await seedUser(other.id);
-    const otherCustomer = await testDb.customer.create({
-      data: { name: "Intruso", workspaceId: other.id },
+  it("desfazer reabre a parcela e a venda", async () => {
+    const sale = await threeParcels();
+    await payInstallments(sale.installments.map((i) => i.id));
+    expect(await unpayInstallments([sale.installments[2].id])).toEqual({ ok: true });
+    const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
+    expect([saved.status, saved.openCents, saved.paymentForecastDate]).toEqual(["PENDING", 3334, due(12)]);
+  });
+
+  it("payNextInstallment paga a primeira parcela em aberto", async () => {
+    const sale = await threeParcels();
+    await payInstallments([sale.installments[0].id]);
+    const res = await payNextInstallment(sale.id);
+    expect(res).toEqual({
+      ok: true,
+      data: { installmentId: sale.installments[1].id, number: 2, installmentCount: 3, amountCents: 3333 },
     });
-    const alheia = await seedSale(other.id, otherUser.id, otherCustomer.id, { totalCents: 9999 });
+  });
 
-    const res = await markSalesAsPaid([alheia.id]);
-
-    expect(res.ok).toBe(false);
-    const untouched = await testDb.sale.findUniqueOrThrow({ where: { id: alheia.id } });
-    expect(untouched.status).toBe("PENDING");
+  it("não paga parcela de outro workspace", async () => {
+    const other = await createWorkspace("Outra");
+    const foreign = await seedParceledSale({ workspaceId: other.id, parcels: [{ amountCents: 1000, dueDate: due(10) }] });
+    const res = await payInstallments([foreign.installments[0].id]);
+    expect(res).toEqual({ ok: false, error: "Nenhuma parcela em aberto selecionada." });
   });
 
   it("recusa lista vazia", async () => {
-    const res = await markSalesAsPaid([]);
-    expect(res.ok).toBe(false);
+    expect(await payInstallments([])).toEqual({ ok: false, error: "Selecione ao menos uma parcela." });
   });
 });

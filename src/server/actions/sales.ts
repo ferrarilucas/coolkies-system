@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { assertCanWrite, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
-import { toPlans, writeInstallments } from "@/server/sales/installments";
+import { syncSaleSummary, toPlans, writeInstallments } from "@/server/sales/installments";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -207,116 +207,92 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   }
 }
 
+function revalidatePayments() {
+  revalidatePath("/sales");
+  revalidatePath("/customers");
+  revalidatePath("/dashboard");
+}
 
-// ─── Marcar como pago ────────────────────────────────────────────────────────
+export async function payInstallments(
+  installmentIds: string[],
+): Promise<ActionResult<{ count: number; totalCents: number }>> {
+  if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
-export async function markAsPaid(
-  id: string,
-): Promise<ActionResult<{ forecastDate: string | null; forecastPreset: string | null }>> {
   const { db } = await getScopedDb();
   await assertCanWrite();
-  const sale = await db.sale.findUnique({
-    where: { id },
-    select: { paymentForecastDate: true, forecastPreset: true },
-  });
-  if (!sale) return { ok: false, error: "Venda não encontrada." };
 
-  await db.sale.update({
-    where: { id },
-    data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
+  const open = await db.saleInstallment.findMany({
+    where: { id: { in: installmentIds }, paidAt: null },
+    select: { id: true, saleId: true, amountCents: true },
   });
-  revalidatePath("/sales");
+  if (open.length === 0) return { ok: false, error: "Nenhuma parcela em aberto selecionada." };
+
+  await db.$transaction(async (tx) => {
+    await tx.saleInstallment.updateMany({
+      where: { id: { in: open.map((i) => i.id) }, paidAt: null },
+      data: { paidAt: new Date() },
+    });
+    await syncSaleSummary(tx, [...new Set(open.map((i) => i.saleId))]);
+  });
+
+  revalidatePayments();
   return {
     ok: true,
     data: {
-      forecastDate: sale.paymentForecastDate?.toISOString() ?? null,
-      forecastPreset: sale.forecastPreset ?? null,
+      count: open.length,
+      totalCents: open.reduce((sum, i) => sum + i.amountCents, 0),
     },
   };
 }
 
-export async function markCustomerSalesAsPaid(
-  customerId: string,
-): Promise<ActionResult<{ count: number; totalCents: number }>> {
+export async function unpayInstallments(installmentIds: string[]): Promise<ActionResult> {
+  if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
+
   const { db } = await getScopedDb();
   await assertCanWrite();
 
-  const pending = await db.sale.aggregate({
-    where: { customerId, status: "PENDING" },
-    _sum: { totalCents: true },
-    _count: { _all: true },
+  const paid = await db.saleInstallment.findMany({
+    where: { id: { in: installmentIds }, paidAt: { not: null } },
+    select: { id: true, saleId: true },
   });
-  const count = pending._count._all;
-  if (count === 0) {
-    return { ok: false, error: "Nenhuma venda pendente para este cliente." };
-  }
+  if (paid.length === 0) return { ok: false, error: "Não foi possível desfazer." };
 
-  await db.sale.updateMany({
-    where: { customerId, status: "PENDING" },
-    data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
+  await db.$transaction(async (tx) => {
+    await tx.saleInstallment.updateMany({
+      where: { id: { in: paid.map((i) => i.id) } },
+      data: { paidAt: null },
+    });
+    await syncSaleSummary(tx, [...new Set(paid.map((i) => i.saleId))]);
   });
 
-  revalidatePath("/sales");
-  revalidatePath("/dashboard");
+  revalidatePayments();
+  return { ok: true };
+}
+
+export async function payNextInstallment(
+  saleId: string,
+): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number; amountCents: number }>> {
+  const { db } = await getScopedDb();
+  await assertCanWrite();
+
+  const next = await db.saleInstallment.findFirst({
+    where: { saleId, paidAt: null },
+    orderBy: { number: "asc" },
+    select: { id: true, number: true, amountCents: true, sale: { select: { installmentCount: true } } },
+  });
+  if (!next) return { ok: false, error: "Esta venda não tem parcela em aberto." };
+
+  const res = await payInstallments([next.id]);
+  if (!res.ok) return { ok: false, error: res.error };
   return {
     ok: true,
-    data: { count, totalCents: pending._sum.totalCents ?? 0 },
+    data: {
+      installmentId: next.id,
+      number: next.number,
+      installmentCount: next.sale.installmentCount,
+      amountCents: next.amountCents,
+    },
   };
-}
-
-export async function markSalesAsPaid(
-  saleIds: string[],
-): Promise<ActionResult<{ count: number; totalCents: number }>> {
-  if (saleIds.length === 0) {
-    return { ok: false, error: "Selecione ao menos uma venda." };
-  }
-
-  const { db } = await getScopedDb();
-  await assertCanWrite();
-
-  const pending = await db.sale.aggregate({
-    where: { id: { in: saleIds }, status: "PENDING" },
-    _sum: { totalCents: true },
-    _count: { _all: true },
-  });
-  const count = pending._count._all;
-  if (count === 0) {
-    return { ok: false, error: "Nenhuma venda pendente selecionada." };
-  }
-
-  await db.sale.updateMany({
-    where: { id: { in: saleIds }, status: "PENDING" },
-    data: { status: "PAID", paidAt: new Date(), paymentForecastDate: null, forecastPreset: null },
-  });
-
-  revalidatePath("/sales");
-  revalidatePath("/customers");
-  revalidatePath("/dashboard");
-  return { ok: true, data: { count, totalCents: pending._sum.totalCents ?? 0 } };
-}
-
-export async function markAsPending(
-  id: string,
-  forecastDate: string | null,
-  forecastPreset: string | null,
-): Promise<ActionResult> {
-  const { db } = await getScopedDb();
-  await assertCanWrite();
-  try {
-    await db.sale.update({
-      where: { id },
-      data: {
-        status: "PENDING",
-        paidAt: null,
-        paymentForecastDate: forecastDate ? new Date(forecastDate) : null,
-        forecastPreset: forecastPreset as "DAY_FIVE" | "FIFTH_BUSINESS_DAY" | "CUSTOM" | null,
-      },
-    });
-  } catch {
-    return { ok: false, error: "Não foi possível desfazer." };
-  }
-  revalidatePath("/sales");
-  return { ok: true };
 }
 
 // ─── Excluir venda ───────────────────────────────────────────────────────────
