@@ -34,6 +34,7 @@ import { resolveForecast, type ForecastPreset } from "@/lib/business-days";
 import type { CustomerSummary } from "@/server/queries/customers";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { buildSchedule, splitAmount, MIN_INSTALLMENTS, MAX_INSTALLMENTS } from "@/lib/installments";
 import { findVariantByValues, isValueAvailable } from "@/lib/variant-options";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -110,6 +111,8 @@ interface Props {
     status: "PAID" | "PENDING";
     forecastPreset: string | null;
     forecastDate: string | null;
+    installmentCount: number;
+    firstDueDate: string | null;
     discountType: DiscountType | null;
     discountValue: number;
     items: Omit<SaleItemLine, "key">[];
@@ -308,11 +311,17 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   );
 
   const initialPayStatus: PayStatus =
-    initial?.status === "PENDING"
-      ? ((initial.forecastPreset as ForecastPreset) ?? "DAY_FIVE")
+    (initial?.installmentCount ?? 1) > 1 || initial?.status === "PENDING"
+      ? ((initial?.forecastPreset as ForecastPreset) ?? "DAY_FIVE")
       : "PAID";
   const [payStatus, setPayStatus] = useState<PayStatus>(initialPayStatus);
-  const [customDate, setCustomDate] = useState(initial?.forecastDate ?? "");
+  const [customDate, setCustomDate] = useState(
+    ((initial?.installmentCount ?? 1) > 1 ? initial?.firstDueDate : initial?.forecastDate) ?? "",
+  );
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "INSTALLMENTS">(
+    (initial?.installmentCount ?? 1) > 1 ? "INSTALLMENTS" : "CASH",
+  );
+  const [installmentCount, setInstallmentCount] = useState<number>(Math.max(initial?.installmentCount ?? 3, MIN_INSTALLMENTS));
 
   // Desconto
   const [discountType, setDiscountType] = useState<DiscountType | null>(initial?.discountType ?? null);
@@ -326,6 +335,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     notes,
     payStatus,
     customDate,
+    paymentMode,
+    installmentCount,
     discountType,
     discountValue,
     lines: lines.map((l) => [l.itemId, l.variantId, l.quantity, l.unitPriceCents]),
@@ -370,12 +381,37 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const totalCents = subtotalCents - discountCents;
   const zeroPriceCount = filledLines.filter((l) => l.unitPriceCents === 0).length;
 
+  const keepFirstDue =
+    paymentMode === "INSTALLMENTS" &&
+    (initial?.installmentCount ?? 1) > 1 &&
+    payStatus === initialPayStatus &&
+    payStatus !== "CUSTOM" &&
+    initial?.firstDueDate;
+
   const forecastDate: Date | null =
     payStatus === "PAID"
       ? null
-      : payStatus === "CUSTOM" && customDate
-        ? new Date(`${customDate}T12:00:00`)
-        : resolveForecast(payStatus as ForecastPreset, undefined);
+      : keepFirstDue
+        ? new Date(`${initial!.firstDueDate}T12:00:00`)
+        : payStatus === "CUSTOM" && customDate
+          ? new Date(`${customDate}T12:00:00`)
+          : resolveForecast(payStatus as ForecastPreset, undefined);
+
+  function choosePaymentMode(mode: "CASH" | "INSTALLMENTS") {
+    setPaymentMode(mode);
+    if (mode === "INSTALLMENTS" && payStatus === "PAID") setPayStatus("DAY_FIVE");
+  }
+
+  const installmentPreview =
+    paymentMode === "INSTALLMENTS" && forecastDate
+      ? (() => {
+          const amounts = splitAmount(totalCents, installmentCount);
+          return buildSchedule(forecastDate, payStatus as ForecastPreset, installmentCount).map((date, idx) => ({
+            date,
+            amountCents: amounts[idx],
+          }));
+        })()
+      : [];
 
   function handleSubmit() {
     if (filledLines.length === 0) {
@@ -392,6 +428,11 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
       return;
     }
 
+    if (paymentMode === "INSTALLMENTS" && !forecastDate) {
+      toast.error("Escolha a data da 1ª parcela.");
+      return;
+    }
+
     const fd = new FormData();
     fd.set("customerId", customer?.id ?? "");
     fd.set("customerName", customer?.name ?? "");
@@ -400,6 +441,8 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
     fd.set("status", payStatus === "PAID" ? "PAID" : "PENDING");
     fd.set("forecastPreset", payStatus !== "PAID" ? payStatus : "");
     fd.set("forecastDate", forecastDate ? format(forecastDate, "yyyy-MM-dd") : "");
+    fd.set("paymentMode", paymentMode);
+    fd.set("installmentCount", String(paymentMode === "INSTALLMENTS" ? installmentCount : 1));
     fd.set("discountType", discountType ?? "");
     fd.set("discountValue", String(discountValue));
     fd.set(
@@ -610,18 +653,55 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Pagamento
         </h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {payOptions.map(({ key, label }) => (
+        <div className="grid grid-cols-2 gap-2">
+          {(["CASH", "INSTALLMENTS"] as const).map((mode) => (
             <Button
-              key={key}
+              key={mode}
               type="button"
-              variant={payStatus === key ? "default" : "outline"}
-              onClick={() => setPayStatus(key)}
-              className="justify-center"
+              variant={paymentMode === mode ? "default" : "outline"}
+              onClick={() => choosePaymentMode(mode)}
             >
-              {label}
+              {mode === "CASH" ? "À vista" : "Parcelado"}
             </Button>
           ))}
+        </div>
+
+        {paymentMode === "INSTALLMENTS" && (
+          <div className="space-y-2">
+            <Label htmlFor="installment-count">Número de parcelas</Label>
+            <Input
+              id="installment-count"
+              type="number"
+              inputMode="numeric"
+              min={MIN_INSTALLMENTS}
+              max={MAX_INSTALLMENTS}
+              value={installmentCount}
+              onChange={(e) =>
+                setInstallmentCount(
+                  Math.min(MAX_INSTALLMENTS, Math.max(MIN_INSTALLMENTS, parseInt(e.target.value, 10) || MIN_INSTALLMENTS)),
+                )
+              }
+            />
+          </div>
+        )}
+
+        {paymentMode === "INSTALLMENTS" && (
+          <Label className="text-muted-foreground">Vencimento da 1ª parcela</Label>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {payOptions
+            .filter(({ key }) => paymentMode === "CASH" || key !== "PAID")
+            .map(({ key, label }) => (
+              <Button
+                key={key}
+                type="button"
+                variant={payStatus === key ? "default" : "outline"}
+                onClick={() => setPayStatus(key)}
+                className="justify-center"
+              >
+                {label}
+              </Button>
+            ))}
         </div>
 
         {payStatus === "CUSTOM" && (
@@ -633,13 +713,26 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
           />
         )}
 
-        {payStatus !== "PAID" && forecastDate && (
+        {paymentMode === "CASH" && payStatus !== "PAID" && forecastDate && (
           <p className="text-sm text-muted-foreground">
             Previsão de recebimento:{" "}
             <span className="font-medium text-foreground">
               {format(forecastDate, "PPP", { locale: ptBR })}
             </span>
           </p>
+        )}
+
+        {installmentPreview.length > 0 && (
+          <div className="rounded-lg border p-3 text-sm">
+            <p className="font-medium">
+              {installmentCount}x de {formatBRL(installmentPreview[0].amountCents)}
+              {installmentPreview[installmentPreview.length - 1].amountCents !== installmentPreview[0].amountCents &&
+                ` (última ${formatBRL(installmentPreview[installmentPreview.length - 1].amountCents)})`}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              {installmentPreview.map((p) => format(p.date, "dd/MM/yy")).join(" · ")}
+            </p>
+          </div>
         )}
       </section>
 

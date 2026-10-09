@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/shared/page-header";
+import { SaleInstallments } from "@/components/sales/sale-installments";
 import { SaleForm } from "@/components/sales/sale-form";
 import { getSaleById, getCatalogForSale } from "@/server/queries/sales";
 
@@ -27,10 +28,12 @@ export default async function EditSalePage({
     soldAt: format(sale.soldAt, "yyyy-MM-dd"),
     notes: sale.notes ?? "",
     status: sale.status as "PAID" | "PENDING",
-    forecastPreset: sale.forecastPreset ?? null,
+    forecastPreset: (sale.installmentCount > 1 ? sale.installments[0]?.forecastPreset : sale.forecastPreset) ?? null,
     forecastDate: sale.paymentForecastDate
       ? format(sale.paymentForecastDate, "yyyy-MM-dd")
       : null,
+    installmentCount: sale.installmentCount,
+    firstDueDate: sale.installments[0]?.dueDate ? format(sale.installments[0].dueDate, "yyyy-MM-dd") : null,
     discountType: (sale.discountType ?? null) as "PERCENTAGE" | "FIXED" | null,
     discountValue: sale.discountValue,
     items: sale.items.map((i) => ({
@@ -54,6 +57,7 @@ export default async function EditSalePage({
         }
         backHref="/sales"
       />
+      {sale.installmentCount > 1 && <SaleInstallments installments={sale.installments} />}
       <SaleForm saleId={sale.id} catalog={catalog} initial={initial} />
     </div>
   );

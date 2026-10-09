@@ -4,34 +4,33 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { markAsPaid, markAsPending } from "@/server/actions/sales";
+import { payNextInstallment, unpayInstallments } from "@/server/actions/sales";
 
-export function MarkAsPaidButton({ id }: { id: string }) {
+export function MarkAsPaidButton({ id, parceled }: { id: string; parceled: boolean }) {
   const [pending, startTransition] = useTransition();
 
   function handleClick() {
     startTransition(async () => {
-      const res = await markAsPaid(id);
-      if (!res.ok) {
+      const res = await payNextInstallment(id);
+      if (!res.ok || !res.data) {
         toast.error(res.error ?? "Erro ao atualizar.");
         return;
       }
-      const previous = res.data;
-      toast.success("Venda marcada como paga.", {
-        action: {
-          label: "Desfazer",
-          onClick: () => {
-            void markAsPending(
-              id,
-              previous?.forecastDate ?? null,
-              previous?.forecastPreset ?? null,
-            ).then((r) => {
-              if (r.ok) toast.success("Venda voltou para pendente.");
-              else toast.error(r.error ?? "Erro ao desfazer.");
-            });
+      const { installmentId, number, installmentCount } = res.data;
+      toast.success(
+        installmentCount > 1 ? `Parcela ${number}/${installmentCount} recebida.` : "Venda marcada como paga.",
+        {
+          action: {
+            label: "Desfazer",
+            onClick: () => {
+              void unpayInstallments([installmentId]).then((r) => {
+                if (r.ok) toast.success(installmentCount > 1 ? "Parcela voltou para em aberto." : "Venda voltou para pendente.");
+                else toast.error(r.error ?? "Erro ao desfazer.");
+              });
+            },
           },
         },
-      });
+      );
     });
   }
 
@@ -44,7 +43,7 @@ export function MarkAsPaidButton({ id }: { id: string }) {
       disabled={pending}
     >
       <CheckCircle className="size-3.5" />
-      {pending ? "Salvando..." : "Marcar como pago"}
+      {pending ? "Salvando..." : parceled ? "Receber parcela" : "Marcar como pago"}
     </Button>
   );
 }

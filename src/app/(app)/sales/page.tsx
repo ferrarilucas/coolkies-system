@@ -246,6 +246,7 @@ type Sale = Awaited<ReturnType<typeof getSales>>["items"][number];
 
 function SaleCard({ sale }: { sale: Sale }) {
   const isPending = sale.status === "PENDING";
+  const parceled = sale.installmentCount > 1;
   const itemsSummary = sale.items
     .map((i) =>
       `${i.quantity}× ${i.productNameSnapshot}${i.variantNameSnapshot ? ` ${i.variantNameSnapshot}` : ""}`,
@@ -270,11 +271,16 @@ function SaleCard({ sale }: { sale: Sale }) {
           <p className="text-xs text-muted-foreground mt-0.5">
             {format(sale.soldAt, "d 'de' MMM yyyy", { locale: ptBR })}
             {isPending && sale.paymentForecastDate &&
-              ` · Prev. ${format(sale.paymentForecastDate, "dd/MM/yyyy")}`}
+              ` · ${parceled ? "Próx. parcela" : "Prev."} ${format(sale.paymentForecastDate, "dd/MM/yyyy")}`}
           </p>
         </div>
         <div className="text-right shrink-0">
           <p className="font-semibold tabular-nums">{formatBRL(sale.totalCents)}</p>
+          {parceled && isPending && (
+            <p className="text-xs text-muted-foreground tabular-nums">
+              Em aberto: {formatBRL(sale.openCents)}
+            </p>
+          )}
           {hasDiscount && (
             <p className="text-xs text-muted-foreground tabular-nums">
               Desconto:{" "}
@@ -291,7 +297,7 @@ function SaleCard({ sale }: { sale: Sale }) {
 
       {/* Linha 3: ações */}
       <div className="flex items-center justify-between gap-2 border-t pt-1">
-        {isPending ? <MarkAsPaidButton id={sale.id} /> : <span />}
+        {isPending ? <MarkAsPaidButton id={sale.id} parceled={parceled} /> : <span />}
         <RowActions
           editHref={`/sales/${sale.id}/edit`}
           deleteTitle="Excluir venda"
@@ -309,6 +315,13 @@ function StatusBadge({ sale }: { sale: Sale }) {
     return (
       <Badge className="text-xs bg-success/15 text-success border-success/30 shrink-0">
         Pago
+      </Badge>
+    );
+  }
+  if (sale.installmentCount > 1) {
+    return (
+      <Badge className="text-xs bg-warning/15 text-warning-text border-warning/30 shrink-0">
+        {sale.installmentCount - sale._count.installments}/{sale.installmentCount} pagas
       </Badge>
     );
   }
