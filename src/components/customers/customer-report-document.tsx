@@ -57,11 +57,23 @@ export function CustomerReportDocument({
                     </li>
                   ))}
                 </ul>
-                {sale.status === "PENDING" && (
-                  <span className="mt-1.5 inline-flex rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning-text">
-                    Em aberto
-                  </span>
-                )}
+                {sale.status === "PENDING" &&
+                  (sale.installmentCount > 1 ? (
+                    <ul className="mt-1.5 space-y-1">
+                      {sale.openInstallments.map((inst) => (
+                        <li key={inst.number}>
+                          <span className="inline-flex rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-warning-text">
+                            Parcela {inst.number}/{sale.installmentCount} em aberto · {formatBRL(inst.amountCents)}
+                            {inst.dueDate ? ` · vence ${format(inst.dueDate, "dd/MM/yyyy")}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="mt-1.5 inline-flex rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning-text">
+                      Em aberto
+                    </span>
+                  ))}
               </li>
             ))}
           </ul>
