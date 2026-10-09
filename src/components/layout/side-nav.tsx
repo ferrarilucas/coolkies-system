@@ -16,6 +16,7 @@ import {
   LogOut,
   Users,
   Building2,
+  Tags,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ const items: NavItem[] = [
   { href: "/production", label: "Produção", icon: Factory },
   { href: "/stock", label: "Estoque", icon: Package },
   { href: "/purchases", label: "Compras", icon: ShoppingBag },
+  { href: "/admin/catalog", label: "Catálogo", icon: Tags, adminOnly: true },
   { href: "/admin", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
