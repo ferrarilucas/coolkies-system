@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { checkoutViewState, type CheckoutViewState } from "./checkout-state";
 
+const FIXED_NOW = new Date("2026-09-14T12:00:00.000Z");
+
 function pixState(
   status: string | null,
   pixCopyPaste: string | null,
@@ -16,7 +18,7 @@ function pixState(
     nextDueDate,
     authorizedAt,
     graceUntil,
-    now ?? new Date(),
+    now ?? FIXED_NOW,
   );
 }
 
