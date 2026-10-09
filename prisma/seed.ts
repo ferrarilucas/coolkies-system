@@ -21,32 +21,31 @@ async function main() {
     },
   });
 
-  const cookie = await db.item.upsert({
-    where: { workspaceId_name: { workspaceId: workspace.id, name: "Cookie" } },
+  const product = await db.item.upsert({
+    where: { workspaceId_name: { workspaceId: workspace.id, name: "Camiseta básica" } },
     update: {},
-    create: { name: "Cookie", sellable: true, unit: "UN", workspaceId: workspace.id },
+    create: { name: "Camiseta básica", sellable: true, unit: "UN", workspaceId: workspace.id },
   });
 
-  const variants = ["Chocolate", "Red Velvet", "Tradicional"];
+  const variants = ["P", "M", "G"];
   for (const name of variants) {
     const variant = await db.variant.upsert({
-      where: { itemId_name: { itemId: cookie.id, name } },
+      where: { itemId_name: { itemId: product.id, name } },
       update: {},
-      create: { name, itemId: cookie.id, workspaceId: workspace.id },
+      create: { name, itemId: product.id, workspaceId: workspace.id },
     });
     await db.priceListItem.upsert({
-      where: { itemId_variantId: { itemId: cookie.id, variantId: variant.id } },
+      where: { itemId_variantId: { itemId: product.id, variantId: variant.id } },
       update: {},
-      create: { itemId: cookie.id, variantId: variant.id, priceCents: 800, workspaceId: workspace.id },
+      create: { itemId: product.id, variantId: variant.id, priceCents: 4900, workspaceId: workspace.id },
     });
   }
 
   const rawItems: Array<[string, "G" | "ML" | "UN"]> = [
-    ["Açúcar", "G"],
-    ["Farinha de trigo", "G"],
-    ["Manteiga", "G"],
-    ["Chocolate (insumo)", "G"],
-    ["Ovo", "UN"],
+    ["Malha de algodão", "G"],
+    ["Linha", "ML"],
+    ["Etiqueta", "UN"],
+    ["Embalagem", "UN"],
   ];
   for (const [name, unit] of rawItems) {
     await db.item.upsert({
@@ -56,13 +55,12 @@ async function main() {
     });
   }
 
-  // Mercado exemplo
   await db.supplier.upsert({
     where: {
-      workspaceId_name: { workspaceId: workspace.id, name: "Mercado Central" },
+      workspaceId_name: { workspaceId: workspace.id, name: "Fornecedor Central" },
     },
     update: {},
-    create: { name: "Mercado Central", workspaceId: workspace.id },
+    create: { name: "Fornecedor Central", workspaceId: workspace.id },
   });
 
   console.log("Seed concluído ✔");

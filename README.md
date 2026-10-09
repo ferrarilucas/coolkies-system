@@ -2,7 +2,7 @@
 
 App **mobile-first** (Next.js + Tailwind + shadcn) para organizar vendas, estoque, produção e compras de pequenos negócios. Login via **BetterAuth**, banco **PostgreSQL** com **Prisma**.
 
-> Veja [`TODO.md`](./TODO.md) para o plano completo de design e módulos.
+> O plano original (da época do app de cookies) está arquivado em [`docs/archive/2026-08-todo-cookies-app.md`](./docs/archive/2026-08-todo-cookies-app.md). Specs e planos atuais ficam em [`docs/superpowers/`](./docs/superpowers/).
 
 ## Pré-requisitos
 - Node 20+
