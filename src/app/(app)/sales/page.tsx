@@ -16,7 +16,7 @@ import { RowActions } from "@/components/shared/row-actions";
 import { deleteSale } from "@/server/actions/sales";
 import { SalesFilters } from "@/components/sales/sales-filters";
 import { CustomerName } from "@/components/customers/customer-name";
-import { CollectCustomerButton } from "@/components/sales/collect-customer-button";
+import { CustomerCollectDialog } from "@/components/customers/customer-collect-dialog";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -147,12 +147,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Search
 
       {selectedCustomer && summary.pendingCents > 0 && (
         <div className="mb-4">
-          <CollectCustomerButton
+          <CustomerCollectDialog
             customerId={selectedCustomer.id}
             customerName={selectedCustomer.name}
             customerSector={selectedCustomer.sector}
-            totalCents={summary.pendingCents}
-            count={summary.pendingCount}
+            pendingCents={summary.pendingCents}
+            pendingCount={summary.pendingCount}
+            triggerSize="lg"
+            triggerClassName="w-full"
+            triggerLabel={`Receber de ${selectedCustomer.name} · ${formatBRL(summary.pendingCents)}`}
           />
         </div>
       )}

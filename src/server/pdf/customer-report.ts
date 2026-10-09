@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatBRL } from "@/lib/money";
 import type { CustomerReport } from "@/server/queries/customers";
@@ -171,8 +172,19 @@ export async function buildCustomerReportPdf({
         ),
       );
       if (itemLines.length === 0) itemLines.push("-");
-      const statusLine = sale.status === "PENDING";
-      if (statusLine) itemLines.push("Em aberto");
+      const statusLines =
+        sale.status !== "PENDING"
+          ? []
+          : sale.installmentCount > 1
+            ? sale.openInstallments.map(
+                (inst) =>
+                  `Parcela ${inst.number}/${sale.installmentCount} em aberto · ${money(inst.amountCents)}${
+                    inst.dueDate ? ` · vence ${format(inst.dueDate, "dd/MM/yyyy")}` : ""
+                  }`,
+              )
+            : ["Em aberto"];
+      const firstStatusIndex = itemLines.length;
+      itemLines.push(...statusLines);
 
       ensure(itemLines.length * 12 + 12, true);
 
@@ -181,7 +193,7 @@ export async function buildCustomerReportPdf({
       rightText(money(sale.totalCents), COL_VALUE_RIGHT, top);
 
       itemLines.forEach((entry, index) => {
-        const isStatus = statusLine && index === itemLines.length - 1;
+        const isStatus = index >= firstStatusIndex && statusLines.length > 0;
         text(entry, COL_PRODUCT_X, top - index * 12, {
           size: isStatus ? 8 : 9.5,
           color: isStatus ? MUTED : INK,
