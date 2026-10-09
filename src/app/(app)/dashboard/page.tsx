@@ -112,8 +112,8 @@ export default async function DashboardPage({
         />
         <Kpi
           label="Receita líquida"
-          value={money(kpis.netRevenueCents)}
-          hint="bruta − custo de produção e revenda"
+          value={formatBRL(kpis.netRevenueCents)}
+          hint={uncostedHint(kpis.paidUncostedUnits, "bruta − custo de produção e revenda")}
           icon={TrendingUp}
           tone={signTone(kpis.netRevenueCents)}
           highlight
@@ -121,7 +121,7 @@ export default async function DashboardPage({
         <Kpi
           label="Margem líquida"
           value={pct(kpis.marginPct)}
-          hint="sobre a receita bruta"
+          hint={uncostedHint(kpis.paidUncostedUnits, "sobre a receita bruta")}
           icon={Percent}
           tone={kpis.marginPct != null && kpis.marginPct < 0 ? "destructive" : undefined}
         />
@@ -143,15 +143,15 @@ export default async function DashboardPage({
         />
         <Kpi
           label="Receita líquida presumida"
-          value={money(kpis.presumedNetRevenueCents)}
-          hint="presumida − custo de todas as vendas"
+          value={formatBRL(kpis.presumedNetRevenueCents)}
+          hint={uncostedHint(kpis.uncostedUnits, "presumida − custo de todas as vendas")}
           icon={TrendingUp}
           tone={signTone(kpis.presumedNetRevenueCents)}
         />
         <Kpi
           label="Margem presumida"
           value={pct(kpis.presumedMarginPct)}
-          hint="sobre a receita presumida"
+          hint={uncostedHint(kpis.uncostedUnits, "sobre a receita presumida")}
           icon={Percent}
           tone={kpis.presumedMarginPct != null && kpis.presumedMarginPct < 0 ? "destructive" : undefined}
         />
@@ -166,11 +166,11 @@ export default async function DashboardPage({
       <KpiSection title="Custos" description="Das vendas pagas no período">
         <Kpi
           label="Custo de produção"
-          value={money(kpis.productionCogsCents)}
+          value={formatBRL(kpis.productionCogsCents)}
           hint={
             kpis.unitCostCents == null
-              ? "sem dados de custo"
-              : `${formatBRL(kpis.unitCostCents)}/un produzida`
+              ? "sem custo cadastrado"
+              : uncostedHint(kpis.paidUncostedUnits, `${formatBRL(kpis.unitCostCents)}/un vendida`)
           }
           icon={Receipt}
         />
@@ -182,7 +182,7 @@ export default async function DashboardPage({
         />
         <Kpi
           label="CMV total"
-          value={money(kpis.cogsCents)}
+          value={formatBRL(kpis.cogsCents)}
           hint="produção + revenda"
           icon={Receipt}
         />
@@ -380,8 +380,9 @@ export default async function DashboardPage({
 
 // ─── Auxiliares ──────────────────────────────────────────────────────────────
 
-function money(cents: number | null): string {
-  return cents == null ? "—" : formatBRL(cents);
+function uncostedHint(units: number, fallback: string): string {
+  if (units <= 0) return fallback;
+  return `${units} un sem custo cadastrado (conta como 0)`;
 }
 
 function signTone(cents: number | null): "success" | "destructive" | undefined {

@@ -164,4 +164,100 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
     expect(result.kpis.presumedNetRevenueCents).toBe(1500);
     expect(result.kpis.presumedMarginPct).toBe(60);
   });
+
+  it("sem custo cadastrado, presume custo zero: líquida igual à bruta e margem de 100%", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-dash-3", name: "Dona", email: "dona3@example.com" },
+    });
+    const cookie = await testDb.item.create({
+      data: { name: "Cookie", unit: "UN", workspaceId: context.workspaceId },
+    });
+    const soldAt = new Date("2026-09-15T12:00:00.000Z");
+    const line = (quantity: number) => ({
+      itemId: cookie.id, quantity, unitPriceSnapshot: 1000,
+      productNameSnapshot: "Cookie", workspaceId: context.workspaceId,
+    });
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: context.workspaceId, status: "PAID",
+        soldAt, paidAt: soldAt, totalCents: 2000, items: { create: [line(2)] },
+      },
+    });
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: context.workspaceId, status: "PENDING",
+        soldAt, totalCents: 1000, items: { create: [line(1)] },
+      },
+    });
+
+    const result = await getDashboardData({
+      from: new Date("2026-09-01"),
+      to: new Date("2026-09-30"),
+      status: "ALL",
+    });
+
+    expect(result.kpis.cogsCents).toBe(0);
+    expect(result.kpis.netRevenueCents).toBe(2000);
+    expect(result.kpis.marginPct).toBe(100);
+    expect(result.kpis.presumedNetRevenueCents).toBe(3000);
+    expect(result.kpis.presumedMarginPct).toBe(100);
+    expect(result.kpis.paidUncostedUnits).toBe(2);
+    expect(result.kpis.uncostedUnits).toBe(3);
+  });
+
+  it("usa a ficha técnica da variação mesmo sem lote de produção registrado", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-dash-4", name: "Dona", email: "dona4@example.com" },
+    });
+    const cookie = await testDb.item.create({
+      data: { name: "Cookie", unit: "UN", workspaceId: context.workspaceId },
+    });
+    const chocolate = await testDb.item.create({
+      data: {
+        name: "Chocolate", unit: "G", sellable: false, productionInput: true,
+        workspaceId: context.workspaceId,
+      },
+    });
+    const recipe = await testDb.recipe.create({
+      data: { name: "Recheio", yieldQty: 1, workspaceId: context.workspaceId },
+    });
+    await testDb.recipeItem.create({
+      data: { recipeId: recipe.id, itemId: chocolate.id, quantity: 20, workspaceId: context.workspaceId },
+    });
+    const variant = await testDb.variant.create({
+      data: { name: "Chocolate", itemId: cookie.id, recipeId: recipe.id, workspaceId: context.workspaceId },
+    });
+    const purchase = await testDb.purchase.create({ data: { workspaceId: context.workspaceId } });
+    await testDb.purchaseItem.create({
+      data: {
+        purchaseId: purchase.id, itemId: chocolate.id,
+        quantity: 1000, unit: "G", pricePaidCents: 5000, workspaceId: context.workspaceId,
+      },
+    });
+
+    const soldAt = new Date("2026-09-15T12:00:00.000Z");
+    await testDb.sale.create({
+      data: {
+        userId: user.id, workspaceId: context.workspaceId, status: "PAID",
+        soldAt, paidAt: soldAt, totalCents: 2000,
+        items: {
+          create: [{
+            itemId: cookie.id, variantId: variant.id, quantity: 2, unitPriceSnapshot: 1000,
+            productNameSnapshot: "Cookie", variantNameSnapshot: "Chocolate", workspaceId: context.workspaceId,
+          }],
+        },
+      },
+    });
+
+    const result = await getDashboardData({
+      from: new Date("2026-09-01"),
+      to: new Date("2026-09-30"),
+      status: "ALL",
+    });
+
+    expect(result.kpis.productionCogsCents).toBe(200);
+    expect(result.kpis.netRevenueCents).toBe(1800);
+    expect(result.kpis.marginPct).toBe(90);
+    expect(result.kpis.paidUncostedUnits).toBe(0);
+  });
 });

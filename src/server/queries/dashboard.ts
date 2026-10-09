@@ -123,6 +123,7 @@ export async function getDashboardData(filters: DashboardFilters) {
   const batches = await db.productionBatch.findMany({
     where: { recipeId: { not: null } },
     select: {
+      itemId: true,
       quantity: true,
       recipe: {
         select: {
@@ -144,6 +145,14 @@ export async function getDashboardData(filters: DashboardFilters) {
           },
         },
       },
+    },
+  });
+
+  const recipeVariants = await db.variant.findMany({
+    where: { recipeId: { not: null } },
+    select: {
+      id: true,
+      recipe: { select: { items: { select: { itemId: true, quantity: true } } } },
     },
   });
 
@@ -177,24 +186,38 @@ export async function getDashboardData(filters: DashboardFilters) {
     }
   }
 
-  // ─── Custo médio por cookie ──────────────────────────────────────────────────
+  // ─── Custo de produção por unidade (item base + variação) ────────────────────
+  const recipeCost = (items: { itemId: string; quantity: number }[]) => {
+    let total = 0;
+    for (const ri of items) {
+      const unit = costPerBaseUnit.get(ri.itemId);
+      if (unit != null) total += unit * ri.quantity;
+    }
+    return total;
+  };
+
+  const variantUnitCost = new Map<string, number>();
+  for (const v of recipeVariants) {
+    if (!v.recipe) continue;
+    const cost = recipeCost(v.recipe.items);
+    if (cost > 0) variantUnitCost.set(v.id, cost);
+  }
+
+  const baseByItem = new Map<string, { cost: number; produced: number }>();
   let totalProductionCost = 0;
   let totalProduced = 0;
   for (const batch of batches) {
     if (!batch.recipe) continue;
     const yieldQty = batch.recipe.yieldQty || 1;
-    const recipeBatches = batch.quantity / yieldQty;
-    for (const ri of batch.recipe.items) {
-      const unit = costPerBaseUnit.get(ri.itemId);
-      if (unit != null) totalProductionCost += unit * ri.quantity * recipeBatches;
-    }
+    const baseCost = (recipeCost(batch.recipe.items) * batch.quantity) / yieldQty;
+    const entry = baseByItem.get(batch.itemId) ?? { cost: 0, produced: 0 };
+    entry.cost += baseCost;
+    entry.produced += batch.quantity;
+    baseByItem.set(batch.itemId, entry);
+    totalProductionCost += baseCost;
     for (const line of batch.variantLines) {
       const vr = line.variant.recipe;
-      if (!vr) continue;
-      for (const ri of vr.items) {
-        const unit = costPerBaseUnit.get(ri.itemId);
-        if (unit != null) totalProductionCost += unit * ri.quantity * line.quantity;
-      }
+      if (vr) totalProductionCost += recipeCost(vr.items) * line.quantity;
     }
     totalProduced += batch.quantity;
   }
@@ -202,6 +225,18 @@ export async function getDashboardData(filters: DashboardFilters) {
     totalProduced > 0 && totalProductionCost > 0
       ? totalProductionCost / totalProduced
       : null;
+
+  const baseUnitCost = new Map<string, number>();
+  for (const [itemId, e] of baseByItem) {
+    if (e.produced > 0 && e.cost > 0) baseUnitCost.set(itemId, e.cost / e.produced);
+  }
+
+  const productionUnitCost = (itemId: string, variantId: string | null) => {
+    const base = baseUnitCost.get(itemId);
+    const variant = variantId ? variantUnitCost.get(variantId) : undefined;
+    if (base == null && variant == null) return unitCost;
+    return (base ?? 0) + (variant ?? 0);
+  };
 
   // ─── KPIs + mix + clientes ───────────────────────────────────────────────────
   const hasItemFilter = !!(filters.itemId || filters.variantId);
@@ -213,10 +248,13 @@ export async function getDashboardData(filters: DashboardFilters) {
   let forecastRevenue = 0;
   let salesCount = 0;
   let soldUnits = 0;
-  let productionUnits = 0;
+  let productionCost = 0;
+  let paidProductionCost = 0;
   let paidProductionUnits = 0;
   let resaleCost = 0;
   let paidResaleCost = 0;
+  let uncostedUnits = 0;
+  let paidUncostedUnits = 0;
 
   const mixMap = new Map<string, { label: string; revenue: number; qty: number }>();
   const customerMap = new Map<
@@ -228,12 +266,20 @@ export async function getDashboardData(filters: DashboardFilters) {
     const matchedItems = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
     let saleQty = 0;
     let saleProductionQty = 0;
+    let saleProductionCost = 0;
     let saleResaleCost = 0;
+    let saleUncosted = 0;
     for (const i of matchedItems) {
       saleQty += i.quantity;
       const directUnit = costPerBaseUnit.get(i.itemId);
-      if (directUnit == null) saleProductionQty += i.quantity;
-      else saleResaleCost += directUnit * i.quantity;
+      if (directUnit != null) {
+        saleResaleCost += directUnit * i.quantity;
+        continue;
+      }
+      saleProductionQty += i.quantity;
+      const unit = productionUnitCost(i.itemId, i.variantId);
+      if (unit == null) saleUncosted += i.quantity;
+      else saleProductionCost += unit * i.quantity;
     }
 
     // Receita: usa totalCents (já com desconto) quando não há filtro de item.
@@ -251,12 +297,15 @@ export async function getDashboardData(filters: DashboardFilters) {
 
     salesCount += 1;
     soldUnits += saleQty;
-    productionUnits += saleProductionQty;
+    productionCost += saleProductionCost;
     resaleCost += saleResaleCost;
+    uncostedUnits += saleUncosted;
     if (sale.status === "PAID") {
       paidRevenue += saleRevenue;
+      paidProductionCost += saleProductionCost;
       paidProductionUnits += saleProductionQty;
       paidResaleCost += saleResaleCost;
+      paidUncostedUnits += saleUncosted;
     } else {
       forecastRevenue += saleRevenue;
     }
@@ -288,20 +337,23 @@ export async function getDashboardData(filters: DashboardFilters) {
   const totalRevenue = paidRevenue + forecastRevenue;
   const avgTicket = salesCount > 0 ? Math.round(totalRevenue / salesCount) : 0;
 
-  const costOf = (units: number, resale: number) =>
-    unitCost != null || resale > 0 ? Math.round((unitCost ?? 0) * units + resale) : null;
-  const marginOf = (net: number | null, revenue: number) =>
-    net != null && revenue > 0 ? (net / revenue) * 100 : null;
+  const marginOf = (net: number, revenue: number) =>
+    revenue > 0 ? (net / revenue) * 100 : null;
 
-  const productionCogs = unitCost != null ? Math.round(unitCost * paidProductionUnits) : null;
+  const productionCogs = Math.round(paidProductionCost);
   const resaleCogs = Math.round(paidResaleCost);
-  const cogs = costOf(paidProductionUnits, paidResaleCost);
-  const netRevenue = cogs != null ? paidRevenue - cogs : null;
+  const cogs = Math.round(paidProductionCost + paidResaleCost);
+  const netRevenue = paidRevenue - cogs;
   const marginPct = marginOf(netRevenue, paidRevenue);
 
-  const presumedCogs = costOf(productionUnits, resaleCost);
-  const presumedNetRevenue = presumedCogs != null ? totalRevenue - presumedCogs : null;
+  const presumedCogs = Math.round(productionCost + resaleCost);
+  const presumedNetRevenue = totalRevenue - presumedCogs;
   const presumedMarginPct = marginOf(presumedNetRevenue, totalRevenue);
+  const costedPaidProductionUnits = paidProductionUnits - paidUncostedUnits;
+  const soldUnitCost =
+    costedPaidProductionUnits > 0 && paidProductionCost > 0
+      ? paidProductionCost / costedPaidProductionUnits
+      : unitCost;
 
   // ─── Série temporal ──────────────────────────────────────────────────────────
   const spanDays = differenceInCalendarDays(to, from);
@@ -439,7 +491,9 @@ export async function getDashboardData(filters: DashboardFilters) {
       presumedCogsCents: presumedCogs,
       presumedNetRevenueCents: presumedNetRevenue,
       presumedMarginPct,
-      unitCostCents: unitCost != null ? Math.round(unitCost) : null,
+      uncostedUnits,
+      paidUncostedUnits,
+      unitCostCents: soldUnitCost != null ? Math.round(soldUnitCost) : null,
     },
     granularity,
     trend,
