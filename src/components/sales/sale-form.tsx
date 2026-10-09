@@ -321,7 +321,14 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
   const [paymentMode, setPaymentMode] = useState<"CASH" | "INSTALLMENTS">(
     (initial?.installmentCount ?? 1) > 1 ? "INSTALLMENTS" : "CASH",
   );
-  const [installmentCount, setInstallmentCount] = useState<number>(Math.max(initial?.installmentCount ?? 3, MIN_INSTALLMENTS));
+  const [installmentCountInput, setInstallmentCountInput] = useState<string>(
+    String(Math.max(initial?.installmentCount ?? 3, MIN_INSTALLMENTS)),
+  );
+  const [autoInstallmentPay, setAutoInstallmentPay] = useState(false);
+  const parsedCount = parseInt(installmentCountInput, 10);
+  const installmentCount = Number.isNaN(parsedCount)
+    ? MIN_INSTALLMENTS
+    : Math.min(MAX_INSTALLMENTS, Math.max(MIN_INSTALLMENTS, parsedCount));
 
   // Desconto
   const [discountType, setDiscountType] = useState<DiscountType | null>(initial?.discountType ?? null);
@@ -399,7 +406,15 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
 
   function choosePaymentMode(mode: "CASH" | "INSTALLMENTS") {
     setPaymentMode(mode);
-    if (mode === "INSTALLMENTS" && payStatus === "PAID") setPayStatus("DAY_FIVE");
+    if (mode === "INSTALLMENTS" && payStatus === "PAID") {
+      setPayStatus("DAY_FIVE");
+      setAutoInstallmentPay(true);
+    } else if (mode === "CASH" && autoInstallmentPay && payStatus === "DAY_FIVE") {
+      setPayStatus("PAID");
+      setAutoInstallmentPay(false);
+    } else {
+      setAutoInstallmentPay(false);
+    }
   }
 
   const installmentPreview =
@@ -675,12 +690,9 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
               inputMode="numeric"
               min={MIN_INSTALLMENTS}
               max={MAX_INSTALLMENTS}
-              value={installmentCount}
-              onChange={(e) =>
-                setInstallmentCount(
-                  Math.min(MAX_INSTALLMENTS, Math.max(MIN_INSTALLMENTS, parseInt(e.target.value, 10) || MIN_INSTALLMENTS)),
-                )
-              }
+              value={installmentCountInput}
+              onChange={(e) => setInstallmentCountInput(e.target.value)}
+              onBlur={() => setInstallmentCountInput(String(installmentCount))}
             />
           </div>
         )}
@@ -696,7 +708,10 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
                 key={key}
                 type="button"
                 variant={payStatus === key ? "default" : "outline"}
-                onClick={() => setPayStatus(key)}
+                onClick={() => {
+                  setPayStatus(key);
+                  setAutoInstallmentPay(false);
+                }}
                 className="justify-center"
               >
                 {label}
