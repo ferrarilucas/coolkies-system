@@ -9,7 +9,7 @@ type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
 export function validateOptions(raw: OptionInput[]): Result<{ options: OptionInput[] }> {
   if (raw.length > MAX_OPTIONS) {
-    return { ok: false, error: `Um produto pode ter no máximo ${MAX_OPTIONS} eixos de variação.` };
+    return { ok: false, error: `Um produto pode ter no máximo ${MAX_OPTIONS} tipos de variação.` };
   }
 
   const options: OptionInput[] = [];
@@ -17,10 +17,10 @@ export function validateOptions(raw: OptionInput[]): Result<{ options: OptionInp
 
   for (const option of raw) {
     const name = normalizeName(option.name);
-    if (!name) return { ok: false, error: "Dê um nome a cada eixo de variação." };
+    if (!name) return { ok: false, error: "Dê um nome a cada tipo de variação, como Sabor ou Tamanho." };
 
     const optionKey = name.toLocaleLowerCase("pt-BR");
-    if (optionNames.has(optionKey)) return { ok: false, error: `O eixo "${name}" está repetido.` };
+    if (optionNames.has(optionKey)) return { ok: false, error: `O tipo de variação "${name}" está repetido.` };
     optionNames.add(optionKey);
 
     const values: OptionValueInput[] = [];
@@ -30,14 +30,14 @@ export function validateOptions(raw: OptionInput[]): Result<{ options: OptionInp
       if (!valueName) continue;
       const valueKey = valueName.toLocaleLowerCase("pt-BR");
       if (valueNames.has(valueKey)) {
-        return { ok: false, error: `O valor "${valueName}" está repetido em "${name}".` };
+        return { ok: false, error: `A opção "${valueName}" está repetida em "${name}".` };
       }
       valueNames.add(valueKey);
       values.push({ ...value, name: valueName });
     }
 
     if (values.length === 0) {
-      return { ok: false, error: `O eixo "${name}" precisa de pelo menos um valor.` };
+      return { ok: false, error: `Adicione pelo menos uma opção em "${name}".` };
     }
     options.push({ ...option, name, values });
   }
@@ -55,13 +55,13 @@ export function resolveCombination(
   for (const option of options) {
     const matches = option.values.filter((v) => remaining.has(v.key));
     if (matches.length !== 1) {
-      return { ok: false, error: `Escolha um valor de "${option.name}" para cada combinação.` };
+      return { ok: false, error: `Escolha uma opção de "${option.name}" para cada combinação.` };
     }
     ordered.push(matches[0].key);
     remaining.delete(matches[0].key);
   }
 
-  if (remaining.size > 0) return { ok: false, error: "A combinação tem um valor que não existe nos eixos." };
+  if (remaining.size > 0) return { ok: false, error: "A combinação tem uma opção que não existe mais." };
   return { ok: true, valueKeys: ordered };
 }
 

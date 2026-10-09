@@ -49,7 +49,7 @@ export function CombinationsList({
   if (filled.length !== options.length || options.length === 0) {
     return (
       <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-        Dê pelo menos um valor a cada eixo para escolher as combinações.
+        Adicione pelo menos uma opção em cada tipo de variação para escolher o que você vende.
       </p>
     );
   }
@@ -61,10 +61,15 @@ export function CombinationsList({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm text-muted-foreground">
-            {entries.length} de {rows.length} {rows.length === 1 ? "combinação marcada" : "combinações marcadas"}
+          <p className="text-sm font-medium">
+            {options.length === 1 ? "Quais você vende?" : "Quais combinações você vende?"}{" "}
+            <span className="font-normal text-muted-foreground">
+              {entries.length} de {rows.length}
+            </span>
           </p>
-          <p className="text-xs text-muted-foreground">Preço em R$ 0,00 usa o preço padrão.</p>
+          <p className="text-xs text-muted-foreground">
+            Deixe o preço em R$ 0,00 para usar o preço padrão. Pausadas não aparecem na venda.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={() => onToggleAll(true)}>
@@ -112,7 +117,7 @@ export function CombinationsList({
                       onValueChange={(value) => onUpdate(key, { recipeId: value === NO_RECIPE ? null : value })}
                     >
                       <SelectTrigger className="h-9 min-w-40 flex-1">
-                        <SelectValue placeholder="Ficha técnica…" />
+                        <SelectValue placeholder="Ficha técnica" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_RECIPE}>Sem ficha técnica</SelectItem>
@@ -127,7 +132,7 @@ export function CombinationsList({
                       checked={entry.active}
                       onCheckedChange={(checked) => onUpdate(key, { active: checked })}
                     />
-                    Ativa
+                    <span className="w-16">{entry.active ? "Disponível" : "Pausada"}</span>
                   </label>
                 </div>
               )}

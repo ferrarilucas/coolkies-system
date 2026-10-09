@@ -43,18 +43,18 @@ describe("validateOptions", () => {
   it("recusa mais de 3 eixos", () => {
     const extra = (name: string): OptionInput => ({ id: null, name, values: [{ key: name, id: null, name: "X" }] });
     const result = validateOptions([tamanho, cor, extra("Material"), extra("Gola")]);
-    expect(result).toEqual({ ok: false, error: "Um produto pode ter no máximo 3 eixos de variação." });
+    expect(result).toEqual({ ok: false, error: "Um produto pode ter no máximo 3 tipos de variação." });
   });
 
   it("recusa eixo sem nome, eixo repetido e eixo sem valores", () => {
-    expect(validateOptions([{ ...tamanho, name: " " }])).toEqual({ ok: false, error: "Dê um nome a cada eixo de variação." });
+    expect(validateOptions([{ ...tamanho, name: " " }])).toEqual({ ok: false, error: "Dê um nome a cada tipo de variação, como Sabor ou Tamanho." });
     expect(validateOptions([tamanho, { ...cor, name: "tamanho" }])).toEqual({
       ok: false,
-      error: 'O eixo "Tamanho" está repetido.',
+      error: 'O tipo de variação "Tamanho" está repetido.',
     });
     expect(validateOptions([{ ...tamanho, values: [] }])).toEqual({
       ok: false,
-      error: 'O eixo "Tamanho" precisa de pelo menos um valor.',
+      error: 'Adicione pelo menos uma opção em "Tamanho".',
     });
   });
 
@@ -62,7 +62,7 @@ describe("validateOptions", () => {
     const result = validateOptions([
       { ...cor, values: [{ key: "a", id: null, name: "Azul" }, { key: "b", id: null, name: "azul" }] },
     ]);
-    expect(result).toEqual({ ok: false, error: 'O valor "Azul" está repetido em "Cor".' });
+    expect(result).toEqual({ ok: false, error: 'A opção "Azul" está repetida em "Cor".' });
   });
 
   it("descarta valores em branco", () => {
@@ -79,7 +79,7 @@ describe("resolveCombination", () => {
   it("recusa combinação sem valor para algum eixo", () => {
     expect(resolveCombination([tamanho, cor], ["m"])).toEqual({
       ok: false,
-      error: 'Escolha um valor de "Cor" para cada combinação.',
+      error: 'Escolha uma opção de "Cor" para cada combinação.',
     });
   });
 

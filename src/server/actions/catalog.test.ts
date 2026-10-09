@@ -207,7 +207,7 @@ describe("saveItem", () => {
       combinations: [combo([mKey], null, variant.id)],
       removedVariantIds: [],
     });
-    expect(semCor).toEqual({ ok: false, error: 'Escolha um valor de "Cor" para cada combinação.' });
+    expect(semCor).toEqual({ ok: false, error: 'Escolha uma opção de "Cor" para cada combinação.' });
 
     const comCor = await saveItem(itemId, {
       name: "Camiseta",

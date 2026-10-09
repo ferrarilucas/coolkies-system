@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { MoneyInput } from "@/components/shared/money-input";
 import { OptionsEditor } from "@/components/catalog/options-editor";
 import { CombinationsList, type CombinationEntry } from "@/components/catalog/combinations-list";
+import { VariationsGuide } from "@/components/catalog/variations-guide";
 import { saveItem } from "@/server/actions/catalog";
 import type { ItemForEdit } from "@/server/queries/catalog";
 import {
@@ -178,11 +179,14 @@ export function ProductEditor({
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Variações
-          </h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Variações
+            </h2>
+            <VariationsGuide />
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Opcional. Crie até 3 eixos, como Tamanho e Cor, e marque as combinações que você vende.
+            Opcional. Use quando o produto tem versões diferentes, como sabores ou tamanhos — até 3 tipos.
           </p>
         </div>
 

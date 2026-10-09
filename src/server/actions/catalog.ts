@@ -108,10 +108,10 @@ function resolveCombinations(
   combinations: ItemCombinationInput[],
 ): { ok: true; combinations: ResolvedCombination[] } | { ok: false; error: string } {
   if (options.length === 0 && combinations.length > 0) {
-    return { ok: false, error: "Adicione um eixo de variação antes de marcar combinações." };
+    return { ok: false, error: "Adicione um tipo de variação antes de marcar combinações." };
   }
   if (options.length > 0 && combinations.length === 0) {
-    return { ok: false, error: "Marque pelo menos uma combinação ou remova os eixos de variação." };
+    return { ok: false, error: "Marque pelo menos uma opção para vender ou remova as variações." };
   }
 
   const seen = new Set<string>();
