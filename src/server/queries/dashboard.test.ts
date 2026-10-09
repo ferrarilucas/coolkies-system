@@ -294,4 +294,84 @@ describe("getDashboardData — custo de produção + revenda combinados", () => 
       [0, 0],
     ]);
   });
+  it("venda parcelada com uma parcela paga e item sem custo devolve unidades inteiras", async () => {
+    const cookie = await testDb.item.create({
+      data: { name: "Cookie", unit: "UN", workspaceId: context.workspaceId },
+    });
+    const sale = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      soldAt: new Date(2027, 0, 10, 12),
+      parcels: [
+        { amountCents: 1000, dueDate: new Date(2027, 0, 10, 12), paidAt: new Date(2027, 0, 10, 12) },
+        { amountCents: 1000, dueDate: new Date(2027, 1, 10, 12) },
+        { amountCents: 1000, dueDate: new Date(2027, 2, 10, 12) },
+      ],
+    });
+    await testDb.saleItem.create({
+      data: {
+        saleId: sale.id, itemId: cookie.id, quantity: 5, unitPriceSnapshot: 600,
+        productNameSnapshot: "Cookie", workspaceId: context.workspaceId,
+      },
+    });
+
+    const result = await getDashboardData({
+      from: new Date(2027, 0, 1),
+      to: new Date(2027, 0, 31),
+      status: "ALL",
+    });
+
+    expect(result.kpis.paidRevenueCents).toBe(1000);
+    expect(Number.isInteger(result.kpis.paidUncostedUnits)).toBe(true);
+    expect(Number.isInteger(result.kpis.uncostedUnits)).toBe(true);
+    expect(Number.isInteger(result.kpis.soldUnits)).toBe(true);
+    expect(result.kpis.paidUncostedUnits).toBe(2);
+    expect(result.kpis.uncostedUnits).toBe(5);
+    expect(result.kpis.soldUnits).toBe(5);
+  });
+
+  it("parcela paga dentro do período entra no realizado mesmo com a venda feita antes", async () => {
+    await seedParceledSale({
+      workspaceId: context.workspaceId,
+      soldAt: new Date(2026, 9, 10, 12),
+      parcels: [
+        { amountCents: 10000, dueDate: new Date(2026, 10, 5, 12), paidAt: new Date(2026, 10, 5, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 0, 5, 12), paidAt: new Date(2027, 0, 7, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 0, 20, 12) },
+      ],
+    });
+
+    const result = await getDashboardData({
+      from: new Date(2027, 0, 1),
+      to: new Date(2027, 0, 31),
+      status: "ALL",
+    });
+
+    expect(result.kpis.salesCount).toBe(0);
+    const byLabel = new Map(result.trend.map((b) => [b.label, b]));
+    expect(byLabel.get("07/01")).toEqual({ label: "07/01", realizada: 100, prevista: 0 });
+    expect(byLabel.get("20/01")).toEqual({ label: "20/01", realizada: 0, prevista: 100 });
+    expect(result.trend.reduce((s, b) => s + b.realizada, 0)).toBe(100);
+    expect(result.trend.reduce((s, b) => s + b.prevista, 0)).toBe(100);
+  });
+
+  it("parcelas que vencem fora do período não aparecem na série", async () => {
+    await seedParceledSale({
+      workspaceId: context.workspaceId,
+      soldAt: new Date(2027, 0, 10, 12),
+      parcels: [
+        { amountCents: 10000, dueDate: new Date(2027, 1, 5, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 2, 5, 12) },
+        { amountCents: 10000, dueDate: new Date(2027, 3, 5, 12) },
+      ],
+    });
+
+    const result = await getDashboardData({
+      from: new Date(2027, 0, 1),
+      to: new Date(2027, 0, 31),
+      status: "ALL",
+    });
+
+    expect(result.kpis.forecastRevenueCents).toBe(30000);
+    expect(result.trend.every((b) => b.realizada === 0 && b.prevista === 0)).toBe(true);
+  });
 });

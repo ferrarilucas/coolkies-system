@@ -79,19 +79,19 @@ export async function getDashboardData(filters: DashboardFilters) {
   const to = endOfDay(filters.to);
 
   // ── Query 1: vendas do período ──────────────────────────────────────────────
-  const where: Prisma.SaleWhereInput = {
-    soldAt: { gte: from, lte: to },
-  };
-  if (filters.status !== "ALL") where.status = filters.status;
-  if (filters.customerId) where.customerId = filters.customerId;
+  const saleFilter: Prisma.SaleWhereInput = {};
+  if (filters.status !== "ALL") saleFilter.status = filters.status;
+  if (filters.customerId) saleFilter.customerId = filters.customerId;
   if (filters.itemId || filters.variantId) {
-    where.items = {
+    saleFilter.items = {
       some: {
         ...(filters.itemId ? { itemId: filters.itemId } : {}),
         ...(filters.variantId ? { variantId: filters.variantId } : {}),
       },
     };
   }
+
+  const where: Prisma.SaleWhereInput = { ...saleFilter, soldAt: { gte: from, lte: to } };
 
   const sales = await db.sale.findMany({
     where,
@@ -105,7 +105,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       customerId: true,
       customerName: true,
       customer: { select: { sector: true } },
-      installments: { select: { amountCents: true, paidAt: true, dueDate: true } },
+      installments: { select: { amountCents: true, paidAt: true } },
       items: {
         select: {
           itemId: true,
@@ -380,24 +380,44 @@ export async function getDashboardData(filters: DashboardFilters) {
   for (const b of bucketsArr) {
     series.set(bucketKey(b), { label: bucketLabel(b), realized: 0, forecast: 0 });
   }
-  for (const sale of sales) {
-    const matched = hasItemFilter ? sale.items.filter(itemMatches) : sale.items;
+  const trendInstallments = await db.saleInstallment.findMany({
+    where: {
+      sale: saleFilter,
+      OR: [
+        { paidAt: { gte: from, lte: to } },
+        { paidAt: null, dueDate: { gte: from, lte: to } },
+        { paidAt: null, dueDate: null, sale: { soldAt: { gte: from, lte: to } } },
+      ],
+    },
+    select: {
+      amountCents: true,
+      paidAt: true,
+      dueDate: true,
+      sale: {
+        select: {
+          soldAt: true,
+          totalCents: true,
+          items: { select: { itemId: true, variantId: true, quantity: true, unitPriceSnapshot: true } },
+        },
+      },
+    },
+  });
+  const revenueScale = (sale: (typeof trendInstallments)[number]["sale"]) => {
+    if (!hasItemFilter) return 1;
+    if (sale.totalCents <= 0) return 0;
     const rawItemTotal = sale.items.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
-    const matchedRaw = matched.reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
+    const matchedRaw = sale.items.filter(itemMatches).reduce((s, i) => s + i.unitPriceSnapshot * i.quantity, 0);
     const discountRatio = rawItemTotal > 0 ? sale.totalCents / rawItemTotal : 1;
-    const rev = hasItemFilter ? Math.round(matchedRaw * discountRatio) : sale.totalCents;
-
-    const scale = sale.totalCents > 0 ? rev / sale.totalCents : 0;
-    for (const inst of sale.installments) {
-      const amount = Math.round(inst.amountCents * scale);
-      if (inst.paidAt) {
-        const e = series.get(bucketKey(inst.paidAt));
-        if (e) e.realized += amount;
-      } else {
-        const fd = inst.dueDate ?? sale.soldAt;
-        const e = series.get(bucketKey(fd >= from && fd <= to ? fd : sale.soldAt));
-        if (e) e.forecast += amount;
-      }
+    return Math.round(matchedRaw * discountRatio) / sale.totalCents;
+  };
+  for (const inst of trendInstallments) {
+    const amount = Math.round(inst.amountCents * revenueScale(inst.sale));
+    if (inst.paidAt) {
+      const e = series.get(bucketKey(inst.paidAt));
+      if (e) e.realized += amount;
+    } else {
+      const e = series.get(bucketKey(inst.dueDate ?? inst.sale.soldAt));
+      if (e) e.forecast += amount;
     }
   }
   const trend = Array.from(series.values()).map((b) => ({
@@ -496,7 +516,7 @@ export async function getDashboardData(filters: DashboardFilters) {
       presumedNetRevenueCents: presumedNetRevenue,
       presumedMarginPct,
       uncostedUnits,
-      paidUncostedUnits,
+      paidUncostedUnits: Math.ceil(Math.round(paidUncostedUnits * 1e6) / 1e6),
       unitCostCents: soldUnitCost != null ? Math.round(soldUnitCost) : null,
     },
     granularity,
