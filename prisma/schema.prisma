@@ -279,6 +279,7 @@ model Workspace {
   customers              Customer[]
   sales                  Sale[]
   saleItems              SaleItem[]
+  saleInstallments       SaleInstallment[]
   suppliers              Supplier[]
   purchases              Purchase[]
   purchaseItems          PurchaseItem[]
@@ -531,11 +532,16 @@ model Sale {
   // Snapshot do total (soma dos itens menos desconto) em centavos
   totalCents Int @default(0)
 
+  installmentCount Int @default(1)
+  openCents        Int @default(0)
+
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   items SaleItem[]
+
+  installments SaleInstallment[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -566,6 +572,27 @@ model SaleItem {
 
   @@index([workspaceId])
   @@map("sale_item")
+}
+
+model SaleInstallment {
+  id             String          @id @default(cuid())
+  saleId         String
+  sale           Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  number         Int
+  amountCents    Int
+  dueDate        DateTime?
+  forecastPreset ForecastPreset?
+  paidAt         DateTime?
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([saleId, number])
+  @@index([workspaceId, paidAt, dueDate])
+  @@map("sale_installment")
 }
 
 // ─────────────────────────────────────────────

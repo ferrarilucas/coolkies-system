@@ -22,6 +22,7 @@ const TABLES = [
   "recipe_item",
   "purchase_item",
   "purchase",
+  "sale_installment",
   "sale_item",
   "sale",
   "price_history",
@@ -49,4 +50,18 @@ export async function createWorkspace(name: string) {
   return testDb.workspace.create({
     data: { name, slug: `${name.toLowerCase().replace(/\W+/g, "-")}-${counter}` },
   });
+}
+
+export async function backfillSaleInstallments() {
+  await testDb.$executeRawUnsafe(`
+    INSERT INTO "sale_installment" ("id", "saleId", "number", "amountCents", "dueDate", "forecastPreset", "paidAt", "workspaceId", "updatedAt")
+    SELECT 'inst_' || s."id", s."id", 1, s."totalCents", s."paymentForecastDate", s."forecastPreset",
+      CASE WHEN s."status" = 'PAID' THEN COALESCE(s."paidAt", s."soldAt") END, s."workspaceId", CURRENT_TIMESTAMP
+    FROM "sale" s
+    WHERE NOT EXISTS (SELECT 1 FROM "sale_installment" i WHERE i."saleId" = s."id")
+  `);
+  await testDb.$executeRawUnsafe(`
+    UPDATE "sale" SET "openCents" = CASE WHEN "status" = 'PENDING' THEN "totalCents" ELSE 0 END
+    WHERE "installmentCount" = 1
+  `);
 }
