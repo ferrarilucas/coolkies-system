@@ -186,6 +186,23 @@ describe("planPayment", () => {
     const res = planPayment({ mode: "INSTALLMENTS", count: 2, preset: "DAY_FIVE", firstDue: noon(2026, 10, 5) }, 5000, existing, now);
     expect(res.ok && res.installments.map((i) => i.number)).toEqual([1]);
   });
+
+  it("total zero sem parcela paga gera todas as parcelas em aberto com valor zero", () => {
+    const res = planPayment({ mode: "INSTALLMENTS", count: 3, preset: "DAY_FIVE", firstDue: noon(2026, 10, 5) }, 0, [], now);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.installments.map((i) => [i.number, i.amountCents, ymd(i.dueDate), i.paidAt])).toEqual([
+      [1, 0, "2026-11-05", null],
+      [2, 0, "2026-12-05", null],
+      [3, 0, "2027-01-05", null],
+    ]);
+  });
+
+  it("total zero com parcela paga de valor zero mantém só as pagas", () => {
+    const existing = [paid(1, 0), { ...paid(2, 0), paidAt: null }];
+    const res = planPayment({ mode: "INSTALLMENTS", count: 2, preset: "DAY_FIVE", firstDue: noon(2026, 10, 5) }, 0, existing, now);
+    expect(res.ok && res.installments.map((i) => [i.number, i.amountCents])).toEqual([[1, 0]]);
+  });
 });
 
 describe("summarize", () => {

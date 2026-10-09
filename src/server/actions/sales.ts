@@ -162,12 +162,11 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
   const discountCents = calcDiscountCents(subtotalCents, discountType, discountValue);
   const totalCents = subtotalCents - discountCents;
 
-  const existing = await db.saleInstallment.findMany({ where: { saleId: id }, orderBy: { number: "asc" } });
-  const plan = planPayment(choice, totalCents, toPlans(existing), new Date());
-  if (!plan.ok) return { ok: false, error: plan.error };
-
   try {
-    await db.$transaction(async (tx) => {
+    const plan = await db.$transaction(async (tx) => {
+      const existing = await tx.saleInstallment.findMany({ where: { saleId: id }, orderBy: { number: "asc" } });
+      const planned = planPayment(choice, totalCents, toPlans(existing), new Date());
+      if (!planned.ok) return planned;
       await tx.stockMovement.deleteMany({ where: { saleId: id } });
       await tx.saleItem.deleteMany({ where: { saleId: id } });
       await tx.sale.update({
@@ -195,8 +194,10 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
           },
         });
       }
-      await writeInstallments(tx, id, workspaceId, plan.installments);
+      await writeInstallments(tx, id, workspaceId, planned.installments);
+      return planned;
     });
+    if (!plan.ok) return { ok: false, error: plan.error };
 
     revalidatePath("/sales");
     revalidatePath("/stock");

@@ -15,7 +15,7 @@ type Installment = { id: string; number: number; amountCents: number; dueDate: D
 export function SaleInstallments({ installments }: { installments: Installment[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const total = installments.length;
+  const total = installments.reduce((max, i) => Math.max(max, i.number), installments.length);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, success: string) {
     startTransition(async () => {

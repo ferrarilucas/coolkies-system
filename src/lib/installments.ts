@@ -137,7 +137,9 @@ export function planPayment(
   const paidNumbers = new Set(paid.map((i) => i.number));
   const openNumbers = Array.from({ length: choice.count }, (_, idx) => idx + 1).filter((n) => !paidNumbers.has(n));
 
-  if (remaining === 0) return { ok: true, installments: [...paid].sort((a, b) => a.number - b.number) };
+  if (remaining === 0 && paid.length > 0) {
+    return { ok: true, installments: [...paid].sort((a, b) => a.number - b.number) };
+  }
   if (openNumbers.length === 0) {
     return {
       ok: false,
