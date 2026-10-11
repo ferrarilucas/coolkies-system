@@ -33,6 +33,7 @@ import {
   createStripeSubscription,
   getOrCreateStripeCustomer,
   priceIdFor,
+  retrieveStripeSubscription,
   StripeConfigError,
   type StripeSubscriptionMode,
 } from "@/server/tenant/stripe";
@@ -57,6 +58,13 @@ const VALIDATION_ERROR =
 
 const MANUAL_ERROR =
   "Sua assinatura foi combinada manualmente com a nossa equipe e não pode ser alterada por aqui. Fale com a gente para mudar de plano.";
+
+const CARD_ALREADY_ACTIVE_ERROR =
+  "Você já tem uma assinatura ativa no cartão. Cancele a atual antes de assinar de novo.";
+
+const ATTEMPT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const LIVE_STRIPE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid", "paused"]);
 
 const PLAN_CHANGE_ERROR =
   "Você já tem uma assinatura ativa. Para mudar de plano, fale com a nossa equipe.";
@@ -293,6 +301,11 @@ export async function subscribeWithCard(
     return { ok: false, error: "Ciclo de cobrança inválido." };
   }
   const cycle: PlanCycle = rawCycle;
+  const attemptId = String(formData.get("attemptId") ?? "");
+
+  if (!ATTEMPT_ID_PATTERN.test(attemptId)) {
+    return { ok: false, error: GENERIC_ERROR };
+  }
 
   if (chargeAmountCents(plan, cycle, "CARD") === null) {
     return { ok: false, error: "Este plano é contratado por atendimento." };
@@ -304,6 +317,23 @@ export async function subscribeWithCard(
 
     if (existing?.provider === "MANUAL") {
       return { ok: false, error: MANUAL_ERROR };
+    }
+
+    if (existing?.provider === "STRIPE" && existing.stripeSubscriptionId) {
+      let remoteStatus: string;
+      try {
+        remoteStatus = (await retrieveStripeSubscription(existing.stripeSubscriptionId)).status;
+      } catch (e) {
+        console.error(
+          "subscribeWithCard: falha ao consultar a assinatura Stripe anterior",
+          existing.stripeSubscriptionId,
+          e instanceof Error ? e.name : "erro desconhecido",
+        );
+        return { ok: false, error: GENERIC_ERROR };
+      }
+      if (LIVE_STRIPE_STATUSES.has(remoteStatus)) {
+        return { ok: false, error: CARD_ALREADY_ACTIVE_ERROR };
+      }
     }
 
     const user = await getBillingUser(userId);
@@ -339,7 +369,7 @@ export async function subscribeWithCard(
       priceId: priceIdFor(plan, cycle),
       mode,
       trialEnd,
-      idempotencyKey: `stripe-sub:${userId}:${plan}:${cycle}`,
+      idempotencyKey: `stripe-sub:${userId}:${plan}:${cycle}:${attemptId}`,
       metadata: { userId, plan, cycle },
     });
 

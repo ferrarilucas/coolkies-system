@@ -107,6 +107,7 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     null,
   );
   const [hasWallets, setHasWallets] = useState(false);
+  const [attemptId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     elements?.update({ appearance });
@@ -118,6 +119,7 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     const formData = new FormData();
     formData.set("plan", plan);
     formData.set("cycle", cycle);
+    formData.set("attemptId", attemptId);
     const res = await subscribeWithCard(formData);
     if (!res.ok || !res.data) {
       toast.error(res.error ?? "Não foi possível iniciar a assinatura.");
@@ -194,7 +196,9 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
           <div className="h-px flex-1 bg-border" />
         </div>
       </div>
-      <PaymentElement options={{ layout: "tabs" }} />
+      <PaymentElement
+        options={{ layout: "tabs", fields: { billingDetails: { name: "always" } } }}
+      />
       <Button type="submit" className="w-full" disabled={!stripe || submitting}>
         {submitting ? "Confirmando..." : "Confirmar assinatura"}
       </Button>
