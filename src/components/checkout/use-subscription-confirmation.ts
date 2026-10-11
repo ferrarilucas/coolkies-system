@@ -15,6 +15,12 @@ export function useSubscriptionConfirmation(enabled: boolean): {
   const [outcome, setOutcome] = useState<ConfirmationOutcome>("waiting");
 
   useEffect(() => {
+    if (enabled) return;
+    setOutcome("waiting");
+    setState(null);
+  }, [enabled]);
+
+  useEffect(() => {
     if (!enabled || outcome !== "waiting") return;
 
     const source = new EventSource("/api/subscription/events");
