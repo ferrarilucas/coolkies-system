@@ -249,12 +249,7 @@ export function PlanPanel({
         )}
         {canCancel && (
           <CardFooter>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setCancelOpen(true)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setCancelOpen(true)}>
               Cancelar assinatura
             </Button>
           </CardFooter>
