@@ -91,7 +91,7 @@ export function PixCheckoutContent({
       )}
       {outcome === "failed" && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-          O banco recusou a autorização do débito automático. Volte ao plano para gerar um novo QR.
+          O banco recusou a autorização do débito automático. Gere um novo QR para tentar de novo.
         </p>
       )}
       {previousPendingCharge && (

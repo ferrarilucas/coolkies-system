@@ -122,6 +122,7 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
     if (outcome === "failed") {
       toast.error("O pagamento não foi aprovado. Tente outro cartão.");
       setAwaitingConfirmation(false);
+      setSlowConfirmation(false);
     }
   }, [outcome]);
 

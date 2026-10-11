@@ -61,4 +61,26 @@ describe("GET /api/subscription/events", () => {
     controller.abort();
     await reader.cancel();
   });
+
+  it("remove o ouvinte do emissor quando o cliente aborta", async () => {
+    const user = await testDb.user.create({
+      data: { id: "u-sse-abort", name: "Dono", email: "sse-abort@example.com" },
+    });
+    sessionResult = { user: { id: user.id }, session: { id: "s-sse-abort" } };
+    const controller = new AbortController();
+    const emitter = () =>
+      (globalThis as { subscriptionEvents?: import("node:events").EventEmitter }).subscriptionEvents;
+
+    const response = await GET(
+      new Request("http://localhost/api/subscription/events", { signal: controller.signal }),
+    );
+    const reader = response.body!.getReader();
+    await nextChunk(reader);
+    expect(emitter()?.listenerCount(`subscription:${user.id}`)).toBe(1);
+
+    controller.abort();
+    await reader.cancel();
+
+    expect(emitter()?.listenerCount(`subscription:${user.id}`)).toBe(0);
+  });
 });

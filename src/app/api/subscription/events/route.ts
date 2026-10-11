@@ -22,7 +22,12 @@ export async function GET(request: Request) {
       let closed = false;
 
       function send(chunk: string) {
-        if (!closed) controller.enqueue(encoder.encode(chunk));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          close(false);
+        }
       }
 
       async function sendState() {
@@ -47,7 +52,11 @@ export async function GET(request: Request) {
 
       stop = close;
       request.signal.addEventListener("abort", () => close(false));
-      await sendState();
+      try {
+        await sendState();
+      } catch {
+        close(true);
+      }
     },
     cancel() {
       stop(false);
