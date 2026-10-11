@@ -6,6 +6,8 @@ import QRCode from "qrcode";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useSubscriptionConfirmation } from "./use-subscription-confirmation";
+import { SubscriptionConfirmed } from "./subscription-confirmed";
 
 const QR_IMAGE_SIZE = 320;
 
@@ -59,6 +61,8 @@ export function PixCheckoutContent({
   previousPendingCharge?: { cycleSeq: number; dueDate: string } | null;
 }) {
   const [copied, setCopied] = useState(false);
+  const { outcome, state } = useSubscriptionConfirmation(true);
+  const confirmedDueDate = state?.nextDueDate ?? nextDueDate;
 
   async function onCopy() {
     try {
@@ -76,6 +80,20 @@ export function PixCheckoutContent({
 
   return (
     <div className="space-y-4">
+      {outcome === "confirmed" && (
+        <SubscriptionConfirmed
+          detail={
+            confirmedDueDate
+              ? `Débito automático autorizado. A primeira cobrança entra em ${formatDueDate(confirmedDueDate)}.`
+              : "Débito automático autorizado."
+          }
+        />
+      )}
+      {outcome === "failed" && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          O banco recusou a autorização do débito automático. Volte ao plano para gerar um novo QR.
+        </p>
+      )}
       {previousPendingCharge && (
         <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />

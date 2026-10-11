@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { loadStripe, type Stripe, type Appearance } from "@stripe/stripe-js";
 import {
@@ -20,6 +19,8 @@ import {
   type PendingChargeWarning,
 } from "@/server/actions/subscription";
 import { formatDueDate } from "@/components/checkout/pix-checkout-content";
+import { useSubscriptionConfirmation } from "@/components/checkout/use-subscription-confirmation";
+import { SubscriptionConfirmed } from "@/components/checkout/subscription-confirmed";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
@@ -100,7 +101,6 @@ function PendingChargeNotice({ charge }: { charge: PendingChargeWarning }) {
 function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
   const stripe = useStripe();
   const elements = useElements();
-  const router = useRouter();
   const appearance = useElementsAppearance();
   const [submitting, setSubmitting] = useState(false);
   const [pendingCharge, setPendingCharge] = useState<PendingChargeWarning | null>(
@@ -108,6 +108,22 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
   );
   const [hasWallets, setHasWallets] = useState(false);
   const [attemptId] = useState(() => crypto.randomUUID());
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [slowConfirmation, setSlowConfirmation] = useState(false);
+  const { outcome } = useSubscriptionConfirmation(awaitingConfirmation);
+
+  useEffect(() => {
+    if (!awaitingConfirmation) return;
+    const timer = setTimeout(() => setSlowConfirmation(true), 20_000);
+    return () => clearTimeout(timer);
+  }, [awaitingConfirmation]);
+
+  useEffect(() => {
+    if (outcome === "failed") {
+      toast.error("O pagamento não foi aprovado. Tente outro cartão.");
+      setAwaitingConfirmation(false);
+    }
+  }, [outcome]);
 
   useEffect(() => {
     elements?.update({ appearance });
@@ -149,9 +165,7 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
       return;
     }
 
-    toast.success("Cartão confirmado. Sua assinatura está ativa.");
-    router.push("/workspaces/plan");
-    router.refresh();
+    setAwaitingConfirmation(true);
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -181,6 +195,14 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {pendingCharge && <PendingChargeNotice charge={pendingCharge} />}
+      {outcome === "confirmed" && <SubscriptionConfirmed detail="Pagamento aprovado no cartão." />}
+      {awaitingConfirmation && outcome === "waiting" && (
+        <p role="status" className="rounded-lg border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+          {slowConfirmation
+            ? "Ainda confirmando com a operadora. Você pode sair desta tela; avisaremos no painel quando terminar."
+            : "Confirmando com a operadora…"}
+        </p>
+      )}
       <div hidden={!hasWallets}>
         <ExpressCheckoutElement
           options={{ paymentMethods: { applePay: "always", googlePay: "auto" } }}
@@ -199,7 +221,7 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
       <PaymentElement
         options={{ layout: "tabs", fields: { billingDetails: { name: "always" } } }}
       />
-      <Button type="submit" className="w-full" disabled={!stripe || submitting}>
+      <Button type="submit" className="w-full" disabled={!stripe || submitting || awaitingConfirmation}>
         {submitting ? "Confirmando..." : "Confirmar assinatura"}
       </Button>
       <p className="text-xs text-muted-foreground">
