@@ -1,5 +1,6 @@
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { publishSubscriptionChange } from "@/server/realtime/subscription-events";
 import { decidePeriodEndCorrection, decideReconcile } from "./reconcile-status";
 import { getInterPixSubscription } from "./interpix";
 
@@ -61,6 +62,7 @@ export async function reconcileInterPixSubscriptions(
       if (Object.keys(data).length > 0) {
         await client.subscription.update({ where: { id: sub.id }, data });
         summary.corrected += 1;
+        publishSubscriptionChange(sub.userId);
         log(
           `corrigida ${sub.id}: ${
             statusDecision.action === "apply" ? statusDecision.reason : "sem mudança de status"

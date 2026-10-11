@@ -1,6 +1,7 @@
 import { Prisma, type Subscription } from "@prisma/client";
 import { db } from "@/lib/db";
 import { advancePeriod } from "@/lib/period";
+import { publishSubscriptionChange } from "@/server/realtime/subscription-events";
 import { isSubscriptionUsable } from "./subscription";
 
 const GRACE_DAYS = 7;
@@ -124,7 +125,7 @@ export async function applyInterPixEvent(event: InterPixEvent): Promise<EventOut
   }
 
   try {
-    return await db.$transaction(async (tx) => {
+    const outcome = await db.$transaction(async (tx) => {
       const current = await tx.subscription.findUnique({ where: { id: sub.id } });
       if (!current) return "unknown";
 
@@ -153,6 +154,8 @@ export async function applyInterPixEvent(event: InterPixEvent): Promise<EventOut
       await tx.processedWebhookEvent.create({ data: { id: event.eventId, event: event.type } });
       return "applied";
     });
+    if (outcome === "applied") publishSubscriptionChange(sub.userId);
+    return outcome;
   } catch (error) {
     if (isDuplicateEventError(error)) return "duplicate";
     throw error;

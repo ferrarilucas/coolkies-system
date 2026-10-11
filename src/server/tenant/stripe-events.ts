@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { Prisma } from "@prisma/client";
 import type { SubscriptionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { publishSubscriptionChange } from "@/server/realtime/subscription-events";
 import { retrieveStripeSubscription } from "./stripe";
 
 export type StripeEventOutcome =
@@ -164,5 +165,6 @@ export async function applyStripeEvent(
   if (updated.count === 0) return "stale";
 
   await recordProcessed(event.id, event.type);
+  publishSubscriptionChange(local.userId);
   return "applied";
 }

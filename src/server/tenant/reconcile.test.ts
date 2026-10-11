@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { subscribeToSubscriptionChanges } from "@/server/realtime/subscription-events";
 import { resetDb, testDb } from "@/test/db";
 
 const remote = vi.hoisted(() => ({ byId: {} as Record<string, string | Error> }));
@@ -66,5 +67,17 @@ describe("reconcileInterPixSubscriptions", () => {
     const summary = await reconcileInterPixSubscriptions(undefined, () => {});
 
     expect(summary.checked).toBe(0);
+  });
+
+  it("publica a mudança de cada assinatura corrigida", async () => {
+    await seed("u-rec-pub", "ip-rec-pub", "ACTIVE");
+    remote.byId["ip-rec-pub"] = "CANCELED";
+    const listener = vi.fn();
+    const stop = subscribeToSubscriptionChanges("u-rec-pub", listener);
+
+    await reconcileInterPixSubscriptions(undefined, () => {});
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

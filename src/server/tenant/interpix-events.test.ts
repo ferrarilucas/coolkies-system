@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isPeriodPaid } from "@/lib/period";
+import { subscribeToSubscriptionChanges } from "@/server/realtime/subscription-events";
 import { resetDb, testDb } from "@/test/db";
 import { applyInterPixEvent } from "./interpix-events";
 import { isSubscriptionUsable } from "./subscription";
@@ -744,5 +745,22 @@ describe("eventos da InterPix", () => {
     expect(outcome).toBe("ignored");
     expect(await testDb.subscription.count()).toBe(0);
     expect(await testDb.processedWebhookEvent.count()).toBe(0);
+  });
+
+  it("publica a mudança quando aplica o evento, e não publica de novo no duplicado", async () => {
+    const user = await subscriber("u-publish");
+    const listener = vi.fn();
+    const stop = subscribeToSubscriptionChanges(user.id, listener);
+    const event = {
+      type: "subscription.authorized" as const,
+      eventId: "700",
+      data: { subscriptionId: "ipx-u-publish", externalUserId: user.id },
+    };
+
+    await applyInterPixEvent(event);
+    await applyInterPixEvent(event);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

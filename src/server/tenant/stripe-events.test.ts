@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
+import { subscribeToSubscriptionChanges } from "@/server/realtime/subscription-events";
 import { resetDb, testDb } from "@/test/db";
 
 const retrieveMock = vi.fn();
@@ -213,5 +214,25 @@ describe("applyStripeEvent", () => {
     const sub = await subOf(user.id);
     expect(sub?.status).toBe("PAST_DUE");
     expect(sub?.lastFailureReason).toBe("Pagamento no cartão recusado.");
+  });
+});
+
+describe("publicação de mudanças", () => {
+  beforeEach(async () => {
+    await resetDb();
+    retrieveMock.mockReset();
+  });
+
+  it("publica quando aplica o evento da Stripe", async () => {
+    const user = await subscriber("u-stripe-publish");
+    retrieveMock.mockResolvedValue(fakeStripeSub());
+    const listener = vi.fn();
+    const stop = subscribeToSubscriptionChanges(user.id, listener);
+
+    const outcome = await applyStripeEvent(subEvent("customer.subscription.updated", "evt_publish_1"));
+
+    expect(outcome).toBe("applied");
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
   });
 });
