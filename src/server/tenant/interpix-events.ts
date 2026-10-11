@@ -4,6 +4,7 @@ import { advancePeriod } from "@/lib/period";
 import { isSubscriptionUsable } from "./subscription";
 
 const GRACE_DAYS = 7;
+const POST_TRIAL_GRACE_DAYS = 3;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EVENT_ID_PATTERN = /^\d{1,19}$/;
 
@@ -57,7 +58,21 @@ function changesFor(
       const statusChange: Prisma.SubscriptionUpdateManyMutationInput =
         current.status === "ACTIVE" ? {} : { status: "PENDING_AUTH" };
       const hadAccess = isSubscriptionUsable(current, now);
-      if (current.graceGrantedAt !== null || !hadAccess) {
+      if (!hadAccess) {
+        const postTrialGraceUsed =
+          current.graceGrantedAt !== null &&
+          (current.trialEndsAt === null || current.graceGrantedAt > current.trialEndsAt);
+        if (current.status !== "PENDING_AUTH" || postTrialGraceUsed) {
+          return { ...statusChange, authorizedAt: now };
+        }
+        return {
+          ...statusChange,
+          authorizedAt: now,
+          graceUntil: addDays(now, POST_TRIAL_GRACE_DAYS),
+          graceGrantedAt: now,
+        };
+      }
+      if (current.graceGrantedAt !== null) {
         return { ...statusChange, authorizedAt: now };
       }
       return {
