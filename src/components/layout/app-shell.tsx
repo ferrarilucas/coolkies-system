@@ -45,7 +45,7 @@ export function AppShell({
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
         />
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto [@media(display-mode:standalone)_and_(hover:none)]:pt-6">
           {showMobileBar && (
             <WorkspaceSwitcher
               workspaces={workspaces}
