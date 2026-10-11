@@ -1,8 +1,8 @@
-import { db } from "@/lib/db";
 import type { SubscriptionState } from "@/lib/subscription-confirmation";
+import { getSubscription } from "@/server/tenant/subscription";
 
 export async function getSubscriptionState(userId: string): Promise<SubscriptionState | null> {
-  const sub = await db.subscription.findUnique({ where: { userId } });
+  const sub = await getSubscription(userId);
   if (!sub) return null;
   return {
     status: sub.status,
