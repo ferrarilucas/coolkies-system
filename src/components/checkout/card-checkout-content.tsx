@@ -145,22 +145,12 @@ function CardForm({ plan, cycle }: { plan: string; cycle: string }) {
 
     setPendingCharge(res.data.previousPendingCharge);
     const returnUrl = `${window.location.origin}/workspaces/plan`;
-    const confirm =
-      res.data.mode === "setup"
-        ? stripe.confirmSetup({
-            elements,
-            clientSecret: res.data.clientSecret,
-            confirmParams: { return_url: returnUrl },
-            redirect: "if_required",
-          })
-        : stripe.confirmPayment({
-            elements,
-            clientSecret: res.data.clientSecret,
-            confirmParams: { return_url: returnUrl },
-            redirect: "if_required",
-          });
-
-    const { error } = await confirm;
+    const { error } = await stripe.confirmPayment({
+      elements,
+      clientSecret: res.data.clientSecret,
+      confirmParams: { return_url: returnUrl },
+      redirect: "if_required",
+    });
     if (error) {
       toast.error(error.message ?? "Não foi possível confirmar o cartão.");
       return;

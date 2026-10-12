@@ -9,13 +9,10 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getSession: async () => sessionResult } },
 }));
 
-const createStripeSubscription = vi.fn(
-  async (input: { mode: "payment" | "setup"; trialEnd?: number; idempotencyKey: string }) => ({
-    subscriptionId: "sub_stripe_new",
-    clientSecret: input.mode === "setup" ? "seti_x_secret_y" : "pi_x_secret_y",
-    mode: input.mode,
-  }),
-);
+const createStripeSubscription = vi.fn(async (input: { idempotencyKey: string }) => {
+  void input;
+  return { subscriptionId: "sub_stripe_new", clientSecret: "pi_x_secret_y" };
+});
 const getOrCreateStripeCustomer = vi.fn(async () => "cus_stripe_new");
 const retrieveStripeSubscription = vi.fn(async (id: string) => ({ id, status: "canceled" }));
 
@@ -80,13 +77,12 @@ describe("subscribeWithCard", () => {
     vi.stubEnv("INTERPIX_API_TOKEN", "tok-test");
   });
 
-  it("conta nova sem período pago: modo payment e grava mapeamento STRIPE", async () => {
+  it("conta nova: cobra no cartão na hora e grava mapeamento STRIPE", async () => {
     const { user } = await userWithWorkspace("u-new", "new@example.com");
 
     const result = await subscribeWithCard(cardForm());
 
     expect(result.ok).toBe(true);
-    expect(result.data?.mode).toBe("payment");
     expect(result.data?.clientSecret).toBe("pi_x_secret_y");
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
@@ -97,7 +93,7 @@ describe("subscribeWithCard", () => {
     expect(sub?.stripeSyncedAt).toBeNull();
   });
 
-  it("trial de 14 dias em curso: modo setup com trial_end no fim do teste", async () => {
+  it("teste do app em curso: cobra no cartão na hora, sem período de teste na Stripe", async () => {
     const { user } = await userWithWorkspace("u-trial", "trial@example.com");
     const trialEndsAt = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
     await testDb.subscription.create({
@@ -112,12 +108,13 @@ describe("subscribeWithCard", () => {
 
     const result = await subscribeWithCard(cardForm());
 
-    expect(result.data?.mode).toBe("setup");
-    const passed = createStripeSubscription.mock.calls[0][0] as { trialEnd?: number };
-    expect(passed.trialEnd).toBe(Math.floor(trialEndsAt.getTime() / 1000));
+    expect(result.data?.clientSecret).toBe("pi_x_secret_y");
+    const passed = createStripeSubscription.mock.calls[0][0] as Record<string, unknown>;
+    expect(passed).not.toHaveProperty("trialEnd");
+    expect(passed).not.toHaveProperty("mode");
   });
 
-  it("Pix pago à frente: modo setup usando o fim do período já pago", async () => {
+  it("período pago no Pix: cobra no cartão na hora, sem período de teste na Stripe", async () => {
     const { user } = await userWithWorkspace("u-pixpaid", "pixpaid@example.com");
     const periodEnd = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
     await testDb.subscription.create({
@@ -133,9 +130,10 @@ describe("subscribeWithCard", () => {
 
     const result = await subscribeWithCard(cardForm());
 
-    expect(result.data?.mode).toBe("setup");
-    const passed = createStripeSubscription.mock.calls[0][0] as { trialEnd?: number };
-    expect(passed.trialEnd).toBe(Math.floor(periodEnd.getTime() / 1000));
+    expect(result.data?.clientSecret).toBe("pi_x_secret_y");
+    const passed = createStripeSubscription.mock.calls[0][0] as Record<string, unknown>;
+    expect(passed).not.toHaveProperty("trialEnd");
+    expect(passed).not.toHaveProperty("mode");
   });
 
   it("recusa assinatura MANUAL sem tocar a Stripe", async () => {

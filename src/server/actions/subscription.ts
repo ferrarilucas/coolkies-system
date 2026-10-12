@@ -10,7 +10,6 @@ import {
 } from "@/lib/plans";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { isValidIsoCalendarDate } from "@/lib/date-validation";
-import { isPeriodPaid } from "@/lib/period";
 import type { Subscription } from "@prisma/client";
 import {
   getBillingUser,
@@ -35,7 +34,6 @@ import {
   priceIdFor,
   retrieveStripeSubscription,
   StripeConfigError,
-  type StripeSubscriptionMode,
 } from "@/server/tenant/stripe";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
@@ -238,28 +236,8 @@ export async function subscribe(
 
 export type CardCheckoutResult = {
   clientSecret: string;
-  mode: StripeSubscriptionMode;
   previousPendingCharge: PendingChargeWarning | null;
 };
-
-const STRIPE_TRIAL_MIN_MS = 48 * 60 * 60 * 1000;
-
-function stripeTrialEndSeconds(
-  existing: Subscription | null,
-  now: Date,
-): number | undefined {
-  const candidates: number[] = [];
-  if (existing?.status === "TRIALING" && existing.trialEndsAt) {
-    candidates.push(existing.trialEndsAt.getTime());
-  }
-  if (existing && isPeriodPaid(existing) && existing.currentPeriodEnd) {
-    candidates.push(existing.currentPeriodEnd.getTime());
-  }
-  if (candidates.length === 0) return undefined;
-  const furthest = Math.max(...candidates);
-  if (furthest - now.getTime() < STRIPE_TRIAL_MIN_MS) return undefined;
-  return Math.floor(furthest / 1000);
-}
 
 async function cancelExistingInterPixMandate(
   userId: string,
@@ -353,10 +331,6 @@ export async function subscribeWithCard(
       }
     }
 
-    const now = new Date();
-    const trialEnd = stripeTrialEndSeconds(existing, now);
-    const mode: StripeSubscriptionMode = trialEnd ? "setup" : "payment";
-
     const customerId = await getOrCreateStripeCustomer({
       userId,
       email: user.email,
@@ -367,8 +341,6 @@ export async function subscribeWithCard(
     const created = await createStripeSubscription({
       customerId,
       priceId: priceIdFor(plan, cycle),
-      mode,
-      trialEnd,
       idempotencyKey: `stripe-sub:${userId}:${plan}:${cycle}:${attemptId}`,
       metadata: { userId, plan, cycle },
     });
@@ -385,7 +357,7 @@ export async function subscribeWithCard(
 
     return {
       ok: true,
-      data: { clientSecret: created.clientSecret, mode: created.mode, previousPendingCharge },
+      data: { clientSecret: created.clientSecret, previousPendingCharge },
     };
   } catch (e) {
     if (e instanceof StripeConfigError) {

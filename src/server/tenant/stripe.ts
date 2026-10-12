@@ -110,13 +110,9 @@ export async function createHostedCheckoutSession(input: {
   }
 }
 
-export type StripeSubscriptionMode = "payment" | "setup";
-
 export type CreateStripeSubscriptionInput = {
   customerId: string;
   priceId: string;
-  mode: StripeSubscriptionMode;
-  trialEnd?: number;
   idempotencyKey: string;
   metadata: Record<string, string>;
 };
@@ -124,7 +120,6 @@ export type CreateStripeSubscriptionInput = {
 export type CreatedStripeSubscription = {
   subscriptionId: string;
   clientSecret: string;
-  mode: StripeSubscriptionMode;
 };
 
 export async function getOrCreateStripeCustomer(input: {
@@ -158,34 +153,6 @@ export async function createStripeSubscription(
 ): Promise<CreatedStripeSubscription> {
   const client = stripe();
   try {
-    if (input.mode === "setup") {
-      const sub = await client.subscriptions.create(
-        {
-          customer: input.customerId,
-          items: [{ price: input.priceId }],
-          trial_end: input.trialEnd,
-          payment_behavior: "default_incomplete",
-          trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
-          expand: ["pending_setup_intent"],
-          metadata: input.metadata,
-        },
-        { idempotencyKey: input.idempotencyKey },
-      );
-      const setupIntent = sub.pending_setup_intent;
-      const clientSecret =
-        setupIntent && typeof setupIntent !== "string"
-          ? setupIntent.client_secret
-          : null;
-      if (!clientSecret) {
-        throw new StripeApiError(
-          "MISSING_CLIENT_SECRET",
-          "Assinatura em setup criada sem pending_setup_intent",
-          null,
-        );
-      }
-      return { subscriptionId: sub.id, clientSecret, mode: "setup" };
-    }
-
     const sub = await client.subscriptions.create(
       {
         customer: input.customerId,
@@ -204,11 +171,11 @@ export async function createStripeSubscription(
     if (!clientSecret) {
       throw new StripeApiError(
         "MISSING_CLIENT_SECRET",
-        "Assinatura em payment criada sem confirmation_secret",
+        "Assinatura criada sem confirmation_secret",
         null,
       );
     }
-    return { subscriptionId: sub.id, clientSecret, mode: "payment" };
+    return { subscriptionId: sub.id, clientSecret };
   } catch (error) {
     throw asStripeApiError(error);
   }
