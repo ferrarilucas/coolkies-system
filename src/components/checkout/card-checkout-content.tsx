@@ -257,6 +257,7 @@ export function CardCheckoutContent({
     <Elements
       stripe={stripe}
       options={{
+        locale: "pt-BR",
         mode: "subscription",
         amount: monthlyCents,
         currency: "brl",
