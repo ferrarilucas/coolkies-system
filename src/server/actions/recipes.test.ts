@@ -131,12 +131,13 @@ describe("createItemInline", () => {
     context.canWrite = true;
   });
 
-  it("cria um item com productionInput true", async () => {
+  it("cria um item como matéria-prima, não como item de venda", async () => {
     const res = await createItemInline(fd({ name: "Fermento", unit: "G" }));
     expect(res.ok).toBe(true);
 
     const item = await testDb.item.findUnique({ where: { id: res.data!.id } });
     expect(item).not.toBeNull();
     expect(item!.productionInput).toBe(true);
+    expect(item!.sellable).toBe(false);
   });
 });

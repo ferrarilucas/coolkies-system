@@ -7,27 +7,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { createItemInline } from "@/server/actions/recipes";
 import { toast } from "sonner";
 import type { ItemOption } from "./recipe-form";
 
-// ─── Quick-create inline ──────────────────────────────────────────────────────
+// ─── Criação rápida de matéria-prima ──────────────────────────────────────────
 
-function QuickCreateForm({
+const UNIT_CHOICES = [
+  { value: "G", label: "Peso", hint: "g / kg" },
+  { value: "ML", label: "Volume", hint: "ml / L" },
+  { value: "UN", label: "Unidade", hint: "un" },
+] as const;
+
+function QuickCreateDialog({
+  open,
+  onOpenChange,
   initialName,
   onCreated,
-  onCancel,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   initialName: string;
   onCreated: (item: ItemOption) => void;
-  onCancel: () => void;
 }) {
   const [name, setName] = useState(initialName);
-  const [unit, setUnit] = useState("G");
+  const [unit, setUnit] = useState<string>("G");
   const [saving, startSave] = useTransition();
+
+  useEffect(() => {
+    if (open) {
+      setName(initialName);
+      setUnit("G");
+    }
+  }, [open, initialName]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,57 +67,66 @@ function QuickCreateForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="p-3 space-y-3">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        Novo item
-      </p>
-      <div className="space-y-2">
-        <div>
-          <Label className="text-xs">Nome *</Label>
-          <Input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-8 text-sm"
-            placeholder="Ex.: Farinha de trigo"
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Unidade base</Label>
-          <Select value={unit} onValueChange={setUnit}>
-            <SelectTrigger className="h-8 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="G">Grama (g)</SelectItem>
-              <SelectItem value="ML">Mililitro (ml)</SelectItem>
-              <SelectItem value="UN">Unidade (un)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="flex gap-2 pt-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="flex-1"
-          onClick={onCancel}
-          disabled={saving}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          size="sm"
-          className="flex-1"
-          disabled={saving || !name.trim()}
-        >
-          {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-          Criar
-        </Button>
-      </div>
-    </form>
+    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
+      <DialogContent
+        className={cn(
+          "top-4 w-[calc(100%-2rem)] max-w-sm translate-y-0 rounded-lg",
+          "sm:top-[50%] sm:translate-y-[-50%]",
+        )}
+      >
+        <DialogHeader>
+          <DialogTitle>Nova matéria-prima</DialogTitle>
+          <DialogDescription>
+            Fica disponível nas fichas técnicas e nas compras. Não aparece para venda.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="quick-item-name">Nome</Label>
+            <Input
+              id="quick-item-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex.: Farinha de trigo"
+              className="h-11 text-base"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Medido em</Label>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Medido em">
+              {UNIT_CHOICES.map((u) => (
+                <button
+                  key={u.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={unit === u.value}
+                  onClick={() => setUnit(u.value)}
+                  className={cn(
+                    "flex flex-col items-center justify-center rounded-md border px-2 py-2.5 text-sm transition-colors",
+                    unit === u.value
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <span className="font-medium">{u.label}</span>
+                  <span className="text-xs text-muted-foreground">{u.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving || !name.trim()}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Criar
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -130,13 +154,13 @@ export function ItemCombobox({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setQuery("");
-      setShowCreate(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -154,120 +178,124 @@ export function ItemCombobox({
     setOpen(false);
   }
 
+  function startCreate() {
+    setCreateName(query.trim());
+    setOpen(false);
+    setCreateOpen(true);
+  }
+
   function handleCreated(item: ItemOption) {
     onOptionCreated(item);
     onChange(item);
-    setShowCreate(false);
-    setOpen(false);
+    setCreateOpen(false);
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          className="w-full justify-between font-normal"
-        >
-          {value ? (
-            <span className="flex items-center gap-1.5 min-w-0">
-              <span className="truncate">{value.name}</span>
-              <span className="text-xs text-muted-foreground shrink-0">
-                ({UNIT_ABBR[value.unit] ?? value.unit.toLowerCase()})
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            className="w-full justify-between font-normal"
+          >
+            {value ? (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate">{value.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  ({UNIT_ABBR[value.unit] ?? value.unit.toLowerCase()})
+                </span>
               </span>
-            </span>
-          ) : (
-            <span className="text-muted-foreground">Item…</span>
-          )}
-          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
+            ) : (
+              <span className="text-muted-foreground">Item…</span>
+            )}
+            <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
 
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        {showCreate ? (
-          <QuickCreateForm
-            initialName={query}
-            onCreated={handleCreated}
-            onCancel={() => setShowCreate(false)}
-          />
-        ) : (
-          <>
-            {/* Busca */}
-            <div className="flex items-center border-b px-3 py-2">
-              <Input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar item…"
-                className="h-7 border-0 p-0 shadow-none focus-visible:ring-0 text-sm"
-              />
-            </div>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          {/* Busca */}
+          <div className="flex items-center border-b px-3 py-2">
+            <Input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar item…"
+              className="h-8 border-0 p-0 shadow-none focus-visible:ring-0 text-base sm:text-sm"
+            />
+          </div>
 
-            {/* Lista */}
-            <div className="max-h-52 overflow-y-auto">
-              {filtered.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => handleSelect(o)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
-                >
-                  <Check
-                    className={cn(
-                      "size-4 shrink-0",
-                      value?.id === o.id ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  <span className="flex-1 truncate">{o.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {UNIT_ABBR[o.unit] ?? o.unit.toLowerCase()}
-                  </span>
-                </button>
-              ))}
-
-              {filtered.length === 0 && (
-                <div className="px-3 py-2 space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    {query
-                      ? `Nenhum resultado para "${query}".`
-                      : available.length === 0
-                        ? "Todos os itens já estão adicionados."
-                        : "Nenhum item disponível."}
-                  </p>
-                  {(query || available.length === 0) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-1.5"
-                      onClick={() => setShowCreate(true)}
-                    >
-                      <Plus className="size-3.5" />
-                      {query ? `Criar "${query}"` : "Criar item"}
-                    </Button>
+          {/* Lista */}
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => handleSelect(o)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left"
+              >
+                <Check
+                  className={cn(
+                    "size-4 shrink-0",
+                    value?.id === o.id ? "opacity-100" : "opacity-0",
                   )}
-                </div>
-              )}
+                />
+                <span className="flex-1 truncate">{o.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {UNIT_ABBR[o.unit] ?? o.unit.toLowerCase()}
+                </span>
+              </button>
+            ))}
 
-              {filtered.length > 0 && (
-                <div className="border-t px-3 py-2">
+            {filtered.length === 0 && (
+              <div className="px-3 py-2 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {query
+                    ? `Nenhum resultado para "${query}".`
+                    : available.length === 0
+                      ? "Todos os itens já estão adicionados."
+                      : "Nenhum item disponível."}
+                </p>
+                {(query || available.length === 0) && (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="w-full gap-1.5 text-xs text-muted-foreground"
-                    onClick={() => setShowCreate(true)}
+                    className="w-full gap-1.5"
+                    onClick={startCreate}
                   >
                     <Plus className="size-3.5" />
-                    {query ? `Criar "${query}"` : "Criar novo item"}
+                    {query ? `Criar "${query}"` : "Criar matéria-prima"}
                   </Button>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+                )}
+              </div>
+            )}
+
+            {filtered.length > 0 && (
+              <div className="border-t px-3 py-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full gap-1.5 text-xs text-muted-foreground"
+                  onClick={startCreate}
+                >
+                  <Plus className="size-3.5" />
+                  {query ? `Criar "${query}"` : "Criar matéria-prima"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      <QuickCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialName={createName}
+        onCreated={handleCreated}
+      />
+    </>
   );
 }

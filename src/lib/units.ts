@@ -1,4 +1,5 @@
 import { BaseUnit } from "@prisma/client";
+import { formatBRL } from "./money";
 
 /** Unidades aceitas no input */
 export type InputUnit = "G" | "KG" | "ML" | "L" | "UN" | "TSP" | "DSP" | "TBSP";
@@ -99,4 +100,15 @@ export function bestInputUnit(quantity: number, unit: BaseUnit): InputUnit {
   if (unit === BaseUnit.G  && quantity >= 1000) return "KG";
   if (unit === BaseUnit.ML && quantity >= 1000) return "L";
   return unit as InputUnit;
+}
+
+/**
+ * Preço por unidade de referência a partir de um total pago e quantidade base.
+ * g/ml mostram por kg/L (por grama fica sempre "R$ 0,00").
+ */
+export function formatUnitPrice(totalCents: number, quantity: number, unit: BaseUnit): string {
+  if (!(quantity > 0)) return "—";
+  if (unit === BaseUnit.G)  return `${formatBRL(Math.round((totalCents / quantity) * 1000))}/kg`;
+  if (unit === BaseUnit.ML) return `${formatBRL(Math.round((totalCents / quantity) * 1000))}/L`;
+  return `${formatBRL(Math.round(totalCents / quantity))}/un`;
 }

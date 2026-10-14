@@ -117,7 +117,7 @@ export async function createItemInline(formData: FormData): Promise<ActionResult
   if (!name) return { ok: false, error: "Nome obrigatório." };
 
   try {
-    const item = await db.item.create({ data: { name, unit, productionInput: true, workspaceId } });
+    const item = await db.item.create({ data: { name, unit, productionInput: true, sellable: false, workspaceId } });
     revalidatePath("/admin/inputs");
     return { ok: true, data: { id: item.id, name: item.name, unit: item.unit } };
   } catch {

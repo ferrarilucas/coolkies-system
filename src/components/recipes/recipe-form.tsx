@@ -272,8 +272,13 @@ export function RecipeForm({
             if (line.item?.id) lineUsedIds.delete(line.item.id);
 
             return (
-              <div key={line.key} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
-                <div className="flex-1 min-w-0">
+              // Celular: item + lixeira na 1ª linha; qtd, unidade e custo na 2ª.
+              // Telas maiores: tudo numa linha só.
+              <div
+                key={line.key}
+                className="grid grid-cols-[1fr_6.5rem_auto] items-center gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_5rem_7rem_4.5rem_auto] sm:px-3"
+              >
+                <div className="order-1 col-span-2 min-w-0 sm:col-span-1">
                   <ItemCombobox
                     value={line.item}
                     onChange={(item) => setLineItem(line.key, item)}
@@ -286,35 +291,39 @@ export function RecipeForm({
                 {/* Quantidade */}
                 <Input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="any"
                   placeholder="Qtd."
+                  aria-label="Quantidade"
                   value={line.quantity}
                   onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
                   disabled={!line.item}
-                  className="w-20 text-right tabular-nums"
+                  className="order-3 text-right tabular-nums sm:order-2"
                 />
 
                 {/* Unidade */}
-                <Select
-                  value={line.inputUnit}
-                  onValueChange={(v) => updateLine(line.key, { inputUnit: v as InputUnit })}
-                  disabled={!line.item}
-                >
-                  <SelectTrigger className="w-28 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unitOptions.map((u) => (
-                      <SelectItem key={u} value={u} className="text-xs">
-                        {UNIT_LABEL_SHORT[u]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="order-4 sm:order-3">
+                  <Select
+                    value={line.inputUnit}
+                    onValueChange={(v) => updateLine(line.key, { inputUnit: v as InputUnit })}
+                    disabled={!line.item}
+                  >
+                    <SelectTrigger aria-label="Unidade">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unitOptions.map((u) => (
+                        <SelectItem key={u} value={u}>
+                          {UNIT_LABEL_SHORT[u]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {/* Custo */}
-                <span className="hidden sm:block w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                <span className="order-5 min-w-[4.5rem] text-right text-xs tabular-nums text-muted-foreground sm:order-4">
                   {lineCost != null ? formatBRL(Math.round(lineCost)) : "—"}
                 </span>
 
@@ -322,7 +331,8 @@ export function RecipeForm({
                 <button
                   type="button"
                   onClick={() => removeLine(line.key)}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                  aria-label="Remover material"
+                  className="order-2 flex h-10 w-10 shrink-0 items-center justify-center justify-self-end rounded-md text-destructive hover:bg-destructive/10 sm:order-5"
                 >
                   <Trash2 className="size-4" />
                 </button>

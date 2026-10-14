@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { MoneyInput } from "@/components/shared/money-input";
 import { createPurchase, fetchLastPriceForSupplierItem } from "@/server/actions/purchases";
-import { PURCHASE_UNITS, UNIT_LABEL, bestInputUnit, toDisplayValue, type InputUnit } from "@/lib/units";
+import {
+  PURCHASE_UNITS, UNIT_LABEL, bestInputUnit, formatUnitPrice, toBaseUnit, toDisplayValue, type InputUnit,
+} from "@/lib/units";
+import { convertPriceMode, lineTotalCents, type PriceMode } from "@/lib/purchase-price";
+import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/money";
 import { SupplierCombobox, type SupplierOption } from "./supplier-combobox";
 import { PurchaseItemCombobox, type PurchaseItemOption } from "./item-combobox";
@@ -26,17 +30,25 @@ type DraftItem = {
   variantId: string | null;
   quantity: string;
   unit: InputUnit;
-  unitPriceCents: number;
+  priceMode: PriceMode;
+  /** Valor total ou preço por unidade, conforme `priceMode` */
+  priceCents: number;
 };
 
 function emptyItem(): DraftItem {
-  return { key: crypto.randomUUID(), item: null, variantId: null, quantity: "", unit: "G", unitPriceCents: 0 };
+  return {
+    key: crypto.randomUUID(), item: null, variantId: null, quantity: "", unit: "G",
+    priceMode: "TOTAL", priceCents: 0,
+  };
+}
+
+function parseQty(raw: string): number {
+  const qty = parseFloat(raw.replace(",", "."));
+  return isNaN(qty) ? 0 : qty;
 }
 
 function itemTotalCents(item: DraftItem): number {
-  const qty = parseFloat(item.quantity);
-  if (isNaN(qty) || qty <= 0) return 0;
-  return Math.round(qty * item.unitPriceCents);
+  return lineTotalCents(item.priceMode, item.priceCents, parseQty(item.quantity));
 }
 
 interface Props {
@@ -68,8 +80,18 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     if (!last) return;
     const displayUnit = bestInputUnit(last.quantity, last.unit);
     const displayQty = toDisplayValue(last.quantity, displayUnit, last.unit);
-    const unitPriceCents = displayQty > 0 ? Math.round(last.pricePaidCents / displayQty) : 0;
-    updateItem(key, { quantity: String(displayQty), unit: displayUnit, unitPriceCents });
+    setItems((prev) =>
+      prev.map((i) =>
+        i.key === key
+          ? {
+              ...i,
+              quantity: String(displayQty),
+              unit: displayUnit,
+              priceCents: convertPriceMode("TOTAL", i.priceMode, last.pricePaidCents, displayQty),
+            }
+          : i,
+      ),
+    );
   }
 
   async function handleItemChange(key: string, item: PurchaseItemOption) {
@@ -82,6 +104,13 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
   async function handleVariantChange(key: string, item: PurchaseItemOption, variantId: string) {
     updateItem(key, { variantId });
     await applyLastPrice(key, item.id, variantId);
+  }
+
+  function setPriceMode(item: DraftItem, mode: PriceMode) {
+    updateItem(item.key, {
+      priceMode: mode,
+      priceCents: convertPriceMode(item.priceMode, mode, item.priceCents, parseQty(item.quantity)),
+    });
   }
 
   function addItem() {
@@ -97,8 +126,8 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     items.every(
       (i) =>
         i.item &&
-        parseFloat(i.quantity) > 0 &&
-        i.unitPriceCents > 0 &&
+        parseQty(i.quantity) > 0 &&
+        itemTotalCents(i) > 0 &&
         (i.item.variants.length === 0 || i.variantId),
     );
 
@@ -115,7 +144,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
         items.map((i) => ({
           itemId: i.item!.id,
           variantId: i.variantId,
-          quantity: parseFloat(i.quantity),
+          quantity: parseQty(i.quantity),
           unit: i.unit,
           pricePaidCents: itemTotalCents(i),
         })),
@@ -237,18 +266,33 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">
-                      Preço por {UNIT_LABEL[item.unit]}
-                    </Label>
+                    <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1" role="radiogroup" aria-label="Como informar o preço">
+                      {(["TOTAL", "UNIT"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          role="radio"
+                          aria-checked={item.priceMode === mode}
+                          onClick={() => setPriceMode(item, mode)}
+                          className={cn(
+                            "h-8 rounded px-2 text-xs font-medium transition-colors",
+                            item.priceMode === mode
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {mode === "TOTAL" ? "Valor pago" : `Preço por ${UNIT_LABEL[item.unit]}`}
+                        </button>
+                      ))}
+                    </div>
                     <MoneyInput
-                      valueCents={item.unitPriceCents}
-                      onChangeCents={(cents) => updateItem(item.key, { unitPriceCents: cents })}
+                      aria-label={item.priceMode === "TOTAL" ? "Valor pago" : `Preço por ${UNIT_LABEL[item.unit]}`}
+                      valueCents={item.priceCents}
+                      onChangeCents={(cents) => updateItem(item.key, { priceCents: cents })}
                     />
                   </div>
 
-                  <p className="text-right text-xs text-muted-foreground">
-                    Total: <span className="font-medium text-foreground tabular-nums">{formatBRL(itemTotalCents(item))}</span>
-                  </p>
+                  <PriceSummary item={item} />
                 </div>
               ))}
 
@@ -270,5 +314,20 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function PriceSummary({ item }: { item: DraftItem }) {
+  const qty = parseQty(item.quantity);
+  const total = itemTotalCents(item);
+  if (!item.item || qty <= 0 || total <= 0) return null;
+  const base = toBaseUnit(qty, item.unit);
+  return (
+    <p className="flex justify-between gap-2 text-xs text-muted-foreground">
+      <span className="tabular-nums">{formatUnitPrice(total, base.quantity, base.unit)}</span>
+      <span>
+        Total: <span className="font-medium text-foreground tabular-nums">{formatBRL(total)}</span>
+      </span>
+    </p>
   );
 }

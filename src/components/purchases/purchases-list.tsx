@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatBRL } from "@/lib/money";
-import { formatQty, baseUnitLabel } from "@/lib/units";
+import { formatQty, formatUnitPrice } from "@/lib/units";
 import { deletePurchase } from "@/server/actions/purchases";
 import type { PurchaseListItem } from "@/server/queries/purchases";
 
@@ -70,8 +70,6 @@ function PurchaseRow({ purchase }: { purchase: PurchaseListItem }) {
 
       <div className="space-y-1">
         {purchase.items.map((item) => {
-          const pricePerUnit = item.quantity > 0 ? (item.pricePaidCents / item.quantity / 100).toFixed(2) : "—";
-          const unitLabel = baseUnitLabel(item.item.unit);
           return (
             <div key={item.id} className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground pl-1">
               <span className="text-foreground">
@@ -80,7 +78,9 @@ function PurchaseRow({ purchase }: { purchase: PurchaseListItem }) {
               </span>
               <span>{formatQty(item.quantity, item.item.unit)}</span>
               <span className="text-foreground tabular-nums">{formatBRL(item.pricePaidCents)}</span>
-              <span className="text-xs">R$ {pricePerUnit}/{unitLabel}</span>
+              <span className="text-xs tabular-nums">
+                {formatUnitPrice(item.pricePaidCents, item.quantity, item.item.unit)}
+              </span>
             </div>
           );
         })}
