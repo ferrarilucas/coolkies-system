@@ -301,6 +301,59 @@ export async function payNextInstallment(
   };
 }
 
+export async function unpayLastInstallment(
+  saleId: string,
+): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number }>> {
+  const { db } = await getScopedDb();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
+
+  const last = await db.saleInstallment.findFirst({
+    where: { saleId, paidAt: { not: null } },
+    orderBy: { number: "desc" },
+    select: { id: true, number: true, sale: { select: { installmentCount: true } } },
+  });
+  if (!last) return { ok: false, error: "Esta venda não tem parcela paga." };
+
+  const res = await unpayInstallments([last.id]);
+  if (!res.ok) return { ok: false, error: res.error };
+  return {
+    ok: true,
+    data: { installmentId: last.id, number: last.number, installmentCount: last.sale.installmentCount },
+  };
+}
+
+export async function unpayLastCollection(
+  customerId: string,
+): Promise<ActionResult<{ installmentIds: string[]; count: number; totalCents: number }>> {
+  const { db } = await getScopedDb();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
+
+  const latest = await db.saleInstallment.findFirst({
+    where: { sale: { customerId }, paidAt: { not: null } },
+    orderBy: { paidAt: "desc" },
+    select: { paidAt: true },
+  });
+  if (!latest?.paidAt) return { ok: false, error: "Nenhum recebimento para desfazer." };
+
+  const batch = await db.saleInstallment.findMany({
+    where: { sale: { customerId }, paidAt: latest.paidAt },
+    select: { id: true, amountCents: true },
+  });
+
+  const res = await unpayInstallments(batch.map((i) => i.id));
+  if (!res.ok) return { ok: false, error: res.error };
+  return {
+    ok: true,
+    data: {
+      installmentIds: batch.map((i) => i.id),
+      count: batch.length,
+      totalCents: batch.reduce((sum, i) => sum + i.amountCents, 0),
+    },
+  };
+}
+
 // ─── Excluir venda ───────────────────────────────────────────────────────────
 
 export async function deleteSale(id: string): Promise<ActionResult> {

@@ -78,6 +78,12 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
       include: {
         customer: { select: { sector: true } },
         _count: { select: { installments: { where: { paidAt: null } } } },
+        installments: {
+          where: { paidAt: null },
+          orderBy: { number: "asc" },
+          take: 1,
+          select: { number: true, amountCents: true, dueDate: true },
+        },
         items: {
           select: {
             quantity: true,

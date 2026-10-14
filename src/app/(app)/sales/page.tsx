@@ -13,6 +13,7 @@ import { getCustomerById } from "@/server/queries/customers";
 import { formatBRL } from "@/lib/money";
 import { MarkAsPaidButton } from "@/components/sales/mark-as-paid-button";
 import { RowActions } from "@/components/shared/row-actions";
+import { UnpaySaleMenuItem } from "@/components/sales/unpay-menu-item";
 import { deleteSale } from "@/server/actions/sales";
 import { SalesFilters } from "@/components/sales/sales-filters";
 import { CustomerName } from "@/components/customers/customer-name";
@@ -253,6 +254,8 @@ type Sale = Awaited<ReturnType<typeof getSales>>["items"][number];
 function SaleCard({ sale }: { sale: Sale }) {
   const isPending = sale.status === "PENDING";
   const parceled = sale.installmentCount > 1;
+  const nextInstallment = parceled && isPending ? sale.installments[0] : undefined;
+  const hasPaidInstallment = sale.installmentCount - sale._count.installments > 0;
   const itemsSummary = sale.items
     .map((i) =>
       `${i.quantity}× ${i.productNameSnapshot}${i.variantNameSnapshot ? ` ${i.variantNameSnapshot}` : ""}`,
@@ -281,11 +284,20 @@ function SaleCard({ sale }: { sale: Sale }) {
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-semibold tabular-nums">{formatBRL(sale.totalCents)}</p>
-          {parceled && isPending && (
-            <p className="text-xs text-muted-foreground tabular-nums">
-              Em aberto: {formatBRL(sale.openCents)}
-            </p>
+          {nextInstallment ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Parcela {nextInstallment.number}/{sale.installmentCount}
+              </p>
+              <p className="text-lg font-bold leading-tight tabular-nums text-warning-text">
+                {formatBRL(nextInstallment.amountCents)}
+              </p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                Total {formatBRL(sale.totalCents)} · em aberto {formatBRL(sale.openCents)}
+              </p>
+            </>
+          ) : (
+            <p className="font-semibold tabular-nums">{formatBRL(sale.totalCents)}</p>
           )}
           {hasDiscount && (
             <p className="text-xs text-muted-foreground tabular-nums">
@@ -303,8 +315,9 @@ function SaleCard({ sale }: { sale: Sale }) {
 
       {/* Linha 3: ações */}
       <div className="flex items-center justify-between gap-2 border-t pt-1">
-        {isPending ? <MarkAsPaidButton id={sale.id} parceled={parceled} /> : <span />}
+        {isPending ? <MarkAsPaidButton id={sale.id} parceled={parceled} nextAmountCents={nextInstallment?.amountCents} /> : <span />}
         <RowActions
+          extraItems={hasPaidInstallment ? <UnpaySaleMenuItem id={sale.id} parceled={parceled} /> : undefined}
           editHref={`/sales/${sale.id}/edit`}
           deleteTitle="Excluir venda"
           deleteDescription="Tem certeza? Esta ação não pode ser desfeita e irá reverter a movimentação de estoque."

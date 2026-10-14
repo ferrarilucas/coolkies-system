@@ -5,8 +5,17 @@ import { toast } from "sonner";
 import { CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { payNextInstallment, unpayInstallments } from "@/server/actions/sales";
+import { formatBRL } from "@/lib/money";
 
-export function MarkAsPaidButton({ id, parceled }: { id: string; parceled: boolean }) {
+export function MarkAsPaidButton({
+  id,
+  parceled,
+  nextAmountCents,
+}: {
+  id: string;
+  parceled: boolean;
+  nextAmountCents?: number;
+}) {
   const [pending, startTransition] = useTransition();
 
   function handleClick() {
@@ -43,7 +52,13 @@ export function MarkAsPaidButton({ id, parceled }: { id: string; parceled: boole
       disabled={pending}
     >
       <CheckCircle className="size-3.5" />
-      {pending ? "Salvando..." : parceled ? "Receber parcela" : "Marcar como pago"}
+      {pending
+        ? "Salvando..."
+        : parceled
+          ? nextAmountCents !== undefined
+            ? `Receber ${formatBRL(nextAmountCents)}`
+            : "Receber parcela"
+          : "Marcar como pago"}
     </Button>
   );
 }
