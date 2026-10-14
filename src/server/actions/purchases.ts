@@ -68,11 +68,25 @@ type PurchaseItemInput = {
   pricePaidCents: number;
 };
 
-export async function createPurchase(formData: FormData): Promise<ActionResult> {
-  const { db, workspaceId, userId } = await getScopedDb();
-  const blocked = await writeBlocked();
-  if (blocked) return blocked;
+type ParsedPurchase = {
+  supplierId: string | null;
+  purchasedAt: Date;
+  lines: {
+    itemId: string;
+    variantId: string | null;
+    quantity: number;
+    unit: BaseUnit;
+    pricePaidCents: number;
+  }[];
+};
 
+type ScopedDb = Awaited<ReturnType<typeof getScopedDb>>["db"];
+
+/** Lê e valida o formulário de compra; quantidades já convertidas para a unidade base. */
+async function parsePurchaseForm(
+  db: ScopedDb,
+  formData: FormData,
+): Promise<{ ok: true; data: ParsedPurchase } | { ok: false; error: string }> {
   const supplierId = String(formData.get("supplierId") ?? "").trim() || null;
   const purchasedAtRaw = String(formData.get("purchasedAt") ?? "").trim();
   const purchasedAt = purchasedAtRaw ? new Date(`${purchasedAtRaw}T12:00:00`) : new Date();
@@ -109,47 +123,100 @@ export async function createPurchase(formData: FormData): Promise<ActionResult> 
     }
   }
 
+  return {
+    ok: true,
+    data: {
+      supplierId,
+      purchasedAt,
+      lines: items.map((line) => {
+        const { quantity, unit } = toBaseUnit(line.quantity, line.unit, itemMap.get(line.itemId)?.unit);
+        return {
+          itemId: line.itemId,
+          variantId: line.variantId ?? null,
+          quantity,
+          unit,
+          pricePaidCents: line.pricePaidCents,
+        };
+      }),
+    },
+  };
+}
+
+type Tx = Parameters<Parameters<ScopedDb["$transaction"]>[0]>[0];
+
+/** Cria as linhas da compra e a entrada de estoque correspondente a cada uma. */
+async function createPurchaseLines(
+  tx: Tx,
+  purchaseId: string,
+  workspaceId: string,
+  lines: ParsedPurchase["lines"],
+) {
+  for (const line of lines) {
+    await tx.purchaseItem.create({ data: { ...line, purchaseId, workspaceId } });
+    await tx.stockMovement.create({
+      data: {
+        itemId: line.itemId,
+        variantId: line.variantId,
+        type: StockMovementType.PURCHASE,
+        quantity: Math.round(line.quantity),
+        purchaseId,
+        workspaceId,
+      },
+    });
+  }
+}
+
+export async function createPurchase(formData: FormData): Promise<ActionResult> {
+  const { db, workspaceId, userId } = await getScopedDb();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
+
+  const parsed = await parsePurchaseForm(db, formData);
+  if (!parsed.ok) return parsed;
+  const { supplierId, purchasedAt, lines } = parsed.data;
+
   try {
     await db.$transaction(async (tx) => {
       const created = await tx.purchase.create({
-        data: {
-          supplierId,
-          userId,
-          purchasedAt,
-          workspaceId,
-          items: {
-            create: items.map((line) => {
-              const catalogItem = itemMap.get(line.itemId);
-              const { quantity, unit } = toBaseUnit(line.quantity, line.unit, catalogItem?.unit);
-              return {
-                itemId: line.itemId,
-                variantId: line.variantId ?? null,
-                quantity,
-                unit,
-                pricePaidCents: line.pricePaidCents,
-                workspaceId,
-              };
-            }),
-          },
-        },
-        include: { items: true },
+        data: { supplierId, userId, purchasedAt, workspaceId },
       });
-
-      for (const line of created.items) {
-        await tx.stockMovement.create({
-          data: {
-            itemId: line.itemId,
-            variantId: line.variantId,
-            type: StockMovementType.PURCHASE,
-            quantity: Math.round(line.quantity),
-            purchaseId: created.id,
-            workspaceId,
-          },
-        });
-      }
+      await createPurchaseLines(tx, created.id, workspaceId, lines);
     });
   } catch {
     return { ok: false, error: "Não foi possível registrar a compra." };
+  }
+
+  revalidatePath("/purchases");
+  revalidatePath("/stock");
+  return { ok: true };
+}
+
+/**
+ * Edita uma compra: troca fornecedor, data e todas as linhas.
+ * As entradas de estoque da compra são refeitas junto, então o estoque
+ * passa a refletir as quantidades novas.
+ */
+export async function updatePurchase(id: string, formData: FormData): Promise<ActionResult> {
+  const { db, workspaceId } = await getScopedDb();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
+
+  const existing = await db.purchase.findFirst({ where: { id }, select: { id: true } });
+  if (!existing) return { ok: false, error: "Compra não encontrada." };
+
+  const parsed = await parsePurchaseForm(db, formData);
+  if (!parsed.ok) return parsed;
+  const { supplierId, purchasedAt, lines } = parsed.data;
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.stockMovement.deleteMany({ where: { purchaseId: id } });
+      await tx.purchaseItem.deleteMany({ where: { purchaseId: id } });
+      await tx.purchase.update({ where: { id }, data: { supplierId, purchasedAt } });
+      await createPurchaseLines(tx, id, workspaceId, lines);
+    });
+  } catch {
+    return { ok: false, error: "Não foi possível salvar a compra." };
   }
 
   revalidatePath("/purchases");

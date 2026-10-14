@@ -70,7 +70,7 @@ export default async function PurchasesPage() {
               action={<WriteGate><PurchaseDialog suppliers={suppliers} ingredients={items} /></WriteGate>}
             />
           ) : (
-            <PurchasesList purchases={purchases} />
+            <PurchasesList purchases={purchases} suppliers={suppliers} ingredients={items} />
           )}
         </TabsContent>
 

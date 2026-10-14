@@ -14,7 +14,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { MoneyInput } from "@/components/shared/money-input";
-import { createPurchase, fetchLastPriceForSupplierItem } from "@/server/actions/purchases";
+import { createPurchase, fetchLastPriceForSupplierItem, updatePurchase } from "@/server/actions/purchases";
+import type { PurchaseListItem } from "@/server/queries/purchases";
 import {
   PURCHASE_UNITS, UNIT_LABEL, bestInputUnit, formatUnitPrice, toBaseUnit, toDisplayValue, type InputUnit,
 } from "@/lib/units";
@@ -51,6 +52,29 @@ function itemTotalCents(item: DraftItem): number {
   return lineTotalCents(item.priceMode, item.priceCents, parseQty(item.quantity));
 }
 
+/** Linhas do formulário a partir de uma compra salva (edição): preço vem como valor pago. */
+function draftFromPurchase(purchase: PurchaseListItem, options: PurchaseItemOption[]): DraftItem[] {
+  return purchase.items.map((line) => {
+    const option = options.find((o) => o.id === line.item.id) ?? {
+      id: line.item.id,
+      name: line.item.name,
+      unit: line.item.unit,
+      sellable: false,
+      variants: line.variant ? [line.variant] : [],
+    };
+    const unit = bestInputUnit(line.quantity, line.item.unit);
+    return {
+      key: crypto.randomUUID(),
+      item: option,
+      variantId: line.variant?.id ?? null,
+      quantity: String(+toDisplayValue(line.quantity, unit).toFixed(3)),
+      unit,
+      priceMode: "TOTAL",
+      priceCents: line.pricePaidCents,
+    };
+  });
+}
+
 interface Props {
   suppliers: SupplierOption[];
   ingredients: PurchaseItemOption[];
@@ -58,12 +82,37 @@ interface Props {
 
 export function PurchaseDialog({ suppliers, ingredients }: Props) {
   const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Registrar compra
+      </Button>
+      <PurchaseFormDialog open={open} onOpenChange={setOpen} suppliers={suppliers} ingredients={ingredients} />
+    </>
+  );
+}
+
+interface FormDialogProps extends Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Compra a editar (monte com `key` por compra); sem ela, o diálogo registra uma nova */
+  purchase?: PurchaseListItem;
+}
+
+export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients, purchase }: FormDialogProps) {
+  const setOpen = onOpenChange;
   const [saving, startSave] = useTransition();
   const [allSuppliers, setAllSuppliers] = useState(suppliers);
   const [allItems, setAllItems] = useState(ingredients);
-  const [supplier, setSupplier] = useState<SupplierOption | null>(null);
-  const [purchasedAt, setPurchasedAt] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
+  // Na edição o diálogo é montado a cada abertura, então o estado inicial vem da compra.
+  const [supplier, setSupplier] = useState<SupplierOption | null>(purchase?.supplier ?? null);
+  const [purchasedAt, setPurchasedAt] = useState(
+    format(purchase?.purchasedAt ?? new Date(), "yyyy-MM-dd"),
+  );
+  const [items, setItems] = useState<DraftItem[]>(() =>
+    purchase ? draftFromPurchase(purchase, ingredients) : [emptyItem()],
+  );
 
   function resetForm() {
     setSupplier(null);
@@ -152,11 +201,11 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
     );
 
     startSave(async () => {
-      const res = await createPurchase(fd);
+      const res = purchase ? await updatePurchase(purchase.id, fd) : await createPurchase(fd);
       if (res.ok) {
-        toast.success("Compra registrada.");
+        toast.success(purchase ? "Compra atualizada." : "Compra registrada.");
         setOpen(false);
-        resetForm();
+        if (!purchase) resetForm();
       } else {
         toast.error(res.error ?? "Erro ao registrar.");
       }
@@ -165,11 +214,6 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-4" />
-        Registrar compra
-      </Button>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           className={[
@@ -180,7 +224,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
           ].join(" ")}
         >
           <DialogHeader>
-            <DialogTitle>Registrar compra</DialogTitle>
+            <DialogTitle>{purchase ? "Editar compra" : "Registrar compra"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -307,7 +351,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
                 Cancelar
               </Button>
               <Button type="submit" disabled={saving || !canSubmit}>
-                {saving ? "Salvando…" : "Registrar compra"}
+                {saving ? "Salvando…" : purchase ? "Salvar alterações" : "Registrar compra"}
               </Button>
             </DialogFooter>
           </form>

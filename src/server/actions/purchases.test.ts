@@ -21,7 +21,7 @@ vi.mock("@/server/tenant/context", () => ({
   },
 }));
 
-const { createSupplierInline, createPurchase, deletePurchase, fetchLastPriceForSupplierItem } =
+const { createSupplierInline, createPurchase, updatePurchase, deletePurchase, fetchLastPriceForSupplierItem } =
   await import("./purchases");
 
 function fd(fields: Record<string, string>): FormData {
@@ -234,6 +234,99 @@ describe("deletePurchase", () => {
     expect(res.ok).toBe(true);
     expect(await testDb.stockMovement.count({ where: { purchaseId: purchase.id } })).toBe(0);
     expect(await testDb.stockMovement.count({ where: { itemId: item.id } })).toBe(0);
+  });
+});
+
+describe("updatePurchase", () => {
+  beforeEach(async () => {
+    await resetDb();
+    const workspace = await createWorkspace("Confeitaria Edição");
+    context.workspaceId = workspace.id;
+    context.canWrite = true;
+    await testDb.user.create({
+      data: { id: context.userId, name: "Usuário Teste", email: "u1@example.com" },
+    });
+  });
+
+  it("troca data, linhas e refaz a entrada de estoque com a quantidade nova", async () => {
+    const fermento = await testDb.item.create({
+      data: { name: "Fermento", unit: "G", productionInput: true, workspaceId: context.workspaceId },
+    });
+    const leite = await testDb.item.create({
+      data: { name: "Leite", unit: "ML", productionInput: true, workspaceId: context.workspaceId },
+    });
+
+    await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-10-13",
+        items: JSON.stringify([{ itemId: fermento.id, quantity: 180, unit: "G", pricePaidCents: 108000 }]),
+      }),
+    );
+    const purchase = await testDb.purchase.findFirstOrThrow();
+
+    const res = await updatePurchase(
+      purchase.id,
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-10-12",
+        items: JSON.stringify([
+          { itemId: fermento.id, quantity: 200, unit: "G", pricePaidCents: 600 },
+          { itemId: leite.id, quantity: 1, unit: "L", pricePaidCents: 500 },
+        ]),
+      }),
+    );
+    expect(res.ok).toBe(true);
+
+    const updated = await testDb.purchase.findUniqueOrThrow({
+      where: { id: purchase.id },
+      include: { items: true },
+    });
+    expect(updated.purchasedAt.toISOString().slice(0, 10)).toBe("2026-10-12");
+    expect(updated.items).toHaveLength(2);
+    expect(updated.items.find((i) => i.itemId === fermento.id)!.pricePaidCents).toBe(600);
+
+    const movements = await testDb.stockMovement.findMany({ where: { purchaseId: purchase.id } });
+    expect(movements).toHaveLength(2);
+    expect(movements.find((m) => m.itemId === fermento.id)!.quantity).toBe(200);
+    expect(movements.find((m) => m.itemId === leite.id)!.quantity).toBe(1000);
+  });
+
+  it("recusa edição sem itens e mantém a compra como estava", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Ovos", unit: "UN", workspaceId: context.workspaceId },
+    });
+    await createPurchase(
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-10-13",
+        items: JSON.stringify([{ itemId: item.id, quantity: 12, unit: "UN", pricePaidCents: 1200 }]),
+      }),
+    );
+    const purchase = await testDb.purchase.findFirstOrThrow();
+
+    const res = await updatePurchase(purchase.id, fd({ supplierId: "", purchasedAt: "2026-10-13", items: "[]" }));
+    expect(res.ok).toBe(false);
+    expect(await testDb.purchaseItem.count()).toBe(1);
+    expect(await testDb.stockMovement.count({ where: { purchaseId: purchase.id } })).toBe(1);
+  });
+
+  it("não edita compra de outro workspace", async () => {
+    const other = await createWorkspace("Outra Confeitaria");
+    const item = await testDb.item.create({
+      data: { name: "Ovos", unit: "UN", workspaceId: other.id },
+    });
+    const purchase = await testDb.purchase.create({ data: { workspaceId: other.id } });
+
+    const res = await updatePurchase(
+      purchase.id,
+      fd({
+        supplierId: "",
+        purchasedAt: "2026-10-13",
+        items: JSON.stringify([{ itemId: item.id, quantity: 1, unit: "UN", pricePaidCents: 100 }]),
+      }),
+    );
+    expect(res.ok).toBe(false);
   });
 });
 
