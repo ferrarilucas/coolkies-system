@@ -124,7 +124,7 @@ Regras de conclusão (basta existir ao menos um registro no workspace):
 | `catalogo` | `PriceListItem` ativo | `/admin/catalog/new` |
 | `producao` | `ProductionBatch` | `/production/new` |
 | `venda` | `Sale` | `/sales/new` |
-| `venda-parcelada` | `SaleInstallment` | `/sales/new` |
+| `venda-parcelada` | `Sale` com `installmentCount > 1` (toda venda já tem a parcela 1 em `SaleInstallment`) | `/sales/new` |
 | `cliente` | `Customer` | `/customers` |
 
 ### Missão "Produto no catálogo"
@@ -267,15 +267,25 @@ celular e outro para desktop, resolvidos em tempo de execução).
 
 ### Avanço dos passos
 
-- `next`: botão Próximo do `TourCard`.
-- `click`: listener de clique no alvo.
-- `input`: escuta `input` no alvo e avança quando a condição do passo é
-  satisfeita (ex.: duas opções preenchidas).
-- `element`: avança quando `waitFor` aparece no DOM.
+- `next`: botão Próximo do cartão.
+- `click`: listener de clique no alvo; no passo final (Salvar), consulta o
+  progresso por até 10 s até a missão aparecer concluída.
+- `until`: avança quando um seletor de estado aparece (ex.: o campo ganha
+  `data-filled`, a lista de opções ganha `data-count` maior que 1).
+- `await`: usado quando o usuário precisa interagir com um `Select` ou
+  `Popover` do Radix, que abrem fora do recorte. O holofote sai, o alvo fica
+  com o anel pulsante e um cartão de dica fixo explica o que fazer; avança
+  quando o seletor de estado aparece.
 
-Antes de mostrar cada passo, um `MutationObserver` espera o alvo existir.
-Mudança de rota usa `nextRoute` do nextstepjs. Nenhuma lógica de formulário
-muda; os componentes só ganham `data-tour`.
+Passos dentro de um `Dialog` (compra, cliente) também usam o cartão de dica,
+renderizado num portal dentro do próprio `DialogContent` (que ganha um `id`),
+com o anel no alvo; o diálogo já escurece o fundo. Isso evita que um clique
+no cartão conte como clique fora do diálogo e o feche.
+
+Antes de mostrar cada passo, o controlador espera o alvo existir (polling a
+cada 150 ms, até 8 s). Os componentes só ganham `data-tour` e atributos de
+estado (`data-filled`, `data-count`, `data-checked`, `data-installments`);
+nenhuma lógica de formulário muda.
 
 ### Conclusão e comemoração
 
@@ -295,11 +305,10 @@ somem.
   só o tour de apresentação.
 - **Troca de workspace no meio:** o tour fecha; o estado vem do novo
   workspace.
-- **Diálogos do Radix:** compra e outros fluxos abrem em `Dialog`, que bloqueia
-  ponteiro fora dele e prende o foco. O balão do nextstepjs, num portal fora
-  do diálogo, pode ficar não clicável. Isso é validado na primeira tarefa da
-  implementação; se falhar, o balão é renderizado dentro do conteúdo do
-  diálogo enquanto ele estiver aberto.
+- **Diálogos e selects do Radix:** tratados pelo cartão de dica (ver
+  "Avanço dos passos"). A primeira tarefa de interface valida no navegador
+  que o holofote do nextstepjs funciona nas páginas e que o cartão de dica
+  funciona dentro do diálogo de compra.
 
 ## Testes
 
