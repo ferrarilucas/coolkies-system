@@ -70,9 +70,13 @@ describe("actions do onboarding", () => {
   it("devolve o progresso só para quem vê as missões", async () => {
     await chooseWorkspaceSector("roupas");
     await testDb.customer.create({ data: { name: "Ana", workspaceId: context.workspaceId } });
-    expect((await refreshOnboardingProgress())?.cliente).toBe(true);
+    const owner = await refreshOnboardingProgress();
+    expect(owner.workspaceId).toBe(context.workspaceId);
+    expect(owner.progress?.cliente).toBe(true);
 
     context.role = "MEMBER";
-    expect(await refreshOnboardingProgress()).toBeNull();
+    const member = await refreshOnboardingProgress();
+    expect(member.workspaceId).toBe(context.workspaceId);
+    expect(member.progress).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { NextStep, NextStepProvider, useNextStep, type Tour } from "nextstepjs";
 import { APP_TOUR } from "@/lib/onboarding/app-tour";
-import { buildSteps, stepIndexById, usesSpotlight, type Viewport } from "@/lib/onboarding/build-tour";
+import { buildSteps, fallbackIndexBefore, stepIndexById, usesSpotlight, type Viewport } from "@/lib/onboarding/build-tour";
 import { VariationsGuideDialog } from "@/components/catalog/variations-guide";
 import { MISSIONS, isRouteOfMission } from "@/lib/onboarding/missions";
 import { waitFor } from "@/lib/onboarding/wait-for";
@@ -20,6 +20,7 @@ const OPTIONAL_TIMEOUT_MS = 1500;
 const FINAL_POLLS = 10;
 const UNTIL_STABLE_MS = 1000;
 const UNTIL_POLL_MS = 100;
+const DIALOG_WATCH_MS = 250;
 const DESKTOP_QUERY = "(min-width: 768px)";
 
 function sleep(ms: number): Promise<void> {
@@ -146,6 +147,7 @@ function Controller({ run }: { run: TourRun }) {
         const progress = await onboardingRef.current.refresh();
         if (progress?.[run.missionId]) return;
       }
+      if (current === token.current) onboardingRef.current.pauseRun();
     } catch {
       return;
     } finally {
@@ -267,6 +269,24 @@ function Controller({ run }: { run: TourRun }) {
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [index, steps, goTo, confirmFinal]);
 
+  useEffect(() => {
+    if (index < 0 || index >= steps.length) return;
+    const viewportId = steps[index].def.viewport;
+    if (!viewportId) return;
+    let seen = false;
+    const timer = setInterval(() => {
+      if (document.getElementById(viewportId)) {
+        seen = true;
+        return;
+      }
+      if (!seen) return;
+      clearInterval(timer);
+      const fallback = fallbackIndexBefore(steps, index);
+      if (fallback >= 0) void goToRef.current(fallback);
+    }, DIALOG_WATCH_MS);
+    return () => clearInterval(timer);
+  }, [index, steps]);
+
   const runner = useMemo<RunnerValue>(
     () => ({
       steps,
@@ -296,7 +316,7 @@ function Controller({ run }: { run: TourRun }) {
       >
         <></>
       </NextStep>
-      {current && !usesSpotlight(current) ? <InlineHint step={current} /> : null}
+      {current && !usesSpotlight(current) ? <InlineHint key={current.def.id} step={current} /> : null}
       {mission?.intro === "variations-guide" ? (
         <VariationsGuideDialog open={guideOpen} onOpenChange={setGuideOpen} example={examples} />
       ) : null}

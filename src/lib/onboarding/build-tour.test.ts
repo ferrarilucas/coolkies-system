@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { APP_TOUR } from "./app-tour";
-import { buildSteps, selectorFor, stepIndexById, usesSpotlight } from "./build-tour";
+import { buildSteps, fallbackIndexBefore, selectorFor, stepIndexById, usesSpotlight } from "./build-tour";
 import { MISSIONS } from "./missions";
 import { getSector } from "./sectors";
 
@@ -58,5 +58,20 @@ describe("selectorFor", () => {
   it("monta o seletor de atributo", () => {
     expect(selectorFor("product-name", "mobile")).toBe('[data-tour="product-name"]');
     expect(selectorFor({ mobile: "a", desktop: "b" }, "desktop")).toBe('[data-tour="b"]');
+  });
+});
+
+describe("fallbackIndexBefore", () => {
+  const steps = buildSteps(MISSIONS["compra-insumo"].steps, { model: "PRODUZ", viewport: "mobile", examples: confeitaria, missionsVisible: true });
+
+  it("volta ao último passo sem diálogo antes do atual", () => {
+    const salvar = stepIndexById(steps, "salvar");
+    const abrir = stepIndexById(steps, "abrir");
+    expect(steps[salvar].def.viewport).toBeTruthy();
+    expect(fallbackIndexBefore(steps, salvar)).toBe(abrir);
+  });
+
+  it("devolve -1 quando não há passo anterior sem diálogo", () => {
+    expect(fallbackIndexBefore(steps, 0)).toBe(-1);
   });
 });

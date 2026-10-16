@@ -60,8 +60,11 @@ export async function restartAppTour(): Promise<ActionResult> {
   });
 }
 
-export async function refreshOnboardingProgress(): Promise<OnboardingProgress | null> {
+export async function refreshOnboardingProgress(): Promise<{
+  workspaceId: string;
+  progress: OnboardingProgress | null;
+}> {
   const context = await getWorkspaceContext();
   const state = await getOnboardingState(context);
-  return state.progress;
+  return { workspaceId: context.workspaceId, progress: state.progress };
 }

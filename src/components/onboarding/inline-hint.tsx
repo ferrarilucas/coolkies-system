@@ -13,7 +13,17 @@ export function InlineHint({ step }: { step: BuiltStep }) {
   const viewport = step.def.viewport;
 
   useEffect(() => {
-    setHost(viewport ? document.getElementById(viewport) : document.body);
+    if (!viewport) {
+      setHost(document.body);
+      return;
+    }
+    const resolve = () => {
+      const element = document.getElementById(viewport);
+      setHost((previous) => (previous === element ? previous : element));
+    };
+    resolve();
+    const timer = setInterval(resolve, 250);
+    return () => clearInterval(timer);
   }, [viewport]);
 
   if (!host) return null;

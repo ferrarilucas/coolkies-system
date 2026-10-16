@@ -44,6 +44,13 @@ export function stepIndexById(steps: BuiltStep[], id: string): number {
   return steps.findIndex((step) => step.def.id === id);
 }
 
+export function fallbackIndexBefore(steps: BuiltStep[], index: number): number {
+  for (let position = Math.min(index, steps.length) - 1; position >= 0; position -= 1) {
+    if (!steps[position].def.viewport) return position;
+  }
+  return -1;
+}
+
 export function usesSpotlight(step: BuiltStep): boolean {
   return !step.def.viewport && step.def.advance.on !== "await";
 }

@@ -78,15 +78,21 @@ export function OnboardingProvider({ initial, children }: { initial: OnboardingS
     if (!state.appTourDone && run === null && pathname === "/dashboard") setRun({ kind: "app" });
   }, [state.appTourDone, run, pathname]);
 
-  const tracking = state.eligible && state.sector !== null && !state.dismissed;
+  const tracking = state.eligible && state.sector !== null && !state.dismissed && !allMissionsDone(state);
 
   const refresh = useCallback(async () => {
-    const progress = await refreshOnboardingProgress();
-    applyProgress(progress);
-    return progress;
+    const result = await refreshOnboardingProgress();
+    if (result.workspaceId !== stateRef.current.workspaceId) return null;
+    applyProgress(result.progress);
+    return result.progress;
   }, [applyProgress]);
 
+  const firstRefresh = useRef(true);
   useEffect(() => {
+    if (firstRefresh.current) {
+      firstRefresh.current = false;
+      return;
+    }
     if (tracking) void refresh().catch(() => undefined);
   }, [pathname, tracking, refresh]);
 
