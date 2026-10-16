@@ -34,7 +34,7 @@ describe("createWorkspaceForUser", () => {
   it("cria o trial de 14 dias junto com o primeiro workspace", async () => {
     await seedUserWithSession("u-first", "first@example.com");
 
-    const id = await createWorkspaceForUser("Minha Empresa");
+    const id = await createWorkspaceForUser("Minha Empresa", "outro");
 
     const sub = await testDb.subscription.findUnique({ where: { userId: "u-first" } });
     expect(sub?.status).toBe("TRIALING");
@@ -51,12 +51,12 @@ describe("createWorkspaceForUser", () => {
 
   it("recusa o segundo workspace durante o trial e nao grava nada", async () => {
     await seedUserWithSession("u-second", "second@example.com");
-    await createWorkspaceForUser("Primeiro");
+    await createWorkspaceForUser("Primeiro", "outro");
 
     expect(await testDb.workspace.count()).toBe(1);
     expect(await testDb.member.count()).toBe(1);
 
-    await expect(createWorkspaceForUser("Segundo")).rejects.toThrow(
+    await expect(createWorkspaceForUser("Segundo", "outro")).rejects.toThrow(
       "Durante o teste você pode ter um workspace. Assine um plano para criar outro.",
     );
 
@@ -74,7 +74,7 @@ describe("createWorkspaceForUser", () => {
       data: { userId: user.id, workspaceId: ws.id, role: "OWNER" },
     });
 
-    await expect(createWorkspaceForUser("Outro")).rejects.toThrow(
+    await expect(createWorkspaceForUser("Outro", "outro")).rejects.toThrow(
       "Seu plano não permite mais workspaces. Faça upgrade para criar outro.",
     );
 
@@ -94,9 +94,27 @@ describe("createWorkspaceForUser", () => {
       },
     });
 
-    await createWorkspaceForUser("Primeiro");
+    await createWorkspaceForUser("Primeiro", "outro");
 
     const sub = await testDb.subscription.findUnique({ where: { userId: user.id } });
     expect(sub?.trialEndsAt?.toISOString()).toBe(antiga.toISOString());
+  });
+
+  it("grava o setor do workspace", async () => {
+    await seedUserWithSession("u-sector", "sector@example.com");
+
+    const id = await createWorkspaceForUser("Doce Vida", "confeitaria");
+
+    const ws = await testDb.workspace.findUnique({ where: { id } });
+    expect(ws?.sector).toBe("confeitaria");
+  });
+
+  it("recusa setor desconhecido e não cria nada", async () => {
+    await seedUserWithSession("u-bad-sector", "bad-sector@example.com");
+
+    await expect(createWorkspaceForUser("Doce Vida", "padaria")).rejects.toThrow("Escolha o ramo do seu negócio.");
+
+    expect(await testDb.workspace.count()).toBe(0);
+    expect(await testDb.member.count()).toBe(0);
   });
 });

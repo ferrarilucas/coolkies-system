@@ -33,8 +33,9 @@ export async function switchWorkspace(workspaceId: string): Promise<ActionResult
 
 export async function createWorkspace(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get("name") ?? "");
+  const sector = String(formData.get("sector") ?? "");
   try {
-    await createWorkspaceForUser(name);
+    await createWorkspaceForUser(name, sector);
   } catch (e) {
     return { ok: false, error: messageOf(e) };
   }

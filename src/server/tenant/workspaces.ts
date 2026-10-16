@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { effectiveLimit, planMemberLimit } from "@/lib/plans";
 import { hasPaidAccess } from "@/lib/period";
+import { isSectorKey } from "@/lib/onboarding/sectors";
 import { normalizeName } from "@/lib/text";
 import { ensureTrialSubscription, getSubscription } from "./subscription";
 
@@ -132,10 +133,11 @@ export async function setActiveWorkspace(workspaceId: string): Promise<void> {
   });
 }
 
-export async function createWorkspaceForUser(name: string): Promise<string> {
+export async function createWorkspaceForUser(name: string, sector: string): Promise<string> {
   const userId = await requireUserId();
   const clean = normalizeName(name);
   if (!clean) throw new Error("Informe um nome para o workspace.");
+  if (!isSectorKey(sector)) throw new Error("Escolha o ramo do seu negócio.");
 
   await ensureTrialSubscription(userId);
 
@@ -158,7 +160,7 @@ export async function createWorkspaceForUser(name: string): Promise<string> {
 
   const workspace = await db.$transaction(async (tx) => {
     const created = await tx.workspace.create({
-      data: { name: clean, slug },
+      data: { name: clean, slug, sector },
     });
     await tx.member.create({
       data: { userId, workspaceId: created.id, role: "OWNER" },
