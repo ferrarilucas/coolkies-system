@@ -18,6 +18,8 @@ const TOUR_NAME = "onboarding";
 const TARGET_TIMEOUT_MS = 8000;
 const OPTIONAL_TIMEOUT_MS = 1500;
 const FINAL_POLLS = 10;
+const UNTIL_STABLE_MS = 1000;
+const UNTIL_POLL_MS = 100;
 const DESKTOP_QUERY = "(min-width: 768px)";
 
 function sleep(ms: number): Promise<void> {
@@ -87,13 +89,13 @@ function Controller({ run }: { run: TourRun }) {
           pointerPadding: 8,
           pointerRadius: 14,
           blockKeyboardControl: true,
-          disableInteraction: step.def.advance.on === "next",
+          disableInteraction: run.kind === "app" && step.def.advance.on === "next",
           selectorRetryAttempts: 5,
           scrollOffset: 96,
         })),
       },
     ],
-    [steps],
+    [steps, run.kind],
   );
 
   const leave = useCallback(() => {
@@ -155,6 +157,22 @@ function Controller({ run }: { run: TourRun }) {
     if (!guideOpen) void goToRef.current(0);
   }, [guideOpen]);
 
+  useEffect(() => {
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        window.dispatchEvent(new Event("resize"));
+      });
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
   useEffect(
     () => () => {
       token.current += 1;
@@ -215,7 +233,7 @@ function Controller({ run }: { run: TourRun }) {
       cleanups.push(() => element.removeEventListener("click", onClick));
     }
 
-    if (advance.on === "until" || advance.on === "await") {
+    if (advance.on === "await") {
       const abort = new AbortController();
       void waitFor(() => document.querySelector(advance.until) !== null, {
         timeoutMs: Number.POSITIVE_INFINITY,
@@ -223,6 +241,26 @@ function Controller({ run }: { run: TourRun }) {
       }).then((ok) => {
         if (ok) void goTo(index + 1);
       });
+      cleanups.push(() => abort.abort());
+    }
+
+    if (advance.on === "until") {
+      const abort = new AbortController();
+      void (async () => {
+        let since: number | null = null;
+        while (!abort.signal.aborted) {
+          if (document.querySelector(advance.until) !== null) {
+            since ??= Date.now();
+            if (Date.now() - since >= UNTIL_STABLE_MS) {
+              void goTo(index + 1);
+              return;
+            }
+          } else {
+            since = null;
+          }
+          await sleep(UNTIL_POLL_MS);
+        }
+      })();
       cleanups.push(() => abort.abort());
     }
 
