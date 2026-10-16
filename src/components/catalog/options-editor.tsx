@@ -75,7 +75,11 @@ export function OptionsEditor({
       {options.map((option, index) => (
         <div key={option.key} className="space-y-3 rounded-lg border bg-card p-3">
           <div className="flex items-end gap-2">
-            <div className="flex-1 space-y-1.5">
+            <div
+              className="flex-1 space-y-1.5"
+              data-tour={index === 0 ? "option-name" : undefined}
+              data-filled={index === 0 && option.name.trim() ? "" : undefined}
+            >
               <Label htmlFor={`option-name-${option.key}`} className="text-xs text-muted-foreground">
                 Tipo de variação
               </Label>
@@ -101,7 +105,11 @@ export function OptionsEditor({
             <p className="text-xs text-muted-foreground">
               Opções <span className="text-muted-foreground/70">· separe por vírgula ou aperte Enter</span>
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-tour={index === 0 ? "option-values" : undefined}
+              data-count={index === 0 ? option.values.filter((value) => value.name.trim()).length : undefined}
+            >
               {option.values.map((value) => (
                 <div key={value.key} className="flex items-center rounded-md border bg-background pr-1">
                   <input
@@ -152,7 +160,13 @@ export function OptionsEditor({
       ))}
 
       {options.length < MAX_OPTIONS && (
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...options, blankOption()])}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-tour="add-variation"
+          onClick={() => onChange([...options, blankOption()])}
+        >
           <Plus />
           {options.length === 0 ? "Adicionar variação" : "Adicionar outro tipo de variação"}
         </Button>

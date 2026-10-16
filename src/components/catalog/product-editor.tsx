@@ -147,7 +147,7 @@ export function ProductEditor({
           Produto
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="product-name" data-filled={name.trim() ? "" : undefined}>
             <Label htmlFor="product-name">Nome *</Label>
             <Input
               id="product-name"
@@ -157,7 +157,7 @@ export function ProductEditor({
               autoFocus
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="product-price">
             <Label htmlFor="generic-price">
               {hasVariants ? "Preço padrão" : "Preço de venda *"}
             </Label>
@@ -223,6 +223,7 @@ export function ProductEditor({
             type="button"
             className="flex-1 md:flex-none"
             onClick={handleSubmit}
+            data-tour="product-save"
             disabled={saving || !name.trim()}
           >
             {saving ? "Salvando…" : "Salvar produto"}

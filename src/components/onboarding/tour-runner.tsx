@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { NextStep, NextStepProvider, useNextStep, type Tour } from "nextstepjs";
 import { APP_TOUR } from "@/lib/onboarding/app-tour";
 import { buildSteps, stepIndexById, usesSpotlight, type Viewport } from "@/lib/onboarding/build-tour";
+import { VariationsGuideDialog } from "@/components/catalog/variations-guide";
 import { MISSIONS, isRouteOfMission } from "@/lib/onboarding/missions";
 import { waitFor } from "@/lib/onboarding/wait-for";
 import { findTarget } from "./find-target";
@@ -55,6 +56,7 @@ function Controller({ run }: { run: TourRun }) {
   const { startNextStep, setCurrentStep, closeNextStep, currentTour, isNextStepVisible } = useNextStep();
   const mission = run.kind === "mission" ? MISSIONS[run.missionId] : null;
   const [index, setIndex] = useState(-1);
+  const [guideOpen, setGuideOpen] = useState(mission?.intro === "variations-guide");
   const token = useRef(0);
   const polling = useRef(false);
   const currentId = useRef<string | null>(null);
@@ -150,8 +152,8 @@ function Controller({ run }: { run: TourRun }) {
   }, [run]);
 
   useEffect(() => {
-    void goToRef.current(0);
-  }, []);
+    if (!guideOpen) void goToRef.current(0);
+  }, [guideOpen]);
 
   useEffect(
     () => () => {
@@ -257,6 +259,9 @@ function Controller({ run }: { run: TourRun }) {
         <></>
       </NextStep>
       {current && !usesSpotlight(current) ? <InlineHint step={current} /> : null}
+      {mission?.intro === "variations-guide" ? (
+        <VariationsGuideDialog open={guideOpen} onOpenChange={setGuideOpen} example={examples} />
+      ) : null}
     </RunnerContext.Provider>
   );
 }

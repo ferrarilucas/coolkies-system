@@ -56,6 +56,7 @@ export function CombinationsList({
 
   const byKey = new Map(entries.map((e) => [combinationKey(e.valueKeys), e]));
   const rows = allCombinations(options);
+  const firstEntryKey = rows.map((valueKeys) => combinationKey(valueKeys)).find((key) => byKey.has(key));
 
   return (
     <div className="space-y-3">
@@ -81,7 +82,7 @@ export function CombinationsList({
         </div>
       </div>
 
-      <ul className="divide-y rounded-lg border bg-card">
+      <ul className="divide-y rounded-lg border bg-card" data-tour="combinations" data-checked={firstEntryKey ? "" : undefined}>
         {rows.map((valueKeys) => {
           const key = combinationKey(valueKeys);
           const entry = byKey.get(key);
@@ -104,7 +105,7 @@ export function CombinationsList({
               </label>
 
               {entry && (
-                <div className="flex flex-wrap items-center gap-3 pl-7">
+                <div className="flex flex-wrap items-center gap-3 pl-7" data-tour={key === firstEntryKey ? "combination-details" : undefined}>
                   <MoneyInput
                     valueCents={entry.priceCents}
                     onChangeCents={(cents) => onUpdate(key, { priceCents: cents })}
