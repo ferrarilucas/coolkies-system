@@ -52,11 +52,13 @@ function Controller({ run }: { run: TourRun }) {
   onboardingRef.current = onboarding;
   const viewport = useViewport();
   const pathname = usePathname();
-  const { startNextStep, setCurrentStep, closeNextStep } = useNextStep();
+  const { startNextStep, setCurrentStep, closeNextStep, currentTour, isNextStepVisible } = useNextStep();
   const mission = run.kind === "mission" ? MISSIONS[run.missionId] : null;
   const [index, setIndex] = useState(-1);
   const token = useRef(0);
-  const spotlightOn = useRef(false);
+  const polling = useRef(false);
+  const currentId = useRef<string | null>(null);
+  const previousSteps = useRef<typeof steps | null>(null);
   const arrived = useRef(false);
   const { model, examples, missionsPreviewable } = onboarding;
 
@@ -83,6 +85,7 @@ function Controller({ run }: { run: TourRun }) {
           pointerPadding: 8,
           pointerRadius: 14,
           blockKeyboardControl: true,
+          disableInteraction: step.def.advance.on === "next",
           selectorRetryAttempts: 5,
           scrollOffset: 96,
         })),
@@ -119,6 +122,7 @@ function Controller({ run }: { run: TourRun }) {
         else onboardingRef.current.stopRun();
         return;
       }
+      currentId.current = steps[next].def.id;
       setIndex(next);
     },
     [steps, leave, run.kind],
@@ -128,13 +132,20 @@ function Controller({ run }: { run: TourRun }) {
   goToRef.current = goTo;
 
   const confirmFinal = useCallback(async () => {
-    if (run.kind !== "mission") return;
+    if (run.kind !== "mission" || polling.current) return;
+    polling.current = true;
     const current = token.current;
-    for (let attempt = 0; attempt < FINAL_POLLS; attempt += 1) {
-      await sleep(1000);
-      if (current !== token.current) return;
-      const progress = await onboardingRef.current.refresh();
-      if (progress?.[run.missionId]) return;
+    try {
+      for (let attempt = 0; attempt < FINAL_POLLS; attempt += 1) {
+        await sleep(1000);
+        if (current !== token.current) return;
+        const progress = await onboardingRef.current.refresh();
+        if (progress?.[run.missionId]) return;
+      }
+    } catch {
+      return;
+    } finally {
+      polling.current = false;
     }
   }, [run]);
 
@@ -167,15 +178,25 @@ function Controller({ run }: { run: TourRun }) {
     const step = steps[index];
 
     if (usesSpotlight(step)) {
-      if (!spotlightOn.current) {
-        startNextStep(TOUR_NAME);
-        spotlightOn.current = true;
-      }
+      if (currentTour !== TOUR_NAME || !isNextStepVisible) startNextStep(TOUR_NAME);
       setCurrentStep(index);
-    } else if (spotlightOn.current) {
+    } else if (currentTour === TOUR_NAME) {
       closeNextStep();
-      spotlightOn.current = false;
     }
+  }, [index, steps, currentTour, isNextStepVisible, startNextStep, setCurrentStep, closeNextStep]);
+
+  useEffect(() => {
+    if (previousSteps.current === steps) return;
+    const hadSteps = previousSteps.current !== null;
+    previousSteps.current = steps;
+    if (!hadSteps || index < 0) return;
+    const remapped = currentId.current ? stepIndexById(steps, currentId.current) : -1;
+    void goToRef.current(remapped >= 0 ? remapped : Math.min(index, steps.length));
+  }, [steps, index]);
+
+  useEffect(() => {
+    if (index < 0 || index >= steps.length) return;
+    const step = steps[index];
 
     const element = findTarget(step.selector);
     element?.setAttribute("data-tour-active", "");
@@ -203,7 +224,7 @@ function Controller({ run }: { run: TourRun }) {
     }
 
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [index, steps, startNextStep, setCurrentStep, closeNextStep, goTo, confirmFinal]);
+  }, [index, steps, goTo, confirmFinal]);
 
   const runner = useMemo<RunnerValue>(
     () => ({
