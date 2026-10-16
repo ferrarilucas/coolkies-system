@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE "workspace" ADD COLUMN IF NOT EXISTS "sector" TEXT;
+ALTER TABLE "workspace" ADD COLUMN IF NOT EXISTS "onboardingDismissedAt" TIMESTAMP(3);
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "appTourCompletedAt" TIMESTAMP(3);
+
+COMMIT;
