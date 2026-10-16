@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { OnboardingSettings } from "@/components/onboarding/onboarding-settings";
 import { InstallAppItem } from "@/components/pwa/install-app-item";
 
 type MoreLink = {
@@ -155,6 +156,7 @@ export default async function MorePage() {
         ))}
       </div>
 
+      <OnboardingSettings />
       <InstallAppItem />
 
       <div className="space-y-2">

@@ -6,6 +6,7 @@ import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { listUserWorkspaces } from "@/server/tenant/workspaces";
 import { getWorkspaceContext } from "@/server/tenant/context";
 import { getWorkspacePlanState } from "@/server/tenant/subscription";
+import { getOnboardingState } from "@/server/tenant/onboarding";
 import { trialState } from "@/lib/trial";
 import type { SessionUser } from "@/lib/session-user";
 
@@ -26,6 +27,12 @@ export default async function AppLayout({
   const { status, isOverLimit, trialEndsAt, hasAuthorized, lastFailureReason } =
     await getWorkspacePlanState(active.id);
   const trial = trialState(status, trialEndsAt);
+  const onboarding = await getOnboardingState({
+    workspaceId: active.id,
+    userId: session.user.id,
+    role: active.role,
+    canWrite,
+  });
 
   const u = session.user as typeof session.user & { role?: string };
   const user: SessionUser = {
@@ -46,6 +53,7 @@ export default async function AppLayout({
       hasAuthorized={hasAuthorized}
       lastFailureReason={lastFailureReason}
       trial={trial}
+      onboarding={onboarding}
     >
       {children}
     </AppShell>

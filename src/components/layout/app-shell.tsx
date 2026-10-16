@@ -7,6 +7,8 @@ import { ReadOnlyProvider } from "./read-only-context";
 import { TrialBanner } from "./trial-banner";
 import { InstallBanner } from "@/components/pwa/install-banner";
 import { WorkspaceSwitcher, type WorkspaceOption } from "./workspace-switcher";
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
+import type { OnboardingState } from "@/lib/onboarding/visibility";
 import type { SessionUser } from "@/lib/session-user";
 import type { TrialState } from "@/lib/trial";
 
@@ -20,6 +22,7 @@ export function AppShell({
   hasAuthorized,
   lastFailureReason,
   trial,
+  onboarding,
   children,
 }: {
   user: SessionUser;
@@ -31,6 +34,7 @@ export function AppShell({
   hasAuthorized: boolean;
   lastFailureReason: string | null;
   trial: TrialState | null;
+  onboarding: OnboardingState;
   children: ReactNode;
 }) {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -39,35 +43,37 @@ export function AppShell({
 
   return (
     <ReadOnlyProvider readOnly={isReadOnly}>
-      <div className="flex h-dvh overflow-hidden">
-        <SideNav
-          user={user}
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-        />
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto [@media(display-mode:standalone)_and_(hover:none)]:pt-6">
-          {showMobileBar && (
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              activeId={activeWorkspaceId}
-              variant="bar"
-            />
-          )}
-          <InstallBanner />
-          <TrialBanner trial={trial} canManageBilling={canManageBilling} />
-          <PlanBanner
-            status={planStatus}
-            isOverLimit={isOverLimit}
-            isReadOnly={isReadOnly}
-            workspaceName={active?.name ?? "este workspace"}
-            canManageBilling={canManageBilling}
-            hasAuthorized={hasAuthorized}
-            lastFailureReason={lastFailureReason}
+      <OnboardingProvider key={onboarding.workspaceId} initial={onboarding}>
+        <div className="flex h-dvh overflow-hidden">
+          <SideNav
+            user={user}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
           />
-          <MainArea>{children}</MainArea>
+          <div className="flex min-w-0 flex-1 flex-col overflow-y-auto [@media(display-mode:standalone)_and_(hover:none)]:pt-6">
+            {showMobileBar && (
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeId={activeWorkspaceId}
+                variant="bar"
+              />
+            )}
+            <InstallBanner />
+            <TrialBanner trial={trial} canManageBilling={canManageBilling} />
+            <PlanBanner
+              status={planStatus}
+              isOverLimit={isOverLimit}
+              isReadOnly={isReadOnly}
+              workspaceName={active?.name ?? "este workspace"}
+              canManageBilling={canManageBilling}
+              hasAuthorized={hasAuthorized}
+              lastFailureReason={lastFailureReason}
+            />
+            <MainArea>{children}</MainArea>
+          </div>
+          <BottomNav />
         </div>
-        <BottomNav />
-      </div>
+      </OnboardingProvider>
     </ReadOnlyProvider>
   );
 }
