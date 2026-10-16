@@ -25,6 +25,8 @@ import {
   restartAppTour as restartAppTourAction,
   resumeOnboarding,
 } from "@/server/actions/onboarding";
+import { Celebration } from "./celebration";
+import { OnboardingBubble } from "./onboarding-bubble";
 import { OnboardingContext, type Celebrating, type OnboardingValue, type TourRun } from "./onboarding-context";
 
 const TourRunner = dynamic(() => import("./tour-runner").then((mod) => mod.TourRunner), { ssr: false });
@@ -202,6 +204,8 @@ export function OnboardingProvider({ initial, children }: { initial: OnboardingS
   return (
     <OnboardingContext.Provider value={value}>
       {children}
+      <OnboardingBubble />
+      <Celebration />
       {run ? <TourRunner key={run.kind === "app" ? "app" : run.missionId} run={run} /> : null}
     </OnboardingContext.Provider>
   );

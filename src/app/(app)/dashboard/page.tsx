@@ -13,6 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { OnboardingCard } from "@/components/onboarding/onboarding-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { CustomerName } from "@/components/customers/customer-name";
@@ -92,6 +93,8 @@ export default async function DashboardPage({
           </WriteGate>
         }
       />
+
+      <OnboardingCard />
 
       <DashboardFilters
         options={options}

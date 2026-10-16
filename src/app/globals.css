@@ -493,3 +493,31 @@
     animation: none;
   }
 }
+
+.tour-confetti {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: tour-confetti 1.3s cubic-bezier(0.2, 0.7, 0.4, 1) var(--delay, 0s) forwards;
+}
+
+@keyframes tour-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) rotate(var(--r)) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-confetti {
+    display: none;
+  }
+}
