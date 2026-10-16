@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MISSIONS, type MissionId, type OnboardingProgress } from "@/lib/onboarding/missions";
@@ -25,6 +26,8 @@ import {
   resumeOnboarding,
 } from "@/server/actions/onboarding";
 import { OnboardingContext, type Celebrating, type OnboardingValue, type TourRun } from "./onboarding-context";
+
+const TourRunner = dynamic(() => import("./tour-runner").then((mod) => mod.TourRunner), { ssr: false });
 
 const FALLBACK_EXAMPLES = getSector("outro").examples;
 
@@ -196,5 +199,10 @@ export function OnboardingProvider({ initial, children }: { initial: OnboardingS
     clearCelebration,
   ]);
 
-  return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;
+  return (
+    <OnboardingContext.Provider value={value}>
+      {children}
+      {run ? <TourRunner key={run.kind === "app" ? "app" : run.missionId} run={run} /> : null}
+    </OnboardingContext.Provider>
+  );
 }

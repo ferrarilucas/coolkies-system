@@ -79,11 +79,12 @@ export default async function DashboardPage({
     <div>
       <PageHeader
         title="Painel"
+        tourId="dashboard-header"
         description="Visão geral do negócio"
         action={
           <WriteGate className="hidden md:inline-flex">
             <Button asChild size="sm">
-              <Link href="/sales/new">
+              <Link href="/sales/new" data-tour="dashboard-new-sale">
                 <Plus />
                 Nova venda
               </Link>

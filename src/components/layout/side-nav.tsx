@@ -39,18 +39,19 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  tour: string;
 };
 
 const items: NavItem[] = [
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/dashboard/consolidated", label: "Consolidado", icon: Building2 },
-  { href: "/sales", label: "Vendas", icon: ShoppingCart },
-  { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/production", label: "Produção", icon: Factory },
-  { href: "/stock", label: "Estoque", icon: Package },
-  { href: "/purchases", label: "Compras", icon: ShoppingBag },
-  { href: "/admin/catalog", label: "Catálogo", icon: Tags, adminOnly: true },
-  { href: "/admin", label: "Configurações", icon: Settings, adminOnly: true },
+  { href: "/dashboard", label: "Painel", icon: LayoutDashboard, tour: "side-dashboard" },
+  { href: "/dashboard/consolidated", label: "Consolidado", icon: Building2, tour: "side-consolidated" },
+  { href: "/sales", label: "Vendas", icon: ShoppingCart, tour: "side-sales" },
+  { href: "/customers", label: "Clientes", icon: Users, tour: "side-customers" },
+  { href: "/production", label: "Produção", icon: Factory, tour: "side-production" },
+  { href: "/stock", label: "Estoque", icon: Package, tour: "side-stock" },
+  { href: "/purchases", label: "Compras", icon: ShoppingBag, tour: "side-purchases" },
+  { href: "/admin/catalog", label: "Catálogo", icon: Tags, adminOnly: true, tour: "side-catalog" },
+  { href: "/admin", label: "Configurações", icon: Settings, adminOnly: true, tour: "side-admin" },
 ];
 
 const STORAGE_KEY = "sidebar:collapsed";
@@ -129,12 +130,13 @@ export function SideNav({
 
       <nav className="flex-1 p-2">
         <ul className="space-y-1">
-          {visibleItems.map(({ href, label, icon: Icon }) => {
+          {visibleItems.map(({ href, label, icon: Icon, tour }) => {
             const active = href === activeHref;
             return (
               <li key={href}>
                 <Link
                   href={href}
+                  data-tour={tour}
                   title={collapsed ? label : undefined}
                   aria-current={active ? "page" : undefined}
                   className={cn(

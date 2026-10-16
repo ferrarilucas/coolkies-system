@@ -17,20 +17,22 @@ type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  tour: string;
   extraPrefixes?: string[];
 };
 
 const leftItems: NavItem[] = [
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/sales", label: "Vendas", icon: ShoppingCart },
+  { href: "/dashboard", label: "Painel", icon: LayoutDashboard, tour: "nav-dashboard" },
+  { href: "/sales", label: "Vendas", icon: ShoppingCart, tour: "nav-sales" },
 ];
 
 const rightItems: NavItem[] = [
-  { href: "/customers", label: "Clientes", icon: Users },
+  { href: "/customers", label: "Clientes", icon: Users, tour: "nav-customers" },
   {
     href: "/more",
     label: "Ajustes",
     icon: Menu,
+    tour: "nav-more",
     extraPrefixes: ["/production", "/stock", "/purchases", "/admin", "/workspaces"],
   },
 ];
@@ -49,7 +51,7 @@ function NavLink({
   item: NavItem;
   pathname: string;
 }) {
-  const { href, label, icon: Icon, extraPrefixes } = item;
+  const { href, label, icon: Icon, extraPrefixes, tour } = item;
   const prefixes = [href, ...(extraPrefixes ?? [])];
   const active = prefixes.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
@@ -59,6 +61,7 @@ function NavLink({
     <li className="flex-1">
       <Link
         href={href}
+        data-tour={tour}
         aria-current={active ? "page" : undefined}
         className={cn(
           "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
@@ -90,6 +93,7 @@ export function BottomNav() {
             <Link
               href="/sales/new"
               aria-label="Nova venda"
+              data-tour="nav-sell"
               className="-mt-6 flex flex-col items-center gap-1 pb-2.5 text-[11px] font-medium text-primary"
             >
               <span className="flex size-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95">

@@ -7,14 +7,16 @@ export function PageHeader({
   description,
   action,
   backHref,
+  tourId,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   backHref?: string;
+  tourId?: string;
 }) {
   return (
-    <div className="mb-5">
+    <div className="mb-5" data-tour={tourId}>
       {backHref && (
         <Link
           href={backHref}
