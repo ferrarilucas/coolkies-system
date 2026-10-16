@@ -129,7 +129,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Produção</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="production-item" data-filled={itemId ? "" : undefined}>
             <Label>Item</Label>
             <Select value={itemId} onValueChange={handleItemChange}>
               <SelectTrigger>
@@ -143,7 +143,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="production-recipe">
             <Label>
               Ficha técnica base <span className="text-muted-foreground">(opcional)</span>
             </Label>
@@ -164,7 +164,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="production-qty" data-filled={Number(quantity) > 0 ? "" : undefined}>
             <Label htmlFor="qty">Quantidade produzida</Label>
             <Input
               id="qty"
@@ -286,7 +286,7 @@ export function ProductionForm({ batchId, items, variants, recipes, initial }: P
         <Button type="button" variant="outline" onClick={() => router.push("/production")} disabled={saving}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={saving || !itemId || totalQty <= 0}>
+        <Button type="submit" disabled={saving || !itemId || totalQty <= 0} data-tour="production-save">
           <ClipboardList className="size-4" />
           {saving ? "Salvando…" : batchId ? "Salvar produção" : "Registrar produção"}
         </Button>

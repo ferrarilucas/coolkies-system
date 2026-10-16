@@ -84,7 +84,7 @@ export function PurchaseDialog({ suppliers, ingredients }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" onClick={() => setOpen(true)} data-tour="purchase-new">
         <Plus className="size-4" />
         Registrar compra
       </Button>
@@ -216,6 +216,7 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
+          id="tour-purchase-dialog"
           className={[
             "inset-0 top-0 left-0 h-full max-h-screen w-full max-w-full translate-x-0 translate-y-0",
             "rounded-none overflow-y-auto",
@@ -228,7 +229,7 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
+              <div className="space-y-2" data-tour="purchase-supplier">
                 <Label>Fornecedor</Label>
                 <SupplierCombobox
                   value={supplier}
@@ -249,10 +250,14 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
             </div>
 
             <div className="space-y-3">
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <div key={item.key} className="rounded-lg border p-3 space-y-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1">
+                    <div
+                      className="flex-1"
+                      data-tour={index === 0 ? "purchase-item" : undefined}
+                      data-filled={index === 0 && item.item ? "" : undefined}
+                    >
                       <PurchaseItemCombobox
                         value={item.item}
                         onChange={(v) => handleItemChange(item.key, v)}
@@ -277,7 +282,11 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
                       value={item.variantId ?? ""}
                       onValueChange={(v) => handleVariantChange(item.key, item.item!, v)}
                     >
-                      <SelectTrigger className={!item.variantId ? "text-muted-foreground" : undefined}>
+                      <SelectTrigger
+                        className={!item.variantId ? "text-muted-foreground" : undefined}
+                        data-tour={index === 0 ? "purchase-variant" : undefined}
+                        data-filled={index === 0 && item.variantId ? "" : undefined}
+                      >
                         <SelectValue placeholder="Selecione a variante…" />
                       </SelectTrigger>
                       <SelectContent>
@@ -288,7 +297,11 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
                     </Select>
                   )}
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div
+                    className="grid grid-cols-2 gap-2"
+                    data-tour={index === 0 ? "purchase-values" : undefined}
+                    data-filled={index === 0 && parseQty(item.quantity) > 0 && itemTotalCents(item) > 0 ? "" : undefined}
+                  >
                     <Input
                       type="number"
                       min="0.001"
@@ -350,7 +363,7 @@ export function PurchaseFormDialog({ open, onOpenChange, suppliers, ingredients,
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving || !canSubmit}>
+              <Button type="submit" disabled={saving || !canSubmit} data-tour="purchase-save">
                 {saving ? "Salvando…" : purchase ? "Salvar alterações" : "Registrar compra"}
               </Button>
             </DialogFooter>

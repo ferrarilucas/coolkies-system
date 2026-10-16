@@ -169,12 +169,14 @@ function ItemRow({
   onChange,
   onRemove,
   showTotal,
+  tourId,
 }: {
   line: SaleItemLine;
   catalog: CatalogProduct[];
   onChange: (updated: Partial<SaleItemLine>) => void;
   onRemove: () => void;
   showTotal: boolean;
+  tourId?: string;
 }) {
   const product = catalog.find((p) => p.id === line.itemId);
   const variants = product?.variants ?? [];
@@ -221,7 +223,11 @@ function ItemRow({
   const lineTotal = line.unitPriceCents * line.quantity;
 
   return (
-    <div className="rounded-lg border bg-card p-3 space-y-2">
+    <div
+      className="rounded-lg border bg-card p-3 space-y-2"
+      data-tour={tourId}
+      data-filled={tourId && line.itemId ? "" : undefined}
+    >
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Select value={line.itemId || ""} onValueChange={handleProductChange}>
           <SelectTrigger className={cn(!line.itemId && "text-muted-foreground")}>
@@ -517,7 +523,7 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
           Informações
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="sale-customer">
             <Label>
               Cliente <span className="text-muted-foreground">(opcional)</span>
             </Label>
@@ -556,8 +562,9 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
         </h2>
 
         <div className="space-y-2">
-          {lines.map((line) => (
+          {lines.map((line, index) => (
             <ItemRow
+              tourId={index === 0 ? "sale-line" : undefined}
               key={line.key}
               line={line}
               catalog={catalog}
@@ -684,7 +691,11 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
       <Separator />
 
       {/* ── Pagamento ──────────────────────────────────────────────────── */}
-      <section className="space-y-4">
+      <section
+        className="space-y-4"
+        data-tour="sale-payment"
+        data-installments={paymentMode === "INSTALLMENTS" ? "" : undefined}
+      >
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Pagamento
         </h2>
@@ -813,7 +824,7 @@ export function SaleForm({ saleId, catalog, initial }: Props) {
             >
               Cancelar
             </Button>
-            <Button onClick={handleSubmit} disabled={saving}>
+            <Button onClick={handleSubmit} disabled={saving} data-tour="sale-save">
               <ShoppingCart className="size-4" />
               {saving ? "Salvando..." : saleId ? "Salvar venda" : "Registrar venda"}
             </Button>

@@ -40,19 +40,19 @@ export function CustomerCreateDialog({ trigger }: Props) {
       {trigger ? (
         <span onClick={() => setOpen(true)}>{trigger}</span>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={() => setOpen(true)} data-tour="customer-new">
           <Plus className="size-4" />
           Novo cliente
         </Button>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" id="tour-customer-dialog">
           <DialogHeader>
             <DialogTitle>Novo cliente</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="customer-name">
               <Label htmlFor="name">Nome *</Label>
               <Input id="name" name="name" placeholder="Nome do cliente" autoFocus required />
             </div>
@@ -78,7 +78,7 @@ export function CustomerCreateDialog({ trigger }: Props) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={saving} data-tour="customer-save">
                 {saving ? "Criando…" : "Criar cliente"}
               </Button>
             </DialogFooter>

@@ -202,7 +202,7 @@ export function RecipeForm({
           Informações
         </h2>
 
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="recipe-name" data-filled={name.trim() ? "" : undefined}>
           <Label htmlFor="recipe-name">Nome da ficha técnica</Label>
           <Input
             id="recipe-name"
@@ -215,7 +215,7 @@ export function RecipeForm({
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="recipe-yield">
             <Label htmlFor="recipe-yield">Rendimento (unidades)</Label>
             <Input
               id="recipe-yield"
@@ -259,7 +259,7 @@ export function RecipeForm({
         </h2>
 
         <div className="space-y-2">
-          {lines.map((line) => {
+          {lines.map((line, index) => {
             const base = (line.item?.unit ?? "G") as BaseUnit;
             const unitOptions = recipeUnitsFor(base);
             const rawQty = parseFloat(line.quantity.replace(",", ".")) || 0;
@@ -276,6 +276,8 @@ export function RecipeForm({
               // Telas maiores: tudo numa linha só.
               <div
                 key={line.key}
+                data-tour={index === 0 ? "recipe-line" : undefined}
+                data-filled={index === 0 && line.item && rawQty > 0 ? "" : undefined}
                 className="grid grid-cols-[1fr_6.5rem_auto] items-center gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_5rem_7rem_4.5rem_auto] sm:px-3"
               >
                 <div className="order-1 col-span-2 min-w-0 sm:col-span-1">
@@ -372,7 +374,7 @@ export function RecipeForm({
         >
           Cancelar
         </Button>
-        <Button onClick={handleSubmit} disabled={saving}>
+        <Button onClick={handleSubmit} disabled={saving} data-tour="recipe-save">
           <ClipboardList className="size-4" />
           {saving ? "Salvando..." : recipeId ? "Salvar ficha técnica" : "Criar ficha técnica"}
         </Button>
