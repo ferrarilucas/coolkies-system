@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createWorkspace, joinWorkspace } from "@/server/actions/workspaces";
+import { SectorPicker } from "@/components/onboarding/sector-picker";
+import type { SectorKey } from "@/lib/onboarding/sectors";
 
 type FormProps = {
   onDone?: () => void;
@@ -15,9 +17,16 @@ type FormProps = {
 
 export function CreateWorkspaceForm({ onDone, redirectTo = "/dashboard" }: FormProps) {
   const [pending, startTransition] = useTransition();
+  const [step, setStep] = useState<"name" | "sector">("name");
+  const [name, setName] = useState("");
+  const [sector, setSector] = useState<SectorKey | null>(null);
   const router = useRouter();
 
-  function onSubmit(formData: FormData) {
+  function submit() {
+    if (!sector) return;
+    const formData = new FormData();
+    formData.set("name", name);
+    formData.set("sector", sector);
     startTransition(async () => {
       const result = await createWorkspace(formData);
       if (!result.ok) {
@@ -31,27 +40,57 @@ export function CreateWorkspaceForm({ onDone, redirectTo = "/dashboard" }: FormP
     });
   }
 
+  if (step === "name") {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) setStep("sector");
+        }}
+        className="space-y-4"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="name">Nome do negócio</Label>
+          <Input
+            id="name"
+            name="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex.: Douce Vie"
+            autoComplete="off"
+            autoFocus
+            required
+            maxLength={60}
+          />
+          <p className="text-xs text-muted-foreground">
+            É assim que ele aparece no seletor. Dá para mudar depois.
+          </p>
+        </div>
+        <Button type="submit" disabled={!name.trim()} className="w-full">
+          Continuar
+        </Button>
+      </form>
+    );
+  }
+
   return (
-    <form action={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Nome do negócio</Label>
-        <Input
-          id="name"
-          name="name"
-          placeholder="Ex.: Douce Vie"
-          autoComplete="off"
-          autoFocus
-          required
-          maxLength={60}
-        />
+    <div className="space-y-4 duration-300 animate-in fade-in slide-in-from-right-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Qual é o ramo do seu negócio?</p>
         <p className="text-xs text-muted-foreground">
-          É assim que ele aparece no seletor. Dá para mudar depois.
+          Usamos isso para mostrar os primeiros passos certos para você.
         </p>
       </div>
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "Criando..." : "Criar workspace"}
-      </Button>
-    </form>
+      <SectorPicker value={sector} onChange={setSector} disabled={pending} />
+      <div className="flex gap-2">
+        <Button type="button" variant="ghost" onClick={() => setStep("name")} disabled={pending}>
+          Voltar
+        </Button>
+        <Button type="button" className="flex-1" onClick={submit} disabled={pending || !sector}>
+          {pending ? "Criando..." : "Criar workspace"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
