@@ -191,8 +191,9 @@ function Controller({ run }: { run: TourRun }) {
     previousSteps.current = steps;
     if (!hadSteps || index < 0) return;
     const remapped = currentId.current ? stepIndexById(steps, currentId.current) : -1;
+    closeNextStep();
     void goToRef.current(remapped >= 0 ? remapped : Math.min(index, steps.length));
-  }, [steps, index]);
+  }, [steps, index, closeNextStep]);
 
   useEffect(() => {
     if (index < 0 || index >= steps.length) return;
