@@ -25,6 +25,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import { OnboardingSettings } from "@/components/onboarding/onboarding-settings";
 import { InstallAppItem } from "@/components/pwa/install-app-item";
+import { DueRemindersToggle } from "@/components/notifications/due-reminders-toggle";
 
 type MoreLink = {
   href: string;
@@ -157,6 +158,7 @@ export default async function MorePage() {
       </div>
 
       <OnboardingSettings />
+      <DueRemindersToggle />
       <InstallAppItem />
 
       <div className="space-y-2">

@@ -16,6 +16,7 @@ export const UNSCOPED_MODELS = new Set([
   "OauthConsent",
   "RateLimit",
   "ApiRateLimit",
+  "PushSubscription",
   ...TENANCY_CONTROL_PLANE_MODELS,
 ]);
 

@@ -4,6 +4,7 @@ export const testDb = new PrismaClient();
 
 const TABLES = [
   "api_rate_limit",
+  "push_subscription",
   "rate_limit",
   "mcp_workspace_context",
   "member",
