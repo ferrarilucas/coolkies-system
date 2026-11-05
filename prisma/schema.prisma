@@ -191,6 +191,14 @@ model OauthConsent {
   @@map("oauth_consent")
 }
 
+enum PixKeyType {
+  CPF
+  CNPJ
+  PHONE
+  EMAIL
+  EVP
+}
+
 enum MemberRole {
   OWNER
   ADMIN
@@ -280,6 +288,12 @@ model Workspace {
   publicToken String?  @unique
   sector                String?
   onboardingDismissedAt DateTime?
+  chargeMessageTemplate String?
+  chargeSendImage       Boolean     @default(true)
+  pixKeyType            PixKeyType?
+  pixKey                String?
+  pixRecipientName      String?
+  pixCity               String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
