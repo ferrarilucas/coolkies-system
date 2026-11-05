@@ -6,6 +6,7 @@ import {
   Tags,
   UserCheck,
   CreditCard,
+  MessageCircle,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -68,6 +69,12 @@ export default async function AdminPage() {
           label: "Catálogo",
           description: "Produtos, variações e preços de venda.",
           icon: Tags,
+        },
+        {
+          href: "/admin/charge",
+          label: "Cobrança",
+          description: "Mensagem de cobrança e Pix copia e cola.",
+          icon: MessageCircle,
         },
       ],
     },
