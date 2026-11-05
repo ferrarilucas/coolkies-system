@@ -6,6 +6,7 @@ config({ path: ".env.test" });
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     fileParallelism: false,

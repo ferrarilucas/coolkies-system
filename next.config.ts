@@ -10,6 +10,9 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  outputFileTracingIncludes: {
+    "/customers/*/charge-image": ["./src/server/charge-image/fonts/**", "./public/brand/cipri-wordmark*.svg"],
+  },
   async redirects() {
     return [
       { source: "/products/:path*", destination: "/production/:path*", permanent: true },
