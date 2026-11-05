@@ -11,6 +11,8 @@ import { CustomersFilters } from "@/components/customers/customers-filters";
 import { formatBRL } from "@/lib/money";
 import { parseForecastCutoff, type CustomerSituation } from "@/lib/customer-balance";
 import { WriteGate } from "@/components/layout/read-only-context";
+import { getWorkspaceContext } from "@/server/tenant/context";
+import { getChargeSettings } from "@/server/tenant/charge-settings";
 
 type SearchParams = Promise<{
   q?: string;
@@ -42,7 +44,8 @@ export default async function CustomersPage({
     ? (sp.situation as CustomerSituation)
     : "all";
 
-  const [customers, sectors] = await Promise.all([
+  const { workspaceId, role } = await getWorkspaceContext();
+  const [customers, sectors, chargeSettings] = await Promise.all([
     getCustomersWithBalance({
       q: q || undefined,
       sector: sector || undefined,
@@ -51,6 +54,10 @@ export default async function CustomersPage({
       forecastTo: forecastTo || undefined,
     }),
     getCustomerSectors(),
+    getChargeSettings(workspaceId).catch((error) => {
+      console.error("[customers] falha ao carregar config de cobrança", error);
+      return null;
+    }),
   ]);
 
   const hasFilters = Boolean(q || sector || minDue || forecastTo || situation !== "all");
@@ -106,7 +113,12 @@ export default async function CustomersPage({
           action={hasFilters ? undefined : <WriteGate><CustomerCreateDialog /></WriteGate>}
         />
       ) : (
-        <CustomerList customers={customers} forecastTo={forecastTo || undefined} />
+        <CustomerList
+          customers={customers}
+          forecastTo={forecastTo || undefined}
+          chargeSettings={chargeSettings}
+          canConfigureCharge={role === "OWNER" || role === "ADMIN"}
+        />
       )}
     </div>
   );

@@ -17,21 +17,33 @@ import { RowActions } from "@/components/shared/row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { UndoLastCollectionMenuItem } from "@/components/sales/unpay-menu-item";
 import { CustomerCollectDialog } from "@/components/customers/customer-collect-dialog";
+import { CustomerChargeDialog } from "@/components/customers/customer-charge-dialog";
 import { updateCustomer, deleteCustomer } from "@/server/actions/customers";
 import { formatBRL } from "@/lib/money";
 import type { CustomerWithBalance } from "@/server/queries/customers";
+import type { ChargeSettings } from "@/server/tenant/charge-settings";
 
 export function CustomerList({
   customers,
   forecastTo,
+  chargeSettings,
+  canConfigureCharge,
 }: {
   customers: CustomerWithBalance[];
   forecastTo?: string;
+  chargeSettings: ChargeSettings | null;
+  canConfigureCharge: boolean;
 }) {
   return (
     <div className="space-y-2">
       {customers.map((c) => (
-        <CustomerCard key={c.id} customer={c} forecastTo={forecastTo} />
+        <CustomerCard
+          key={c.id}
+          customer={c}
+          forecastTo={forecastTo}
+          chargeSettings={chargeSettings}
+          canConfigureCharge={canConfigureCharge}
+        />
       ))}
     </div>
   );
@@ -40,9 +52,13 @@ export function CustomerList({
 function CustomerCard({
   customer,
   forecastTo,
+  chargeSettings,
+  canConfigureCharge,
 }: {
   customer: CustomerWithBalance;
   forecastTo?: string;
+  chargeSettings: ChargeSettings | null;
+  canConfigureCharge: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [saving, startSave] = useTransition();
@@ -128,7 +144,27 @@ function CustomerCard({
         </div>
 
         {customer.pendingCents > 0 && (
-          <div className="order-3 w-full sm:order-2 sm:w-auto">
+          <div
+            className={
+              chargeSettings
+                ? "order-3 grid w-full grid-cols-2 gap-2 sm:order-2 sm:flex sm:w-auto"
+                : "order-3 w-full sm:order-2 sm:w-auto"
+            }
+          >
+            {chargeSettings && (
+              <CustomerChargeDialog
+                customerId={customer.id}
+                customerName={customer.name}
+                customerSector={customer.sector}
+                customerPhone={customer.phone}
+                pendingCents={customer.pendingCents}
+                pendingCount={customer.pendingCount}
+                forecastTo={forecastTo}
+                settings={chargeSettings}
+                canConfigure={canConfigureCharge}
+                triggerClassName="w-full sm:w-auto"
+              />
+            )}
             <CustomerCollectDialog
               customerId={customer.id}
               customerName={customer.name}
