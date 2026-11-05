@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { endOfDay, format } from "date-fns";
+import { useState, useTransition, type ReactNode } from "react";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { Check, HandCoins, Loader2 } from "lucide-react";
+import { HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -15,13 +14,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { getOpenInstallmentsByCustomer } from "@/server/queries/customers";
+import { InstallmentPicker, useOpenInstallments } from "@/components/customers/installment-picker";
 import { payInstallments } from "@/server/actions/sales";
 import { formatBRL } from "@/lib/money";
 import { parseForecastCutoff } from "@/lib/customer-balance";
-import { cn } from "@/lib/utils";
-
-type OpenInstallment = Awaited<ReturnType<typeof getOpenInstallmentsByCustomer>>[number];
 
 export function CustomerCollectDialog({
   customerId,
@@ -45,44 +41,12 @@ export function CustomerCollectDialog({
   triggerLabel?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [installments, setInstallments] = useState<OpenInstallment[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, startSave] = useTransition();
-
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    setInstallments(null);
-    getOpenInstallmentsByCustomer(customerId, forecastTo).then((rows) => {
-      if (!active) return;
-      const today = endOfDay(new Date());
-      setInstallments(rows);
-      setSelected(new Set(rows.filter((r) => !r.dueDate || r.dueDate <= today).map((r) => r.id)));
-    });
-    return () => {
-      active = false;
-    };
-  }, [open, customerId, forecastTo]);
+  const picker = useOpenInstallments(customerId, forecastTo, open);
+  const { selected, selectedCents } = picker;
 
   const cutoff = parseForecastCutoff(forecastTo);
   const cutoffLabel = cutoff ? format(cutoff, "dd/MM/yyyy", { locale: ptBR }) : null;
-  const selectedInstallments = (installments ?? []).filter((i) => selected.has(i.id));
-  const selectedCents = selectedInstallments.reduce((sum, i) => sum + i.amountCents, 0);
-  const allSelected =
-    installments !== null && installments.length > 0 && selected.size === installments.length;
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set((installments ?? []).map((i) => i.id)));
-  }
 
   function handleConfirm() {
     startSave(async () => {
@@ -118,75 +82,7 @@ export function CustomerCollectDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {installments === null ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-            </div>
-          ) : installments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Nenhuma parcela em aberto.
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {selected.size} de {installments.length} selecionada{installments.length === 1 ? "" : "s"}
-                </span>
-                <Button type="button" variant="ghost" size="sm" onClick={toggleAll}>
-                  {allSelected ? "Limpar seleção" : "Selecionar tudo"}
-                </Button>
-              </div>
-
-              <div className="max-h-72 space-y-2 overflow-y-auto">
-                {installments.map((inst) => {
-                  const isSelected = selected.has(inst.id);
-                  const overdue = inst.dueDate !== null && inst.dueDate < new Date();
-                  return (
-                    <button
-                      key={inst.id}
-                      type="button"
-                      onClick={() => toggle(inst.id)}
-                      aria-pressed={isSelected}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-                        isSelected ? "border-primary bg-primary/5" : "hover:bg-muted",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex size-5 shrink-0 items-center justify-center rounded border",
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-muted-foreground/40",
-                        )}
-                      >
-                        {isSelected && <Check className="size-3.5" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">
-                          {formatBRL(inst.amountCents)}
-                          {inst.sale.installmentCount > 1 && (
-                            <span className="font-normal text-muted-foreground">
-                              {" "}· parcela {inst.number}/{inst.sale.installmentCount}
-                            </span>
-                          )}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          Venda {format(inst.sale.soldAt, "dd/MM/yyyy", { locale: ptBR })}
-                          {inst.dueDate && ` · vence ${format(inst.dueDate, "dd/MM", { locale: ptBR })}`}
-                        </span>
-                      </span>
-                      {overdue && (
-                        <Badge variant="destructive" className="shrink-0">
-                          Atrasada
-                        </Badge>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
+          <InstallmentPicker {...picker} />
 
           <DialogFooter>
             <Button
