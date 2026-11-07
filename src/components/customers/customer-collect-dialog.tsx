@@ -1,21 +1,13 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
-import { format } from "date-fns";
+import { useMemo, useState, type ReactNode } from "react";
+import { endOfDay, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { InstallmentPicker, useOpenInstallments } from "@/components/customers/installment-picker";
-import { payInstallments } from "@/server/actions/sales";
+import { useOpenInstallments } from "@/components/customers/installment-picker";
+import { ReceiveSheet, toReceiveTarget, type ReceiveResult } from "@/components/sales/receive-sheet";
 import { formatBRL } from "@/lib/money";
 import { parseForecastCutoff } from "@/lib/customer-balance";
 
@@ -41,25 +33,36 @@ export function CustomerCollectDialog({
   triggerLabel?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [saving, startSave] = useTransition();
   const picker = useOpenInstallments(customerId, forecastTo, open);
-  const { selected, selectedCents } = picker;
+  const { installments, selected, toggle, toggleAll, allSelected, loadFailed, retryLoad } = picker;
+
+  const targets = useMemo(
+    () =>
+      (installments ?? []).map((inst) =>
+        toReceiveTarget(inst, {
+          soldAt: inst.sale.soldAt,
+          forecastPreset: inst.sale.forecastPreset,
+          installmentCount: inst.sale.installmentCount,
+          rows: inst.sale.installments,
+        }),
+      ),
+    [installments],
+  );
+  const dueIds = useMemo(() => {
+    const today = endOfDay(new Date());
+    return (installments ?? []).filter((i) => !i.dueDate || i.dueDate <= today).map((i) => i.id);
+  }, [installments]);
 
   const cutoff = parseForecastCutoff(forecastTo);
   const cutoffLabel = cutoff ? format(cutoff, "dd/MM/yyyy", { locale: ptBR }) : null;
 
-  function handleConfirm() {
-    startSave(async () => {
-      const res = await payInstallments([...selected]);
-      if (res.ok && res.data) {
-        toast.success(
-          `${res.data.count} ${res.data.count === 1 ? "parcela recebida" : "parcelas recebidas"} — ${formatBRL(res.data.totalCents)}.`,
-        );
-        setOpen(false);
-      } else {
-        toast.error(res.error ?? "Erro ao registrar recebimento.");
-      }
-    });
+  function handleReceived(result: ReceiveResult) {
+    setOpen(false);
+    toast.success(
+      result.partial
+        ? `${formatBRL(result.totalCents)} recebido. O restante continua em aberto.`
+        : `${result.count} ${result.count === 1 ? "parcela recebida" : "parcelas recebidas"} — ${formatBRL(result.totalCents)}.`,
+    );
   }
 
   return (
@@ -69,36 +72,20 @@ export function CustomerCollectDialog({
         {triggerLabel ?? "Receber"}
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Receber de {[customerName, customerSector].filter(Boolean).join(" · ")}
-            </DialogTitle>
-            <DialogDescription>
-              {pendingCount} {pendingCount === 1 ? "venda em aberto" : "vendas em aberto"}
-              {cutoffLabel ? ` com previsão até ${cutoffLabel}` : ""}, totalizando{" "}
-              {formatBRL(pendingCents)}. Selecione o que foi pago.
-            </DialogDescription>
-          </DialogHeader>
-
-          <InstallmentPicker {...picker} />
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirm} disabled={saving || selected.size === 0}>
-              {saving ? "Registrando…" : `Receber ${formatBRL(selectedCents)}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ReceiveSheet
+        open={open}
+        onOpenChange={setOpen}
+        title={`Receber de ${[customerName, customerSector].filter(Boolean).join(" · ")}`}
+        subtitle={`${pendingCount} ${pendingCount === 1 ? "venda em aberto" : "vendas em aberto"}${
+          cutoffLabel ? ` com previsão até ${cutoffLabel}` : ""
+        }, totalizando ${formatBRL(pendingCents)}. Toque numa parcela para incluir ou tirar.`}
+        targets={targets}
+        selection={{ selected, toggle, dueIds, toggleAll, allSelected }}
+        loading={installments === null && !loadFailed}
+        loadFailed={loadFailed}
+        onRetry={retryLoad}
+        onReceived={handleReceived}
+      />
     </>
   );
 }

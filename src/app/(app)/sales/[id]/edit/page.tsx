@@ -15,6 +15,10 @@ export default async function EditSalePage({
 
   if (!sale) notFound();
 
+  const formKey = sale.installments
+    .map((i) => `${i.id}:${i.amountCents}:${i.paidAt?.getTime() ?? ""}`)
+    .join("|");
+
   const initial = {
     customer: sale.customerId
       ? {
@@ -64,8 +68,18 @@ export default async function EditSalePage({
         }
         backHref="/sales"
       />
-      {sale.installmentCount > 1 && <SaleInstallments installments={sale.installments} />}
-      <SaleForm saleId={sale.id} catalog={catalog} initial={initial} />
+      {sale.installmentCount > 1 && (
+        <SaleInstallments
+          installments={sale.installments}
+          sale={{
+            customerName: sale.customerName,
+            soldAt: sale.soldAt,
+            forecastPreset: sale.forecastPreset,
+            installmentCount: sale.installmentCount,
+          }}
+        />
+      )}
+      <SaleForm key={formKey} saleId={sale.id} catalog={catalog} initial={initial} />
     </div>
   );
 }

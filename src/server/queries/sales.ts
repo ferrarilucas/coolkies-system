@@ -82,7 +82,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
           where: { paidAt: null },
           orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { number: "asc" }],
           take: 1,
-          select: { number: true, amountCents: true, dueDate: true },
+          select: { id: true, number: true, amountCents: true, dueDate: true },
         },
         items: {
           select: {
@@ -97,7 +97,33 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
     db.sale.count({ where }),
   ]);
 
-  return { items, total, page, pageSize: SALES_PAGE_SIZE, pageCount: Math.ceil(total / SALES_PAGE_SIZE) };
+  const pendingIds = items.filter((sale) => sale.status === "PENDING").map((sale) => sale.id);
+  const rows =
+    pendingIds.length === 0
+      ? []
+      : await db.saleInstallment.findMany({
+          where: { saleId: { in: pendingIds } },
+          orderBy: [{ saleId: "asc" }, { number: "asc" }],
+          select: {
+            saleId: true,
+            id: true,
+            number: true,
+            amountCents: true,
+            dueDate: true,
+            forecastPreset: true,
+            paidAt: true,
+          },
+        });
+  const rowsBySale = new Map<string, Omit<(typeof rows)[number], "saleId">[]>();
+  for (const { saleId, ...row } of rows) rowsBySale.set(saleId, [...(rowsBySale.get(saleId) ?? []), row]);
+
+  return {
+    items: items.map((sale) => ({ ...sale, saleRows: rowsBySale.get(sale.id) ?? [] })),
+    total,
+    page,
+    pageSize: SALES_PAGE_SIZE,
+    pageCount: Math.ceil(total / SALES_PAGE_SIZE),
+  };
 }
 
 export async function getSalesCounts(filters: Omit<SalesFilters, "status" | "overdueOnly"> = {}) {

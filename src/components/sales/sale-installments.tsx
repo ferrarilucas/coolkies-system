@@ -1,21 +1,50 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { payInstallments, unpayInstallments } from "@/server/actions/sales";
+import { ReceiveSheet, toReceiveTarget, type ReceiveResult } from "@/components/sales/receive-sheet";
+import { unpayInstallments } from "@/server/actions/sales";
+import type { ForecastPreset } from "@/lib/business-days";
 import { formatBRL } from "@/lib/money";
+import type { SaleRow } from "@/lib/partial-payment";
 
-type Installment = { id: string; number: number; amountCents: number; dueDate: Date | null; paidAt: Date | null };
-
-export function SaleInstallments({ installments }: { installments: Installment[] }) {
+export function SaleInstallments({
+  installments,
+  sale,
+}: {
+  installments: SaleRow[];
+  sale: { customerName: string | null; soldAt: Date; forecastPreset: ForecastPreset | null; installmentCount: number };
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const total = installments.reduce((max, i) => Math.max(max, i.number), installments.length);
+  const receiving = installments.find((i) => i.id === receivingId) ?? null;
+  const target = receiving
+    ? toReceiveTarget(receiving, {
+        soldAt: sale.soldAt,
+        forecastPreset: sale.forecastPreset,
+        installmentCount: sale.installmentCount,
+        rows: installments,
+      })
+    : null;
+
+  function handleReceived(result: ReceiveResult) {
+    const number = receiving?.number;
+    setSheetOpen(false);
+    toast.success(
+      result.partial
+        ? `${formatBRL(result.totalCents)} recebido. O restante continua em aberto.`
+        : `Parcela ${number} recebida.`,
+    );
+    router.refresh();
+  }
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, success: string) {
     startTransition(async () => {
@@ -55,6 +84,7 @@ export function SaleInstallments({ installments }: { installments: Installment[]
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="h-11"
                     disabled={pending}
                     onClick={() => run(() => unpayInstallments([inst.id]), `Parcela ${inst.number} voltou para em aberto.`)}
                   >
@@ -64,8 +94,12 @@ export function SaleInstallments({ installments }: { installments: Installment[]
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-11"
                     disabled={pending}
-                    onClick={() => run(() => payInstallments([inst.id]), `Parcela ${inst.number} recebida.`)}
+                    onClick={() => {
+                      setReceivingId(inst.id);
+                      setSheetOpen(true);
+                    }}
                   >
                     Receber
                   </Button>
@@ -75,6 +109,20 @@ export function SaleInstallments({ installments }: { installments: Installment[]
           );
         })}
       </ul>
+      <ReceiveSheet
+        open={sheetOpen && target !== null}
+        onOpenChange={setSheetOpen}
+        title={target ? `Receber parcela ${target.number}/${target.installmentCount}` : "Receber parcela"}
+        subtitle={
+          target
+            ? sale.customerName
+              ? `${sale.customerName} · venda de ${target.saleLabel}`
+              : `Venda de ${target.saleLabel}`
+            : undefined
+        }
+        targets={target ? [target] : []}
+        onReceived={handleReceived}
+      />
     </section>
   );
 }

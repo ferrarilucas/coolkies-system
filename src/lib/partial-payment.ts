@@ -33,7 +33,14 @@ export type RemainderPlan = {
   }[];
 };
 
+export const RACE_ERROR = "Algumas parcelas já foram recebidas. Revise o valor.";
+
+export type ExpectedPartial = { partialId: string; paidCents: number; remainderCents: number } | null;
+
+export type ExpectedRow = { id: string; amountCents: number };
+
 const BRL_AMOUNT = /^(\d{1,3}(\.\d{3})*|\d+)(,\d{1,2})?$/;
+const DOT_DECIMAL = /^(\d+)\.(\d{1,2})$/;
 const ERROR_ZERO = "Informe um valor maior que zero.";
 const ERROR_ABOVE_TOTAL = "O valor é maior que o total selecionado.";
 const ERROR_AMOUNT_MISSING = "Informe o valor recebido.";
@@ -160,6 +167,13 @@ export function planRemainder(
   };
 }
 
+export function planPreset(rows: SaleRow[], salePreset: ForecastPreset | null): ForecastPreset | null {
+  const fromPlan = [...rows]
+    .sort((a, b) => b.number - a.number)
+    .find((row) => row.forecastPreset !== null && row.forecastPreset !== "CUSTOM");
+  return fromPlan?.forecastPreset ?? salePreset;
+}
+
 export function suggestedRemainderDate(preset: ForecastPreset | null, now: Date): Date {
   const today = calendarNoon(now);
   if (preset === "DAY_FIVE" || preset === "FIFTH_BUSINESS_DAY") {
@@ -175,9 +189,32 @@ export function parseReceiveAmount(
   maxCents: number,
 ): { ok: true; cents: number } | { ok: false; error: string } {
   const cleaned = input.trim().replace(/^R\$\s*/, "");
-  if (!BRL_AMOUNT.test(cleaned)) return { ok: false, error: ERROR_AMOUNT_MISSING };
-  const cents = parseBRL(cleaned);
+  const dotDecimal = DOT_DECIMAL.exec(cleaned);
+  const normalized = dotDecimal ? `${dotDecimal[1]},${dotDecimal[2]}` : cleaned;
+  if (!BRL_AMOUNT.test(normalized)) return { ok: false, error: ERROR_AMOUNT_MISSING };
+  const cents = parseBRL(normalized);
   if (cents <= 0) return { ok: false, error: ERROR_ZERO };
   if (cents > maxCents) return { ok: false, error: ERROR_ABOVE_TOTAL };
   return { ok: true, cents };
+}
+
+export function allocationMatches(allocation: Allocation, expected: ExpectedPartial): boolean {
+  if (expected === null) return allocation.partial === null;
+  return (
+    allocation.partial !== null &&
+    allocation.partial.id === expected.partialId &&
+    allocation.partial.paidCents === expected.paidCents &&
+    allocation.partial.remainderCents === expected.remainderCents
+  );
+}
+
+export function openRowsMatch(
+  rows: { id: string; amountCents: number; paidAt: Date | null }[],
+  expectedRows: ExpectedRow[],
+  ignoreIds: string[],
+): boolean {
+  const current = rows.filter((row) => row.paidAt === null && !ignoreIds.includes(row.id));
+  const seen = expectedRows.filter((row) => !ignoreIds.includes(row.id));
+  if (current.length !== seen.length) return false;
+  return current.every((row) => seen.some((e) => e.id === row.id && e.amountCents === row.amountCents));
 }

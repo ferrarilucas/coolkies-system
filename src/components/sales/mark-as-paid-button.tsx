@@ -1,64 +1,85 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { payNextInstallment, unpayInstallments } from "@/server/actions/sales";
+import { ReceiveSheet, toReceiveTarget, type ReceiveResult } from "@/components/sales/receive-sheet";
+import { unpayInstallments } from "@/server/actions/sales";
+import type { ForecastPreset } from "@/lib/business-days";
 import { formatBRL } from "@/lib/money";
+import type { SaleRow } from "@/lib/partial-payment";
 
 export function MarkAsPaidButton({
-  id,
-  parceled,
-  nextAmountCents,
+  next,
+  sale,
 }: {
-  id: string;
-  parceled: boolean;
-  nextAmountCents?: number;
+  next: { id: string; number: number; amountCents: number; dueDate: Date | null };
+  sale: {
+    customerName: string | null;
+    soldAt: Date;
+    forecastPreset: ForecastPreset | null;
+    installmentCount: number;
+    rows: SaleRow[];
+  };
 }) {
-  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const parceled = sale.installmentCount > 1;
+  const target = toReceiveTarget(next, sale);
 
-  function handleClick() {
-    startTransition(async () => {
-      const res = await payNextInstallment(id);
-      if (!res.ok || !res.data) {
-        toast.error(res.error ?? "Erro ao atualizar.");
-        return;
-      }
-      const { installmentId, number, installmentCount } = res.data;
-      toast.success(
-        installmentCount > 1 ? `Parcela ${number}/${installmentCount} recebida.` : "Venda marcada como paga.",
-        {
-          action: {
-            label: "Desfazer",
-            onClick: () => {
-              void unpayInstallments([installmentId]).then((r) => {
-                if (r.ok) toast.success(installmentCount > 1 ? "Parcela voltou para em aberto." : "Venda voltou para pendente.");
-                else toast.error(r.error ?? "Erro ao desfazer.");
-              });
-            },
-          },
+  function handleReceived(result: ReceiveResult) {
+    setOpen(false);
+    const message = result.partial
+      ? `${formatBRL(result.totalCents)} recebido. O restante continua em aberto.`
+      : parceled
+        ? `Parcela ${next.number}/${sale.installmentCount} recebida.`
+        : "Venda marcada como paga.";
+    toast.success(message, {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          void unpayInstallments(result.paidInstallmentIds).then((r) => {
+            if (r.ok) {
+              toast.success(
+                result.partial
+                  ? "Recebimento desfeito."
+                  : parceled
+                    ? "Parcela voltou para em aberto."
+                    : "Venda voltou para pendente.",
+              );
+            } else {
+              toast.error(r.error ?? "Erro ao desfazer.");
+            }
+          });
         },
-      );
+      },
     });
   }
 
+  const title = parceled ? `Receber parcela ${next.number}/${sale.installmentCount}` : "Receber venda";
+  const subtitle = sale.customerName
+    ? `${sale.customerName} · venda de ${target.saleLabel}`
+    : `Venda de ${target.saleLabel}`;
+
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="gap-1.5 text-success border-success/40 hover:bg-success/10 hover:text-success"
-      onClick={handleClick}
-      disabled={pending}
-    >
-      <CheckCircle className="size-3.5" />
-      {pending
-        ? "Salvando..."
-        : parceled
-          ? nextAmountCents !== undefined
-            ? `Receber ${formatBRL(nextAmountCents)}`
-            : "Receber parcela"
-          : "Marcar como pago"}
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-11 gap-1.5 text-success border-success/40 hover:bg-success/10 hover:text-success"
+        onClick={() => setOpen(true)}
+      >
+        <CheckCircle className="size-3.5" />
+        {parceled ? `Receber ${formatBRL(next.amountCents)}` : "Marcar como pago"}
+      </Button>
+      <ReceiveSheet
+        open={open}
+        onOpenChange={setOpen}
+        title={title}
+        subtitle={subtitle}
+        targets={[target]}
+        onReceived={handleReceived}
+      />
+    </>
   );
 }

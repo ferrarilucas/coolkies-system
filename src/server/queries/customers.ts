@@ -150,7 +150,19 @@ export async function getOpenInstallmentsByCustomer(customerId: string, forecast
       number: true,
       amountCents: true,
       dueDate: true,
-      sale: { select: { id: true, soldAt: true, installmentCount: true, notes: true } },
+      sale: {
+        select: {
+          id: true,
+          soldAt: true,
+          installmentCount: true,
+          notes: true,
+          forecastPreset: true,
+          installments: {
+            orderBy: { number: "asc" },
+            select: { id: true, number: true, amountCents: true, dueDate: true, forecastPreset: true, paidAt: true },
+          },
+        },
+      },
     },
   });
 }

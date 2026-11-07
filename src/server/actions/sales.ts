@@ -6,7 +6,7 @@ import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
 import { syncSaleSummary, toPlans, writeInstallments } from "@/server/sales/installments";
-import { allocate, type RemainderChoice } from "@/lib/partial-payment";
+import { allocate, allocationMatches, type ExpectedPartial, type ExpectedRow, type RemainderChoice } from "@/lib/partial-payment";
 import {
   applyPartial,
   isConcurrencyError,
@@ -316,6 +316,19 @@ const receiveSchema = z.object(
       .positive(RECEIVE_ZERO)
       .max(MAX_RECEIVE_CENTS, "O valor é maior que o total selecionado."),
     remainder: remainderSchema.optional(),
+    expected: z
+      .object({
+        partialId: z.string().min(1).max(64),
+        paidCents: z.number().int().positive().max(MAX_RECEIVE_CENTS),
+        remainderCents: z.number().int().positive().max(MAX_RECEIVE_CENTS),
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    expectedRows: z
+      .array(z.object({ id: z.string().min(1).max(64), amountCents: z.number().int().nonnegative() }).strict())
+      .max(500)
+      .optional(),
   },
   { errorMap: () => ({ message: RECEIVE_INVALID }) },
 );
@@ -324,10 +337,12 @@ export async function receivePayment(input: {
   installmentIds: string[];
   amountCents: number;
   remainder?: RemainderChoice;
+  expected?: ExpectedPartial;
+  expectedRows?: ExpectedRow[];
 }): Promise<ActionResult<{ count: number; totalCents: number; partial: boolean; paidInstallmentIds: string[] }>> {
   const parsed = receiveSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? RECEIVE_INVALID };
-  const { installmentIds, amountCents, remainder } = parsed.data;
+  const { installmentIds, amountCents, remainder, expected, expectedRows } = parsed.data;
 
   const { db, workspaceId } = await getScopedDb();
   const blocked = await writeBlocked();
@@ -365,6 +380,25 @@ export async function receivePayment(input: {
       async (tx) => {
         const locked = await lockSales(tx, workspaceId, touchedSaleIds);
         if (locked !== touchedSaleIds.length) throw new ReceiveAbort(RACE_ERROR);
+        if (expected !== undefined) {
+          const fresh = await tx.saleInstallment.findMany({
+            where: { id: { in: installmentIds }, paidAt: null },
+            select: { id: true, number: true, amountCents: true, dueDate: true, sale: { select: { soldAt: true } } },
+          });
+          const realloc = allocate(
+            fresh.map((i) => ({ id: i.id, number: i.number, amountCents: i.amountCents, dueDate: i.dueDate, soldAt: i.sale.soldAt })),
+            amountCents,
+          );
+          if (
+            fresh.length !== installmentIds.length ||
+            !realloc.ok ||
+            !allocationMatches(realloc.allocation, expected) ||
+            !allocationMatches(allocated.allocation, expected) ||
+            [...realloc.allocation.fullIds].sort().join() !== [...fullIds].sort().join()
+          ) {
+            throw new ReceiveAbort(RACE_ERROR);
+          }
+        }
         for (const [amount, ids] of fullByAmount) {
           const updated = await tx.saleInstallment.updateMany({
             where: { id: { in: ids }, paidAt: null, amountCents: amount },
@@ -383,6 +417,7 @@ export async function receivePayment(input: {
             choice,
             paidAt,
             excludeIds: fullIds.filter((id) => byId.get(id)!.saleId === saleId),
+            expectedRows,
           });
           if (!applied.ok) throw new ReceiveAbort(applied.error);
         }
@@ -478,33 +513,6 @@ export async function unpayInstallments(installmentIds: string[]): Promise<Actio
 
   revalidatePayments();
   return { ok: true };
-}
-
-export async function payNextInstallment(
-  saleId: string,
-): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number; amountCents: number }>> {
-  const { db } = await getScopedDb();
-  const blocked = await writeBlocked();
-  if (blocked) return blocked;
-
-  const next = await db.saleInstallment.findFirst({
-    where: { saleId, paidAt: null },
-    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { number: "asc" }],
-    select: { id: true, number: true, amountCents: true, sale: { select: { installmentCount: true } } },
-  });
-  if (!next) return { ok: false, error: "Esta venda não tem parcela em aberto." };
-
-  const res = await payInstallments([next.id]);
-  if (!res.ok) return { ok: false, error: res.error };
-  return {
-    ok: true,
-    data: {
-      installmentId: next.id,
-      number: next.number,
-      installmentCount: next.sale.installmentCount,
-      amountCents: next.amountCents,
-    },
-  };
 }
 
 export async function unpayLastInstallment(

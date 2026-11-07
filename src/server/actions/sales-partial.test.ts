@@ -38,7 +38,7 @@ vi.mock("@/server/tenant/context", () => ({
   writeBlocked: async () => null,
 }));
 
-const { receivePayment, updateSale, payNextInstallment } = await import("./sales");
+const { receivePayment, updateSale } = await import("./sales");
 const { getSales } = await import("@/server/queries/sales");
 const { applyPartial, isConcurrencyError } = await import("@/server/sales/partial-payment");
 
@@ -87,6 +87,112 @@ describe("receivePayment", () => {
       ],
     });
   }
+
+  describe("expected da prévia", () => {
+    async function paidOutside(id: string) {
+      await testDb.saleInstallment.update({ where: { id }, data: { paidAt: new Date(2026, 10, 1, 12) } });
+    }
+
+    it("parcela selecionada paga por fora com o valor ainda cabendo dá corrida quando expected vem", async () => {
+      const seeded = await threeParcels();
+      const ids = seeded.installments.map((i) => i.id);
+      await paidOutside(ids[0]);
+      const before = await snapshot();
+      const res = await receivePayment({
+        installmentIds: ids,
+        amountCents: 5000,
+        remainder: { mode: "APPEND" },
+        expected: { partialId: ids[1], paidCents: 1667, remainderCents: 1666 },
+      });
+      expect(res).toEqual({ ok: false, error: RACE });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it("sem expected, o mesmo cenário realoca como antes", async () => {
+      const seeded = await threeParcels();
+      const ids = seeded.installments.map((i) => i.id);
+      await paidOutside(ids[0]);
+      const res = await receivePayment({ installmentIds: ids, amountCents: 5000, remainder: { mode: "APPEND" } });
+      expect(res).toEqual({
+        ok: true,
+        data: { count: 2, totalCents: 5000, partial: true, paidInstallmentIds: [ids[1], ids[2]] },
+      });
+    });
+
+    it("expected null recusa quando a realocação passa a ter parcial", async () => {
+      const seeded = await threeParcels();
+      const ids = seeded.installments.map((i) => i.id);
+      await paidOutside(ids[0]);
+      const before = await snapshot();
+      const res = await receivePayment({ installmentIds: ids, amountCents: 3333, expected: null });
+      expect(res).toEqual({ ok: false, error: RACE });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it("expected igual à alocação recebe normalmente", async () => {
+      const seeded = await threeParcels();
+      const ids = seeded.installments.map((i) => i.id);
+      const res = await receivePayment({
+        installmentIds: ids,
+        amountCents: 5000,
+        remainder: { mode: "SPREAD" },
+        expected: { partialId: ids[1], paidCents: 1667, remainderCents: 1666 },
+        expectedRows: seeded.installments.map((i) => ({ id: i.id, amountCents: i.amountCents })),
+      });
+      expect(res.ok).toBe(true);
+      const { parcels } = await expectBalanced(seeded.id);
+      expect(parcels.map((p) => [p.amountCents, p.paidAt !== null])).toEqual([
+        [3333, true],
+        [1667, true],
+        [5000, false],
+      ]);
+    });
+
+    it("SPREAD com valor de parcela seguinte alterado dá corrida", async () => {
+      const seeded = await threeParcels();
+      const [first, second, third] = seeded.installments;
+      const seen = seeded.installments.map((i) => ({ id: i.id, amountCents: i.amountCents }));
+      await testDb.saleInstallment.update({ where: { id: second.id }, data: { amountCents: 3367 } });
+      await testDb.saleInstallment.update({ where: { id: third.id }, data: { amountCents: 3300 } });
+      const before = await snapshot();
+      const res = await receivePayment({
+        installmentIds: [first.id],
+        amountCents: 1000,
+        remainder: { mode: "SPREAD" },
+        expected: { partialId: first.id, paidCents: 1000, remainderCents: 2333 },
+        expectedRows: seen,
+      });
+      expect(res).toEqual({ ok: false, error: RACE });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it("SPREAD com parcela seguinte paga por fora dá corrida", async () => {
+      const seeded = await threeParcels();
+      const [first, , third] = seeded.installments;
+      const seen = seeded.installments.map((i) => ({ id: i.id, amountCents: i.amountCents }));
+      await paidOutside(third.id);
+      const res = await receivePayment({
+        installmentIds: [first.id],
+        amountCents: 1000,
+        remainder: { mode: "SPREAD" },
+        expected: { partialId: first.id, paidCents: 1000, remainderCents: 2333 },
+        expectedRows: seen,
+      });
+      expect(res).toEqual({ ok: false, error: RACE });
+    });
+
+    it("recusa expected malformado", async () => {
+      const seeded = await threeParcels();
+      const res = await receivePayment({
+        installmentIds: [seeded.installments[0].id],
+        amountCents: 1000,
+        remainder: { mode: "APPEND" },
+        expected: { partialId: "", paidCents: -1, remainderCents: 0 },
+      });
+      expect(res.ok).toBe(false);
+      expect(await testDb.installmentSplit.count()).toBe(0);
+    });
+  });
 
   it("venda simples com NEW_DATE vira paga + restante na nova data", async () => {
     const seeded = await seedParceledSale({
@@ -534,7 +640,7 @@ describe("receivePayment", () => {
     expect(parcels.reduce((sum, p) => sum + p.amountCents, 0)).toBe(10000);
   });
 
-  it("depois de um NEW_DATE tardio, a lista e o botão apontam para a mesma parcela", async () => {
+  it("depois de um NEW_DATE tardio, o botão da lista recebe a parcela de menor vencimento", async () => {
     const seeded = await threeParcels();
     const res = await receivePayment({
       installmentIds: [seeded.installments[0].id],
@@ -543,16 +649,16 @@ describe("receivePayment", () => {
     });
     expect(res.ok).toBe(true);
     const { items } = await getSales();
-    const listed = items.find((s) => s.id === seeded.id)!.installments[0];
-    const paid = await payNextInstallment(seeded.id);
-    expect(paid.ok).toBe(true);
-    expect(paid.data).toEqual({
-      installmentId: seeded.installments[1].id,
-      number: listed.number,
-      installmentCount: 4,
-      amountCents: listed.amountCents,
+    const sale = items.find((s) => s.id === seeded.id)!;
+    const listed = sale.installments[0];
+    expect([listed.id, listed.number, listed.amountCents]).toEqual([seeded.installments[1].id, 3, 3333]);
+    const target = sale.saleRows.find((row) => row.id === listed.id)!;
+    expect([target.number, target.amountCents, target.paidAt]).toEqual([3, 3333, null]);
+    const paid = await receivePayment({ installmentIds: [target.id], amountCents: target.amountCents });
+    expect(paid).toEqual({
+      ok: true,
+      data: { count: 1, totalCents: 3333, partial: false, paidInstallmentIds: [seeded.installments[1].id] },
     });
-    expect([listed.number, listed.amountCents]).toEqual([3, 3333]);
   });
 
   it("recebimentos concorrentes na mesma venda nunca perdem centavos", async () => {
@@ -772,7 +878,10 @@ describe("lista de vendas", () => {
     });
     const { items } = await getSales();
     const row = items.find((s) => s.id === seeded.id)!;
-    expect(row.installments).toEqual([{ number: 2, amountCents: 2000, dueDate: due(10) }]);
+    expect(row.installments).toEqual([{ id: seeded.installments[1].id, number: 2, amountCents: 2000, dueDate: due(10) }]);
+    expect(row.saleRows.map((r) => [r.id, r.number, r.amountCents, r.paidAt])).toEqual(
+      seeded.installments.map((i) => [i.id, i.number, i.amountCents, null]),
+    );
     expect(row.paymentForecastDate).toEqual(due(10));
   });
 });

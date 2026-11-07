@@ -255,6 +255,7 @@ function SaleCard({ sale }: { sale: Sale }) {
   const isPending = sale.status === "PENDING";
   const parceled = sale.installmentCount > 1;
   const nextInstallment = parceled && isPending ? sale.installments[0] : undefined;
+  const receivable = isPending ? sale.saleRows.find((row) => row.id === sale.installments[0]?.id && row.paidAt === null) : undefined;
   const hasPaidInstallment = sale.installmentCount - sale._count.installments > 0;
   const itemsSummary = sale.items
     .map((i) =>
@@ -315,7 +316,20 @@ function SaleCard({ sale }: { sale: Sale }) {
 
       {/* Linha 3: ações */}
       <div className="flex items-center justify-between gap-2 border-t pt-1">
-        {isPending ? <MarkAsPaidButton id={sale.id} parceled={parceled} nextAmountCents={nextInstallment?.amountCents} /> : <span />}
+        {receivable ? (
+          <MarkAsPaidButton
+            next={receivable}
+            sale={{
+              customerName: sale.customerName,
+              soldAt: sale.soldAt,
+              forecastPreset: sale.forecastPreset,
+              installmentCount: sale.installmentCount,
+              rows: sale.saleRows,
+            }}
+          />
+        ) : (
+          <span />
+        )}
         <RowActions
           extraItems={hasPaidInstallment ? <UnpaySaleMenuItem id={sale.id} parceled={parceled} /> : undefined}
           editHref={`/sales/${sale.id}/edit`}

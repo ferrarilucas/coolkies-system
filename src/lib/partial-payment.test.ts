@@ -4,7 +4,10 @@ import {
   allocate,
   canSpread,
   orderForAllocation,
+  allocationMatches,
+  openRowsMatch,
   parseReceiveAmount,
+  planPreset,
   planRemainder,
   suggestedRemainderDate,
   type AllocatableInstallment,
@@ -312,12 +315,83 @@ describe("parseReceiveAmount", () => {
   });
 
   it("recusa formatos frouxos", () => {
-    for (const input of ["10.50", "100.5", "1e3", "1-2", "1,2,3", "10,005", "-5"]) {
+    for (const input of ["1e3", "1-2", "1,2,3", "10,005", "-5", "1.2.3", "10.5.0"]) {
       expect(parseReceiveAmount(input, 10_000_000)).toEqual({ ok: false, error: "Informe o valor recebido." });
     }
   });
 
+  it("aceita ponto como separador decimal com 1 ou 2 casas e sem vírgula", () => {
+    expect(parseReceiveAmount("10.50", 200000)).toEqual({ ok: true, cents: 1050 });
+    expect(parseReceiveAmount("20.50", 200000)).toEqual({ ok: true, cents: 2050 });
+    expect(parseReceiveAmount("20.5", 200000)).toEqual({ ok: true, cents: 2050 });
+    expect(parseReceiveAmount("100.5", 200000)).toEqual({ ok: true, cents: 10050 });
+    expect(parseReceiveAmount("1.234", 200000)).toEqual({ ok: true, cents: 123400 });
+    expect(parseReceiveAmount("1.234,56", 200000)).toEqual({ ok: true, cents: 123456 });
+  });
+
   it("recusa zero", () => {
     expect(parseReceiveAmount("0", 200000)).toEqual({ ok: false, error: "Informe um valor maior que zero." });
+  });
+});
+
+describe("planPreset", () => {
+  const preset = (id: string, number: number, forecastPreset: SaleRow["forecastPreset"]): SaleRow => ({
+    ...row(id, number, 100),
+    forecastPreset,
+  });
+
+  it("usa o preset da parcela de maior número que não seja CUSTOM", () => {
+    const rows = [preset("1", 1, "DAY_FIVE"), preset("3", 3, "CUSTOM"), preset("2", 2, "FIFTH_BUSINESS_DAY")];
+    expect(planPreset(rows, "DAY_FIVE")).toBe("FIFTH_BUSINESS_DAY");
+  });
+
+  it("cai no preset da venda quando nenhuma parcela tem regra", () => {
+    const rows = [preset("1", 1, null), preset("2", 2, "CUSTOM")];
+    expect(planPreset(rows, "DAY_FIVE")).toBe("DAY_FIVE");
+    expect(planPreset(rows, null)).toBeNull();
+  });
+
+  it("não reordena as linhas recebidas", () => {
+    const rows = [preset("2", 2, "DAY_FIVE"), preset("1", 1, "FIFTH_BUSINESS_DAY")];
+    planPreset(rows, null);
+    expect(rows.map((r) => r.id)).toEqual(["2", "1"]);
+  });
+});
+
+describe("allocationMatches", () => {
+  const base = { fullIds: ["a"], untouchedIds: [] };
+
+  it("aceita a mesma parcial e recusa qualquer diferença", () => {
+    const allocation = { ...base, partial: { id: "b", paidCents: 4000, remainderCents: 3000 } };
+    expect(allocationMatches(allocation, { partialId: "b", paidCents: 4000, remainderCents: 3000 })).toBe(true);
+    expect(allocationMatches(allocation, { partialId: "c", paidCents: 4000, remainderCents: 3000 })).toBe(false);
+    expect(allocationMatches(allocation, { partialId: "b", paidCents: 3000, remainderCents: 3000 })).toBe(false);
+    expect(allocationMatches(allocation, { partialId: "b", paidCents: 4000, remainderCents: 2000 })).toBe(false);
+    expect(allocationMatches(allocation, null)).toBe(false);
+  });
+
+  it("null exige alocação sem parcial", () => {
+    expect(allocationMatches({ ...base, partial: null }, null)).toBe(true);
+    expect(allocationMatches({ ...base, partial: null }, { partialId: "a", paidCents: 1, remainderCents: 1 })).toBe(false);
+  });
+});
+
+describe("openRowsMatch", () => {
+  const rows = [row("1", 1, 1000, null, noon(2026, 10, 1)), row("2", 2, 2000), row("3", 3, 3000)];
+
+  it("aceita quando as abertas batem em id e valor", () => {
+    expect(openRowsMatch(rows, [{ id: "2", amountCents: 2000 }, { id: "3", amountCents: 3000 }], [])).toBe(true);
+  });
+
+  it("recusa valor alterado, linha a mais ou a menos", () => {
+    expect(openRowsMatch(rows, [{ id: "2", amountCents: 2000 }, { id: "3", amountCents: 2999 }], [])).toBe(false);
+    expect(openRowsMatch(rows, [{ id: "2", amountCents: 2000 }], [])).toBe(false);
+    expect(
+      openRowsMatch(rows, [{ id: "1", amountCents: 1000 }, { id: "2", amountCents: 2000 }, { id: "3", amountCents: 3000 }], []),
+    ).toBe(false);
+  });
+
+  it("ignora as linhas pedidas", () => {
+    expect(openRowsMatch(rows, [{ id: "3", amountCents: 3000 }, { id: "9", amountCents: 1 }], ["2", "9"])).toBe(true);
   });
 });

@@ -12,8 +12,7 @@ vi.mock("@/server/tenant/context", () => ({
   writeBlocked: async () => null,
 }));
 
-const { payInstallments, unpayInstallments, payNextInstallment, unpayLastInstallment, unpayLastCollection } =
-  await import("./sales");
+const { payInstallments, unpayInstallments, unpayLastInstallment, unpayLastCollection } = await import("./sales");
 
 const due = (m: number) => new Date(2026, m, 5, 12);
 
@@ -65,16 +64,6 @@ describe("pagamento por parcela", () => {
     expect(await unpayInstallments([sale.installments[2].id])).toEqual({ ok: true });
     const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
     expect([saved.status, saved.openCents, saved.paymentForecastDate]).toEqual(["PENDING", 3334, due(12)]);
-  });
-
-  it("payNextInstallment paga a primeira parcela em aberto", async () => {
-    const sale = await threeParcels();
-    await payInstallments([sale.installments[0].id]);
-    const res = await payNextInstallment(sale.id);
-    expect(res).toEqual({
-      ok: true,
-      data: { installmentId: sale.installments[1].id, number: 2, installmentCount: 3, amountCents: 3333 },
-    });
   });
 
   it("unpayLastInstallment reabre a última parcela paga", async () => {

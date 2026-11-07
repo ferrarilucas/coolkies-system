@@ -1,8 +1,8 @@
-import { Prisma, type ForecastPreset } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { planRemainder, type RemainderChoice, type SaleRow } from "@/lib/partial-payment";
+import { openRowsMatch, planPreset, planRemainder, RACE_ERROR, type ExpectedRow, type RemainderChoice } from "@/lib/partial-payment";
 
-export const RACE_ERROR = "Algumas parcelas já foram recebidas. Revise o valor.";
+export { RACE_ERROR };
 
 type SplitShare = { installmentId: string; cents: number; created: boolean };
 
@@ -38,13 +38,6 @@ export async function lockSales(tx: Prisma.TransactionClient, workspaceId: strin
   return locked.length;
 }
 
-export function planPreset(rows: SaleRow[], salePreset: ForecastPreset | null): ForecastPreset | null {
-  const fromPlan = [...rows]
-    .sort((a, b) => b.number - a.number)
-    .find((row) => row.forecastPreset !== null && row.forecastPreset !== "CUSTOM");
-  return fromPlan?.forecastPreset ?? salePreset;
-}
-
 export async function resequence(tx: Prisma.TransactionClient, saleId: string, orderedIds: string[]): Promise<void> {
   for (const [idx, id] of orderedIds.entries()) {
     await tx.saleInstallment.update({ where: { id, saleId }, data: { number: -(idx + 1) } });
@@ -65,6 +58,7 @@ export async function applyPartial(
     choice: RemainderChoice;
     paidAt: Date;
     excludeIds: string[];
+    expectedRows?: ExpectedRow[];
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const originalCents = input.paidCents + input.remainderCents;
@@ -76,6 +70,13 @@ export async function applyPartial(
   });
   const partial = rows.find((row) => row.id === input.partialId);
   if (!sale || !partial || partial.paidAt !== null || partial.amountCents !== originalCents) {
+    return { ok: false, error: RACE_ERROR };
+  }
+  if (
+    input.choice.mode === "SPREAD" &&
+    input.expectedRows &&
+    !openRowsMatch(rows, input.expectedRows, [partial.id, ...input.excludeIds])
+  ) {
     return { ok: false, error: RACE_ERROR };
   }
 
