@@ -230,4 +230,36 @@ describe("summarize", () => {
       installmentCount: 2,
     });
   });
+
+  it("previsão usa o menor vencimento aberto, não a menor parcela", () => {
+    const list: InstallmentPlan[] = [
+      paid(1, 1000),
+      { number: 2, amountCents: 1000, dueDate: noon(2026, 11, 15), forecastPreset: "CUSTOM", paidAt: null },
+      { number: 3, amountCents: 1000, dueDate: noon(2026, 11, 5), forecastPreset: "DAY_FIVE", paidAt: null },
+    ];
+    const result = summarize(list);
+    expect(ymd(result.paymentForecastDate)).toBe("2026-12-05");
+    expect(result.forecastPreset).toBe("DAY_FIVE");
+  });
+
+  it("parcela sem vencimento só é previsão quando é a única aberta", () => {
+    const semVencimento: InstallmentPlan = { number: 1, amountCents: 1000, dueDate: null, forecastPreset: null, paidAt: null };
+    const comVencimento: InstallmentPlan = {
+      number: 2,
+      amountCents: 1000,
+      dueDate: noon(2026, 11, 5),
+      forecastPreset: "DAY_FIVE",
+      paidAt: null,
+    };
+    expect(ymd(summarize([semVencimento, comVencimento]).paymentForecastDate)).toBe("2026-12-05");
+    expect(summarize([semVencimento])).toMatchObject({ paymentForecastDate: null, forecastPreset: null });
+  });
+
+  it("empate de vencimento é decidido pelo número da parcela", () => {
+    const list: InstallmentPlan[] = [
+      { number: 3, amountCents: 1000, dueDate: noon(2026, 11, 5), forecastPreset: "DAY_FIVE", paidAt: null },
+      { number: 2, amountCents: 1000, dueDate: noon(2026, 11, 5), forecastPreset: "CUSTOM", paidAt: null },
+    ];
+    expect(summarize(list).forecastPreset).toBe("CUSTOM");
+  });
 });

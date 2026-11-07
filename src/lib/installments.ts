@@ -158,8 +158,20 @@ export function planPayment(
   return { ok: true, installments: [...paid, ...open].sort((a, b) => a.number - b.number) };
 }
 
+function compareByDueDate(a: InstallmentPlan, b: InstallmentPlan): number {
+  if (a.dueDate && b.dueDate) {
+    const diff = a.dueDate.getTime() - b.dueDate.getTime();
+    if (diff !== 0) return diff;
+  } else if (a.dueDate) {
+    return -1;
+  } else if (b.dueDate) {
+    return 1;
+  }
+  return a.number - b.number;
+}
+
 export function summarize(installments: InstallmentPlan[]): SaleSummaryFields {
-  const open = installments.filter((i) => i.paidAt === null).sort((a, b) => a.number - b.number);
+  const open = installments.filter((i) => i.paidAt === null).sort(compareByDueDate);
   const openCents = open.reduce((sum, i) => sum + i.amountCents, 0);
   if (open.length === 0) {
     return {
