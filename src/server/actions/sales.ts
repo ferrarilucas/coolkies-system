@@ -176,6 +176,7 @@ export async function updateSale(id: string, formData: FormData): Promise<Action
 
   try {
     const plan = await db.$transaction(async (tx) => {
+      await lockSales(tx, workspaceId, [id]);
       const existing = await tx.saleInstallment.findMany({ where: { saleId: id }, orderBy: { number: "asc" } });
       const planned = planPayment(choice, totalCents, toPlans(existing), new Date());
       if (!planned.ok) return planned;
@@ -524,7 +525,7 @@ export async function unpayLastInstallment(
 
   const last = await db.saleInstallment.findFirst({
     where: { saleId, paidAt: { not: null } },
-    orderBy: { number: "desc" },
+    orderBy: [{ paidAt: "desc" }, { number: "desc" }],
     select: { id: true },
   });
   if (!last) return { ok: false, error: "Esta venda não tem parcela paga." };

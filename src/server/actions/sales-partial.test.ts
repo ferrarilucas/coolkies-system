@@ -283,6 +283,58 @@ describe("receivePayment", () => {
     expect([split.mode, split.shares]).toEqual(["APPEND", [{ installmentId: parcels[3].id, cents: 2333, created: true }]]);
   });
 
+  it("APPEND em venda simples grava status, aberto, previsão e contagem", async () => {
+    const seeded = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      parcels: [{ amountCents: 5000, dueDate: due(10) }],
+    });
+    const res = await receivePayment({
+      installmentIds: [seeded.installments[0].id],
+      amountCents: 2000,
+      remainder: { mode: "APPEND" },
+    });
+    expect(res).toEqual({
+      ok: true,
+      data: { count: 1, totalCents: 2000, partial: true, paidInstallmentIds: [seeded.installments[0].id] },
+    });
+    const { sale, parcels } = await expectBalanced(seeded.id);
+    expect(parcels.map((p) => [p.number, p.amountCents, p.paidAt !== null, ymd(p.dueDate), p.forecastPreset])).toEqual([
+      [1, 2000, true, "2026-11-05", "CUSTOM"],
+      [2, 3000, false, "2026-12-05", "CUSTOM"],
+    ]);
+    expect([sale.status, sale.openCents, ymd(sale.paymentForecastDate), sale.installmentCount]).toEqual([
+      "PENDING",
+      3000,
+      "2026-12-05",
+      2,
+    ]);
+  });
+
+  it("APPEND sem nenhum vencimento vence em hoje de São Paulo mais um mês, ao meio-dia, CUSTOM", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-30T01:30:00Z"));
+    try {
+      const seeded = await seedParceledSale({
+        workspaceId: context.workspaceId,
+        parcels: [{ amountCents: 5000, dueDate: null }],
+      });
+      const res = await receivePayment({
+        installmentIds: [seeded.installments[0].id],
+        amountCents: 2000,
+        remainder: { mode: "APPEND" },
+      });
+      expect(res.ok).toBe(true);
+      const { sale, parcels } = await expectBalanced(seeded.id);
+      const created = parcels[1];
+      expect([created.amountCents, created.paidAt, created.forecastPreset]).toEqual([3000, null, "CUSTOM"]);
+      expect(created.dueDate).toEqual(new Date(2026, 11, 29, 12));
+      expect([sale.status, sale.openCents, sale.installmentCount]).toEqual(["PENDING", 3000, 2]);
+      expect(sale.paymentForecastDate).toEqual(new Date(2026, 11, 29, 12));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("NEW_DATE na #1 de 3 coloca o restante como #2 e empurra as antigas", async () => {
     const seeded = await threeParcels();
     const res = await receivePayment({
@@ -775,6 +827,109 @@ describe("receivePayment", () => {
       [3, 1500, false],
     ]);
     expect([sale.totalCents, sale.openCents, sale.installmentCount]).toEqual([5000, 3000, 3]);
+  });
+
+  it("venda no teto de parcelas recusa NEW_DATE e APPEND sem gravar e aceita SPREAD", async () => {
+    const seeded = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      parcels: Array.from({ length: 24 }, (_, idx) => ({ amountCents: 1000, dueDate: due(10 + idx) })),
+    });
+    const first = seeded.installments[0].id;
+    const capError = "Esta venda já tem o máximo de 24 parcelas. Escolha diluir nas próximas.";
+    const before = await snapshot();
+    expect(
+      await receivePayment({ installmentIds: [first], amountCents: 400, remainder: { mode: "NEW_DATE", dueDate: "2027-03-10" } }),
+    ).toEqual({ ok: false, error: capError });
+    expect(await receivePayment({ installmentIds: [first], amountCents: 400, remainder: { mode: "APPEND" } })).toEqual({
+      ok: false,
+      error: capError,
+    });
+    expect(
+      await receivePayment({ installmentIds: [first, seeded.installments[1].id], amountCents: 1400, remainder: { mode: "APPEND" } }),
+    ).toEqual({ ok: false, error: capError });
+    expect(await snapshot()).toEqual(before);
+    const spread = await receivePayment({ installmentIds: [first], amountCents: 400, remainder: { mode: "SPREAD" } });
+    expect(spread.ok).toBe(true);
+    const { sale, parcels } = await expectBalanced(seeded.id);
+    expect(parcels).toHaveLength(24);
+    expect([sale.installmentCount, sale.openCents]).toEqual([24, 23600]);
+  });
+
+  it("updateSale concorrente com receivePayment não perde o recebimento", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Bolo", unit: "UN", sellable: true, productionInput: false, workspaceId: context.workspaceId },
+    });
+    const seeded = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      parcels: [{ amountCents: 5000, dueDate: due(10) }],
+    });
+    const fd = new FormData();
+    fd.set("soldAt", "2026-10-09");
+    fd.set(
+      "items",
+      JSON.stringify([{ itemId: item.id, productName: "Bolo", variantId: null, variantName: null, quantity: 1, unitPriceCents: 5000 }]),
+    );
+    fd.set("paymentMode", "INSTALLMENTS");
+    fd.set("installmentCount", "3");
+    fd.set("forecastPreset", "CUSTOM");
+    fd.set("forecastDate", "2026-11-05");
+    let receiving: ReturnType<typeof receivePayment> | undefined;
+    hooks.afterFirstRead = async () => {
+      receiving = receivePayment({
+        installmentIds: [seeded.installments[0].id],
+        amountCents: 2000,
+        remainder: { mode: "NEW_DATE", dueDate: "2026-12-10" },
+      });
+      await Promise.race([receiving, new Promise((resolve) => setTimeout(resolve, 500))]);
+    };
+    const updated = await updateSale(seeded.id, fd);
+    const received = await receiving!;
+    expect(updated).toEqual({ ok: true });
+    expect(received.ok || received.error === RACE).toBe(true);
+    const { sale, parcels } = await expectBalanced(seeded.id);
+    const paid = parcels.filter((p) => p.paidAt !== null);
+    if (received.ok) {
+      expect(paid.map((p) => p.amountCents)).toEqual([2000]);
+      expect(sale.openCents).toBe(3000);
+    } else {
+      expect(paid).toHaveLength(0);
+      expect(sale.openCents).toBe(5000);
+    }
+    expect(sale.totalCents).toBe(5000);
+  });
+
+  it("updateSale e receivePayment em paralelo nunca perdem o recebido", async () => {
+    const item = await testDb.item.create({
+      data: { name: "Bolo", unit: "UN", sellable: true, productionInput: false, workspaceId: context.workspaceId },
+    });
+    for (let round = 0; round < 6; round += 1) {
+      const seeded = await seedParceledSale({
+        workspaceId: context.workspaceId,
+        parcels: [{ amountCents: 5000, dueDate: due(10) }],
+      });
+      const fd = new FormData();
+      fd.set("soldAt", "2026-10-09");
+      fd.set(
+        "items",
+        JSON.stringify([{ itemId: item.id, productName: "Bolo", variantId: null, variantName: null, quantity: 1, unitPriceCents: 5000 }]),
+      );
+      fd.set("paymentMode", "INSTALLMENTS");
+      fd.set("installmentCount", "2");
+      fd.set("forecastPreset", "CUSTOM");
+      fd.set("forecastDate", "2026-11-05");
+      const [updated, received] = await Promise.all([
+        updateSale(seeded.id, fd),
+        new Promise<void>((resolve) => setTimeout(resolve, round % 3)).then(() =>
+          receivePayment({ installmentIds: [seeded.installments[0].id], amountCents: 5000 }),
+        ),
+      ]);
+      expect(updated).toEqual({ ok: true });
+      expect(received.ok || received.error === RACE).toBe(true);
+      const { sale, parcels } = await expectBalanced(seeded.id);
+      const paidCents = parcels.filter((p) => p.paidAt !== null).reduce((sum, p) => sum + p.amountCents, 0);
+      expect(paidCents).toBe(received.ok ? 5000 : 0);
+      expect(sale.openCents).toBe(5000 - paidCents);
+    }
   });
 });
 

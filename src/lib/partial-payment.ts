@@ -2,7 +2,7 @@ import { addDays, addMonths } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { resolveForecast, type ForecastPreset } from "./business-days";
 import { isValidIsoCalendarDate } from "./date-validation";
-import { dueDateFor, splitAmount, type InstallmentPlan } from "./installments";
+import { dueDateFor, MAX_INSTALLMENTS, splitAmount, type InstallmentPlan } from "./installments";
 import { parseBRL } from "./money";
 
 export type AllocatableInstallment = {
@@ -46,6 +46,8 @@ const ERROR_ABOVE_TOTAL = "O valor é maior que o total selecionado.";
 const ERROR_AMOUNT_MISSING = "Informe o valor recebido.";
 const ERROR_INVALID_DATE = "Informe uma data válida.";
 const ERROR_NO_NEXT = "Não há parcelas seguintes para diluir.";
+
+export const MAX_INSTALLMENTS_ERROR = `Esta venda já tem o máximo de ${MAX_INSTALLMENTS} parcelas. Escolha diluir nas próximas.`;
 
 const TIME_ZONE = "America/Sao_Paulo";
 
@@ -105,6 +107,23 @@ export function canSpread(rows: SaleRow[], partialNumber: number, excludeIds: st
   return openRowsAfter(rows, partialNumber, excludeIds).length > 0;
 }
 
+function atInstallmentCap(rows: SaleRow[]): boolean {
+  return rows.length >= MAX_INSTALLMENTS;
+}
+
+export function availableRemainderModes(
+  rows: SaleRow[],
+  partialNumber: number,
+  excludeIds: string[],
+): RemainderChoice["mode"][] {
+  const capped = atInstallmentCap(rows);
+  const modes: RemainderChoice["mode"][] = [];
+  if (!capped) modes.push("NEW_DATE");
+  if (canSpread(rows, partialNumber, excludeIds)) modes.push("SPREAD");
+  if (!capped) modes.push("APPEND");
+  return modes;
+}
+
 function appendDue(
   rows: SaleRow[],
   preset: ForecastPreset | null,
@@ -127,6 +146,7 @@ export function planRemainder(
   excludeIds: string[],
 ): { ok: true; plan: RemainderPlan } | { ok: false; error: string } {
   if (!Number.isInteger(remainderCents) || remainderCents <= 0) return { ok: false, error: ERROR_ZERO };
+  if (choice.mode !== "SPREAD" && atInstallmentCap(rows)) return { ok: false, error: MAX_INSTALLMENTS_ERROR };
 
   if (choice.mode === "NEW_DATE") {
     if (!isValidIsoCalendarDate(choice.dueDate)) return { ok: false, error: ERROR_INVALID_DATE };

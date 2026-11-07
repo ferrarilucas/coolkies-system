@@ -1,8 +1,11 @@
 import { fifthBusinessDayOfMonth } from "./business-days";
+import { MAX_INSTALLMENTS } from "./installments";
 import { describe, expect, it } from "vitest";
 import {
   allocate,
+  availableRemainderModes,
   canSpread,
+  MAX_INSTALLMENTS_ERROR,
   orderForAllocation,
   allocationMatches,
   openRowsMatch,
@@ -257,6 +260,44 @@ describe("planRemainder", () => {
       ok: false,
       error: "Informe uma data válida.",
     });
+  });
+});
+
+describe("teto de parcelas", () => {
+  const CAP_ERROR = `Esta venda já tem o máximo de ${MAX_INSTALLMENTS} parcelas. Escolha diluir nas próximas.`;
+  const rowsOf = (count: number) => Array.from({ length: count }, (_, idx) => row(String(idx + 1), idx + 1, 1000, noon(2027, 1, 5)));
+
+  it("a mensagem usa o valor da constante", () => {
+    expect(MAX_INSTALLMENTS_ERROR).toBe(CAP_ERROR);
+    expect(MAX_INSTALLMENTS_ERROR).toContain(String(MAX_INSTALLMENTS));
+  });
+
+  it("recusa NEW_DATE e APPEND quando a venda já está no teto", () => {
+    const rows = rowsOf(MAX_INSTALLMENTS);
+    expect(planRemainder(rows, 1, 300, { mode: "NEW_DATE", dueDate: "2027-03-10" }, null, NOW, [])).toEqual({
+      ok: false,
+      error: CAP_ERROR,
+    });
+    expect(planRemainder(rows, 1, 300, { mode: "APPEND" }, null, NOW, [])).toEqual({ ok: false, error: CAP_ERROR });
+  });
+
+  it("continua permitindo SPREAD no teto", () => {
+    const result = planRemainder(rowsOf(MAX_INSTALLMENTS), 1, 230, { mode: "SPREAD" }, null, NOW, []);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.plan.updates).toHaveLength(MAX_INSTALLMENTS - 1);
+  });
+
+  it("aceita NEW_DATE e APPEND uma abaixo do teto", () => {
+    const rows = rowsOf(MAX_INSTALLMENTS - 1);
+    expect(planRemainder(rows, 1, 300, { mode: "NEW_DATE", dueDate: "2027-03-10" }, null, NOW, []).ok).toBe(true);
+    expect(planRemainder(rows, 1, 300, { mode: "APPEND" }, null, NOW, []).ok).toBe(true);
+  });
+
+  it("availableRemainderModes tira as opções que criam parcela no teto", () => {
+    expect(availableRemainderModes(rowsOf(MAX_INSTALLMENTS - 1), 1, [])).toEqual(["NEW_DATE", "SPREAD", "APPEND"]);
+    expect(availableRemainderModes(rowsOf(MAX_INSTALLMENTS), 1, [])).toEqual(["SPREAD"]);
+    expect(availableRemainderModes(rowsOf(MAX_INSTALLMENTS), MAX_INSTALLMENTS, [])).toEqual([]);
+    expect(availableRemainderModes(rowsOf(2), 2, [])).toEqual(["NEW_DATE", "APPEND"]);
   });
 });
 

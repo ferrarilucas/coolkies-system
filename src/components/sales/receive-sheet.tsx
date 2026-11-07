@@ -15,7 +15,7 @@ import type { ForecastPreset } from "@/lib/business-days";
 import { formatBRL } from "@/lib/money";
 import {
   allocate,
-  canSpread,
+  availableRemainderModes,
   orderForAllocation,
   parseReceiveAmount,
   planPreset,
@@ -275,12 +275,13 @@ function ReceiveSheetBody({
       ? allocation.fullIds.filter((id) => partialTarget.saleRows.some((row) => row.id === id))
       : [];
   const savedDraft = partialTarget && remainder?.partialId === partialTarget.id ? remainder.draft : null;
-  const draft =
-    savedDraft && (savedDraft.mode !== "SPREAD" || canSpread(partialTarget!.saleRows, partialTarget!.number, excludeIds))
+  const availableModes = partialTarget ? availableRemainderModes(partialTarget.saleRows, partialTarget.number, excludeIds) : [];
+  const draft: RemainderDraft =
+    savedDraft && availableModes.includes(savedDraft.mode)
       ? savedDraft
       : {
-          mode: "NEW_DATE" as const,
-          dueDate: format(suggestedRemainderDate(preset, now), "yyyy-MM-dd"),
+          mode: availableModes[0] ?? "NEW_DATE",
+          dueDate: savedDraft?.dueDate ?? format(suggestedRemainderDate(preset, now), "yyyy-MM-dd"),
         };
   const remainderPlan =
     partialTarget && partial

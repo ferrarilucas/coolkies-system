@@ -409,6 +409,34 @@ describe("desfazer recebimento parcial", () => {
     await expectBalanced(seeded.id);
   });
 
+  it("unpayLastInstallment reabre a última recebida, não a de maior número", async () => {
+    const seeded = await seedParceledSale({
+      workspaceId: context.workspaceId,
+      parcels: [
+        { amountCents: 3000, dueDate: due(11) },
+        { amountCents: 3000, dueDate: due(12) },
+      ],
+    });
+    const [dec, jan] = seeded.installments;
+    await receivePayment({ installmentIds: [dec.id], amountCents: 1000, remainder: { mode: "NEW_DATE", dueDate: "2027-03-10" } });
+    const mar = (await parcelsOf(seeded.id))[1];
+    expect([mar.number, mar.amountCents, ymd(mar.dueDate)]).toEqual([2, 2000, "2027-03-10"]);
+    expect((await testDb.saleInstallment.findUniqueOrThrow({ where: { id: jan.id } })).number).toBe(3);
+    expect((await receivePayment({ installmentIds: [jan.id], amountCents: 3000 })).ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect((await receivePayment({ installmentIds: [mar.id], amountCents: 2000 })).ok).toBe(true);
+    expect(await unpayLastInstallment(seeded.id)).toEqual({
+      ok: true,
+      data: { installmentId: mar.id, number: 2, installmentCount: 3, hadPartial: false },
+    });
+    const { parcels } = await expectBalanced(seeded.id);
+    expect(parcels.map((p) => [p.id, p.amountCents, p.paidAt !== null])).toEqual([
+      [dec.id, 1000, true],
+      [mar.id, 2000, false],
+      [jan.id, 3000, true],
+    ]);
+  });
+
   it("unpayLastInstallment sem parcial devolve hadPartial false", async () => {
     const seeded = await threeParcels();
     await receivePayment({ installmentIds: [seeded.installments[0].id], amountCents: 3333 });
@@ -427,6 +455,11 @@ describe("desfazer recebimento parcial", () => {
     expect(created.amountCents).toBe(2334);
     await receivePayment({ installmentIds: [first.id], amountCents: 1000, remainder: { mode: "SPREAD" } });
     expect((await testDb.saleInstallment.findUniqueOrThrow({ where: { id: created.id } })).amountCents).not.toBe(2334);
+    const thirdPaidAt = (await testDb.saleInstallment.findUniqueOrThrow({ where: { id: third.id } })).paidAt!;
+    await testDb.saleInstallment.update({
+      where: { id: first.id },
+      data: { paidAt: new Date(thirdPaidAt.getTime() - 60 * 60 * 1000) },
+    });
     expect(await unpayLastInstallment(seeded.id)).toEqual({
       ok: true,
       data: { installmentId: third.id, number: 3, installmentCount: 4, hadPartial: true },
@@ -556,6 +589,36 @@ describe("desfazer recebimento parcial", () => {
       expect(pay?.data?.totalCents).toBe(paid[0].amountCents);
       expect(await testDb.installmentSplit.count({ where: { saleId: seeded.id } })).toBe(0);
     }
+  });
+
+  it("mark-paid quita o restante e o desfazer do parcial só reabre o recebido", async () => {
+    const owner = await testDb.user.create({ data: { id: "u-mark", name: "Ana", email: "ana-mark@example.com" } });
+    await testDb.member.create({ data: { userId: owner.id, workspaceId: context.workspaceId, role: "OWNER" } });
+    await testDb.subscription.create({ data: { userId: owner.id, plan: "corre", status: "TRIALING", provider: "INTERPIX" } });
+    auth.session = { userId: owner.id };
+    const seeded = await single();
+    const paidId = seeded.installments[0].id;
+    await receivePayment({ installmentIds: [paidId], amountCents: 2000, remainder: { mode: "NEW_DATE", dueDate: "2026-12-10" } });
+    const rest = (await parcelsOf(seeded.id))[1];
+    expect(rest.amountCents).toBe(3000);
+    const response = await markPaid(
+      new NextRequest("http://localhost/api/v1/sales/mark-paid", {
+        method: "POST",
+        body: JSON.stringify({ installmentIds: [rest.id] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ count: 1, totalCents: 3000 });
+    expect((await testDb.sale.findUniqueOrThrow({ where: { id: seeded.id } })).status).toBe("PAID");
+    expect(await unpayInstallments([paidId])).toEqual({ ok: true });
+    const { sale, parcels } = await expectBalanced(seeded.id);
+    expect(parcels.map((p) => [p.id, p.amountCents, p.paidAt !== null])).toEqual([
+      [paidId, 2000, false],
+      [rest.id, 3000, true],
+    ]);
+    expect(summaryOf(sale)).toEqual(["PENDING", 2000, 2, "2026-11-05"]);
+    expect(sale.totalCents).toBe(5000);
+    expect(await testDb.installmentSplit.count()).toBe(0);
   });
 
   it("desfazer e mark-paid ao mesmo tempo não dão deadlock", async () => {

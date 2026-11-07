@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale";
 import { CalendarClock, ListPlus, Split } from "lucide-react";
 import type { ForecastPreset } from "@/lib/business-days";
 import { formatBRL } from "@/lib/money";
-import { canSpread, planRemainder, type RemainderChoice, type SaleRow } from "@/lib/partial-payment";
+import { availableRemainderModes, canSpread, planRemainder, type RemainderChoice, type SaleRow } from "@/lib/partial-payment";
 import { cn } from "@/lib/utils";
 
 type Mode = RemainderChoice["mode"];
@@ -62,6 +62,7 @@ export function RemainderOptions({
   const spreadable = canSpread(rows, partialNumber, excludeIds);
   const spread = spreadable ? plan({ mode: "SPREAD" }) : null;
   const append = plan({ mode: "APPEND" });
+  const available = availableRemainderModes(rows, partialNumber, excludeIds);
 
   const options: { mode: Mode; title: string; preview: string; icon: typeof CalendarClock }[] = [
     {
@@ -95,21 +96,23 @@ export function RemainderOptions({
   return (
     <div role="radiogroup" aria-label="O que fazer com o restante" className="space-y-2">
       {options.map((option) => {
-        const checked = value.mode === option.mode;
+        const blocked = !available.includes(option.mode);
+        const checked = !blocked && value.mode === option.mode;
         const Icon = option.icon;
         return (
           <div
             key={option.mode}
             className={cn(
               "rounded-lg border transition-colors",
-              checked ? "border-primary bg-primary/5" : "hover:bg-muted",
+              checked ? "border-primary bg-primary/5" : blocked ? "bg-muted/40" : "hover:bg-muted",
             )}
           >
             <button
               type="button"
               role="radio"
               aria-checked={checked}
-              disabled={disabled}
+              aria-disabled={blocked || undefined}
+              disabled={disabled || blocked}
               onClick={() => onChange({ ...value, mode: option.mode })}
               className="flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left disabled:opacity-50"
             >
@@ -124,7 +127,11 @@ export function RemainderOptions({
               <Icon className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{option.title}</span>
-                <span className="block text-xs text-muted-foreground tabular-nums">{option.preview}</span>
+                <span
+                  className={cn("block text-xs tabular-nums", blocked ? "text-warning-text" : "text-muted-foreground")}
+                >
+                  {option.preview}
+                </span>
               </span>
             </button>
             {option.mode === "NEW_DATE" && checked && (
