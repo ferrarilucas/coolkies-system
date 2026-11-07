@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { writeBlocked, getScopedDb } from "@/server/tenant/context";
 import { StockMovementType } from "@prisma/client";
 import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
 import { syncSaleSummary, toPlans, writeInstallments } from "@/server/sales/installments";
+import { allocate, type RemainderChoice } from "@/lib/partial-payment";
+import { applyPartial, isConcurrencyError, lockSales, RACE_ERROR } from "@/server/sales/partial-payment";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -249,6 +252,136 @@ export async function payInstallments(
   };
 }
 
+class ReceiveAbort extends Error {}
+
+const MAX_RECEIVE_CENTS = 100_000_000;
+const RECEIVE_INVALID = "Dados de recebimento inválidos.";
+const RECEIVE_NEEDS_REMAINDER = "Escolha o que fazer com o restante.";
+const RECEIVE_ZERO = "Informe um valor maior que zero.";
+
+const remainderSchema = z.discriminatedUnion(
+  "mode",
+  [
+    z.object({
+      mode: z.literal("NEW_DATE"),
+      dueDate: z.string({ errorMap: () => ({ message: "Informe uma data válida." }) }).max(10, "Informe uma data válida."),
+    }),
+    z.object({ mode: z.literal("SPREAD") }),
+    z.object({ mode: z.literal("APPEND") }),
+  ],
+  { errorMap: () => ({ message: RECEIVE_NEEDS_REMAINDER }) },
+);
+
+const receiveSchema = z.object(
+  {
+    installmentIds: z
+      .array(
+        z
+          .string({ errorMap: () => ({ message: "Selecione ao menos uma parcela." }) })
+          .min(1, "Selecione ao menos uma parcela.")
+          .max(64, "Parcela inválida."),
+        { errorMap: () => ({ message: "Selecione ao menos uma parcela." }) },
+      )
+      .min(1, "Selecione ao menos uma parcela.")
+      .max(500, "Selecione menos parcelas.")
+      .refine((ids) => new Set(ids).size === ids.length, "Parcelas repetidas na seleção."),
+    amountCents: z
+      .number({ errorMap: () => ({ message: RECEIVE_ZERO }) })
+      .int(RECEIVE_ZERO)
+      .positive(RECEIVE_ZERO)
+      .max(MAX_RECEIVE_CENTS, "O valor é maior que o total selecionado."),
+    remainder: remainderSchema.optional(),
+  },
+  { errorMap: () => ({ message: RECEIVE_INVALID }) },
+);
+
+export async function receivePayment(input: {
+  installmentIds: string[];
+  amountCents: number;
+  remainder?: RemainderChoice;
+}): Promise<ActionResult<{ count: number; totalCents: number; partial: boolean; paidInstallmentIds: string[] }>> {
+  const parsed = receiveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? RECEIVE_INVALID };
+  const { installmentIds, amountCents, remainder } = parsed.data;
+
+  const { db, workspaceId } = await getScopedDb();
+  const blocked = await writeBlocked();
+  if (blocked) return blocked;
+
+  const open = await db.saleInstallment.findMany({
+    where: { id: { in: installmentIds }, paidAt: null },
+    select: { id: true, saleId: true, number: true, amountCents: true, dueDate: true, sale: { select: { soldAt: true } } },
+  });
+  const openCents = open.reduce((sum, i) => sum + i.amountCents, 0);
+  if (openCents < amountCents && open.length < installmentIds.length) return { ok: false, error: RACE_ERROR };
+
+  const allocated = allocate(
+    open.map((i) => ({ id: i.id, number: i.number, amountCents: i.amountCents, dueDate: i.dueDate, soldAt: i.sale.soldAt })),
+    amountCents,
+  );
+  if (!allocated.ok) return { ok: false, error: allocated.error };
+  const { fullIds, partial } = allocated.allocation;
+
+  const choice = partial ? remainder : undefined;
+  if (partial && !choice) return { ok: false, error: RECEIVE_NEEDS_REMAINDER };
+
+  const byId = new Map(open.map((i) => [i.id, i]));
+  const paidInstallmentIds = partial ? [...fullIds, partial.id] : fullIds;
+  const touchedSaleIds = [...new Set(paidInstallmentIds.map((id) => byId.get(id)!.saleId))];
+  const fullByAmount = new Map<number, string[]>();
+  for (const id of fullIds) {
+    const amount = byId.get(id)!.amountCents;
+    fullByAmount.set(amount, [...(fullByAmount.get(amount) ?? []), id]);
+  }
+  const paidAt = new Date();
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const locked = await lockSales(tx, workspaceId, touchedSaleIds);
+        if (locked !== touchedSaleIds.length) throw new ReceiveAbort(RACE_ERROR);
+        for (const [amount, ids] of fullByAmount) {
+          const updated = await tx.saleInstallment.updateMany({
+            where: { id: { in: ids }, paidAt: null, amountCents: amount },
+            data: { paidAt },
+          });
+          if (updated.count !== ids.length) throw new ReceiveAbort(RACE_ERROR);
+        }
+        if (partial && choice) {
+          const saleId = byId.get(partial.id)!.saleId;
+          const applied = await applyPartial(tx, {
+            saleId,
+            workspaceId,
+            partialId: partial.id,
+            paidCents: partial.paidCents,
+            remainderCents: partial.remainderCents,
+            choice,
+            paidAt,
+            excludeIds: fullIds.filter((id) => byId.get(id)!.saleId === saleId),
+          });
+          if (!applied.ok) throw new ReceiveAbort(applied.error);
+        }
+        await syncSaleSummary(tx, touchedSaleIds);
+      },
+      { timeout: 15000 },
+    );
+  } catch (e) {
+    if (e instanceof ReceiveAbort) return { ok: false, error: e.message };
+    if (isConcurrencyError(e)) {
+      console.warn("receivePayment concorrência:", e instanceof Error ? e.message : e);
+      return { ok: false, error: RACE_ERROR };
+    }
+    console.error("receivePayment error:", e);
+    return { ok: false, error: "Erro ao receber pagamento." };
+  }
+
+  revalidatePayments();
+  return {
+    ok: true,
+    data: { count: paidInstallmentIds.length, totalCents: amountCents, partial: partial !== null, paidInstallmentIds },
+  };
+}
+
 export async function unpayInstallments(installmentIds: string[]): Promise<ActionResult> {
   if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
@@ -283,7 +416,7 @@ export async function payNextInstallment(
 
   const next = await db.saleInstallment.findFirst({
     where: { saleId, paidAt: null },
-    orderBy: { number: "asc" },
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { number: "asc" }],
     select: { id: true, number: true, amountCents: true, sale: { select: { installmentCount: true } } },
   });
   if (!next) return { ok: false, error: "Esta venda não tem parcela em aberto." };

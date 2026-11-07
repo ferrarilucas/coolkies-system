@@ -80,7 +80,7 @@ export async function getSales(filters: SalesFilters = {}, page = 1) {
         _count: { select: { installments: { where: { paidAt: null } } } },
         installments: {
           where: { paidAt: null },
-          orderBy: { number: "asc" },
+          orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { number: "asc" }],
           take: 1,
           select: { number: true, amountCents: true, dueDate: true },
         },
