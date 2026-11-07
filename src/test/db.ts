@@ -23,6 +23,7 @@ const TABLES = [
   "recipe_item",
   "purchase_item",
   "purchase",
+  "installment_split",
   "sale_installment",
   "sale_item",
   "sale",

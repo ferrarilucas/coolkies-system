@@ -311,6 +311,7 @@ model Workspace {
   sales                  Sale[]
   saleItems              SaleItem[]
   saleInstallments       SaleInstallment[]
+  installmentSplits      InstallmentSplit[]
   suppliers              Supplier[]
   purchases              Purchase[]
   purchaseItems          PurchaseItem[]
@@ -572,7 +573,8 @@ model Sale {
 
   items SaleItem[]
 
-  installments SaleInstallment[]
+  installments      SaleInstallment[]
+  installmentSplits InstallmentSplit[]
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -615,6 +617,8 @@ model SaleInstallment {
   forecastPreset ForecastPreset?
   paidAt         DateTime?
 
+  split InstallmentSplit?
+
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -624,6 +628,31 @@ model SaleInstallment {
   @@unique([saleId, number])
   @@index([workspaceId, paidAt, dueDate])
   @@map("sale_installment")
+}
+
+enum RemainderMode {
+  NEW_DATE
+  SPREAD
+  APPEND
+}
+
+model InstallmentSplit {
+  id                String          @id @default(cuid())
+  saleId            String
+  sale              Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  paidInstallmentId String          @unique
+  paidInstallment   SaleInstallment @relation(fields: [paidInstallmentId], references: [id], onDelete: Cascade)
+  originalCents     Int
+  mode              RemainderMode
+  shares            Json
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, saleId])
+  @@map("installment_split")
 }
 
 // ─────────────────────────────────────────────
