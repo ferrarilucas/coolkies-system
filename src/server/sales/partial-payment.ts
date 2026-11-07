@@ -1,9 +1,14 @@
 import { Prisma, type ForecastPreset } from "@prisma/client";
+import { z } from "zod";
 import { planRemainder, type RemainderChoice, type SaleRow } from "@/lib/partial-payment";
 
 export const RACE_ERROR = "Algumas parcelas já foram recebidas. Revise o valor.";
 
 type SplitShare = { installmentId: string; cents: number; created: boolean };
+
+const sharesSchema = z.array(
+  z.object({ installmentId: z.string().min(1), cents: z.number().int().nonnegative(), created: z.boolean() }).strict(),
+);
 
 const RACE_PRISMA_CODES = new Set(["P2034"]);
 const RACE_PG_CODES = ["40P01"];
@@ -146,4 +151,90 @@ export async function applyPartial(
   });
 
   return { ok: true };
+}
+
+export class RevertAbort extends Error {}
+
+type SplitRow = { id: string; saleId: string; paidInstallmentId: string; originalCents: number; shares: Prisma.JsonValue };
+
+async function revertSplit(tx: Prisma.TransactionClient, split: SplitRow): Promise<boolean> {
+  const parsed = sharesSchema.safeParse(split.shares);
+  if (!parsed.success) {
+    console.warn("revertSplits shares inválido", { splitId: split.id });
+    return false;
+  }
+  const shares = parsed.data;
+  const rows = await tx.saleInstallment.findMany({
+    where: { saleId: split.saleId },
+    orderBy: { number: "asc" },
+    select: { id: true, amountCents: true, paidAt: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const paid = byId.get(split.paidInstallmentId);
+  const shareIds = new Set(shares.map((share) => share.installmentId));
+  const movedCents = shares.reduce((sum, share) => sum + share.cents, 0);
+  const clean =
+    paid !== undefined &&
+    paid.paidAt !== null &&
+    paid.amountCents + movedCents === split.originalCents &&
+    shareIds.size === shares.length &&
+    !shareIds.has(split.paidInstallmentId) &&
+    shares.every((share) => {
+      const row = byId.get(share.installmentId);
+      if (!row || row.paidAt !== null) return false;
+      return share.created ? row.amountCents === share.cents : row.amountCents >= share.cents;
+    });
+  if (!clean) return false;
+
+  const restoredPaid = await tx.saleInstallment.updateMany({
+    where: { id: paid.id, saleId: split.saleId, amountCents: paid.amountCents, paidAt: { not: null } },
+    data: { amountCents: split.originalCents, paidAt: null },
+  });
+  if (restoredPaid.count !== 1) return false;
+
+  const createdIds = shares.filter((share) => share.created).map((share) => share.installmentId);
+  for (const share of shares) {
+    const row = byId.get(share.installmentId)!;
+    if (share.created) {
+      const removed = await tx.saleInstallment.deleteMany({
+        where: { id: row.id, saleId: split.saleId, paidAt: null, amountCents: share.cents },
+      });
+      if (removed.count !== 1) throw new RevertAbort();
+    } else if (share.cents > 0) {
+      const reduced = await tx.saleInstallment.updateMany({
+        where: { id: row.id, saleId: split.saleId, paidAt: null, amountCents: row.amountCents },
+        data: { amountCents: row.amountCents - share.cents },
+      });
+      if (reduced.count !== 1) throw new RevertAbort();
+    }
+  }
+  if (createdIds.length > 0) {
+    const removedIds = new Set(createdIds);
+    await resequence(
+      tx,
+      split.saleId,
+      rows.filter((row) => !removedIds.has(row.id)).map((row) => row.id),
+    );
+  }
+  return true;
+}
+
+export async function revertSplits(
+  tx: Prisma.TransactionClient,
+  paidInstallmentIds: string[],
+): Promise<{ restored: string[]; reopenedOnly: string[] }> {
+  const restored: string[] = [];
+  const reopenedOnly: string[] = [];
+  if (paidInstallmentIds.length === 0) return { restored, reopenedOnly };
+  const splits = await tx.installmentSplit.findMany({
+    where: { paidInstallmentId: { in: [...new Set(paidInstallmentIds)] } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true, saleId: true, paidInstallmentId: true, originalCents: true, shares: true },
+  });
+  for (const split of splits) {
+    const clean = await revertSplit(tx, split);
+    await tx.installmentSplit.deleteMany({ where: { id: split.id } });
+    (clean ? restored : reopenedOnly).push(split.paidInstallmentId);
+  }
+  return { restored, reopenedOnly };
 }

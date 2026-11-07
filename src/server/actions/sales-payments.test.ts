@@ -83,7 +83,7 @@ describe("pagamento por parcela", () => {
     const res = await unpayLastInstallment(sale.id);
     expect(res).toEqual({
       ok: true,
-      data: { installmentId: sale.installments[2].id, number: 3, installmentCount: 3 },
+      data: { installmentId: sale.installments[2].id, number: 3, installmentCount: 3, hadPartial: false },
     });
     const saved = await testDb.sale.findUniqueOrThrow({ where: { id: sale.id } });
     expect([saved.status, saved.openCents]).toEqual(["PENDING", 3334]);
@@ -114,7 +114,12 @@ describe("pagamento por parcela", () => {
     const res = await unpayLastCollection(customer.id);
     expect(res).toEqual({
       ok: true,
-      data: { installmentIds: expect.arrayContaining(b.installments.map((i) => i.id)), count: 2, totalCents: 5000 },
+      data: {
+        installmentIds: expect.arrayContaining(b.installments.map((i) => i.id)),
+        count: 2,
+        totalCents: 5000,
+        hadPartial: false,
+      },
     });
     const savedA = await testDb.sale.findUniqueOrThrow({ where: { id: a.id } });
     const savedB = await testDb.sale.findUniqueOrThrow({ where: { id: b.id } });

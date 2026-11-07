@@ -7,7 +7,14 @@ import { StockMovementType } from "@prisma/client";
 import { parsePaymentChoice, planPayment, type PaymentFields } from "@/lib/installments";
 import { syncSaleSummary, toPlans, writeInstallments } from "@/server/sales/installments";
 import { allocate, type RemainderChoice } from "@/lib/partial-payment";
-import { applyPartial, isConcurrencyError, lockSales, RACE_ERROR } from "@/server/sales/partial-payment";
+import {
+  applyPartial,
+  isConcurrencyError,
+  lockSales,
+  RACE_ERROR,
+  revertSplits,
+  RevertAbort,
+} from "@/server/sales/partial-payment";
 
 export type ActionResult<T = undefined> = { ok: boolean; error?: string; data?: T };
 
@@ -219,37 +226,55 @@ function revalidatePayments() {
   revalidatePath("/dashboard");
 }
 
+class PayAbort extends Error {}
+
+const PAY_NONE_OPEN = "Nenhuma parcela em aberto selecionada.";
+
 export async function payInstallments(
   installmentIds: string[],
 ): Promise<ActionResult<{ count: number; totalCents: number }>> {
   if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
-  const { db } = await getScopedDb();
+  const { db, workspaceId } = await getScopedDb();
   const blocked = await writeBlocked();
   if (blocked) return blocked;
 
-  const open = await db.saleInstallment.findMany({
+  const candidates = await db.saleInstallment.findMany({
     where: { id: { in: installmentIds }, paidAt: null },
-    select: { id: true, saleId: true, amountCents: true },
+    select: { saleId: true },
   });
-  if (open.length === 0) return { ok: false, error: "Nenhuma parcela em aberto selecionada." };
+  if (candidates.length === 0) return { ok: false, error: PAY_NONE_OPEN };
+  const saleIds = [...new Set(candidates.map((i) => i.saleId))];
 
-  await db.$transaction(async (tx) => {
-    await tx.saleInstallment.updateMany({
-      where: { id: { in: open.map((i) => i.id) }, paidAt: null },
-      data: { paidAt: new Date() },
-    });
-    await syncSaleSummary(tx, [...new Set(open.map((i) => i.saleId))]);
-  });
-
-  revalidatePayments();
-  return {
-    ok: true,
-    data: {
-      count: open.length,
-      totalCents: open.reduce((sum, i) => sum + i.amountCents, 0),
-    },
-  };
+  try {
+    const data = await db.$transaction(
+      async (tx) => {
+        await lockSales(tx, workspaceId, saleIds);
+        const open = await tx.saleInstallment.findMany({
+          where: { id: { in: installmentIds }, saleId: { in: saleIds }, paidAt: null },
+          select: { id: true, saleId: true, amountCents: true },
+        });
+        if (open.length === 0) throw new PayAbort(RACE_ERROR);
+        await tx.saleInstallment.updateMany({
+          where: { id: { in: open.map((i) => i.id) }, paidAt: null },
+          data: { paidAt: new Date() },
+        });
+        await syncSaleSummary(tx, [...new Set(open.map((i) => i.saleId))]);
+        return { count: open.length, totalCents: open.reduce((sum, i) => sum + i.amountCents, 0) };
+      },
+      { timeout: 15000 },
+    );
+    revalidatePayments();
+    return { ok: true, data };
+  } catch (e) {
+    if (e instanceof PayAbort) return { ok: false, error: e.message };
+    if (isConcurrencyError(e)) {
+      console.warn("payInstallments concorrência:", e instanceof Error ? e.message : e);
+      return { ok: false, error: RACE_ERROR };
+    }
+    console.error("payInstallments error:", e);
+    return { ok: false, error: "Erro ao receber pagamento." };
+  }
 }
 
 class ReceiveAbort extends Error {}
@@ -382,26 +407,74 @@ export async function receivePayment(input: {
   };
 }
 
+class UnpayAbort extends Error {}
+
+const UNPAY_FAILED = "Não foi possível desfazer.";
+const UNPAY_RACE = "Esta venda mudou enquanto você desfazia. Tente de novo.";
+const UNPAY_ERROR = "Erro ao desfazer.";
+
+type Unpaid = {
+  rows: { id: string; saleId: string; amountCents: number }[];
+  after: { id: string; number: number; sale: { installmentCount: number } }[];
+  restored: string[];
+  reopenedOnly: string[];
+};
+
+async function unpayLocked(
+  db: Awaited<ReturnType<typeof getScopedDb>>["db"],
+  workspaceId: string,
+  installmentIds: string[],
+  seenPaid = false,
+): Promise<ActionResult<Unpaid>> {
+  const candidates = await db.saleInstallment.findMany({
+    where: { id: { in: installmentIds }, paidAt: { not: null } },
+    select: { saleId: true },
+  });
+  if (candidates.length === 0) return { ok: false, error: seenPaid ? UNPAY_RACE : UNPAY_FAILED };
+  const saleIds = [...new Set(candidates.map((i) => i.saleId))];
+
+  try {
+    const data = await db.$transaction(
+      async (tx) => {
+        await lockSales(tx, workspaceId, saleIds);
+        const rows = await tx.saleInstallment.findMany({
+          where: { id: { in: installmentIds }, saleId: { in: saleIds }, paidAt: { not: null } },
+          select: { id: true, saleId: true, amountCents: true },
+        });
+        if (rows.length === 0) throw new UnpayAbort(UNPAY_RACE);
+        const ids = rows.map((i) => i.id);
+        const reverted = await revertSplits(tx, ids);
+        await tx.saleInstallment.updateMany({ where: { id: { in: ids } }, data: { paidAt: null } });
+        await syncSaleSummary(tx, [...new Set(rows.map((i) => i.saleId))]);
+        const after = await tx.saleInstallment.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, number: true, sale: { select: { installmentCount: true } } },
+        });
+        return { rows, after, ...reverted };
+      },
+      { timeout: 15000 },
+    );
+    return { ok: true, data };
+  } catch (e) {
+    if (e instanceof UnpayAbort) return { ok: false, error: e.message };
+    if (e instanceof RevertAbort || isConcurrencyError(e)) {
+      console.warn("unpayInstallments concorrência:", e instanceof Error ? e.message : e);
+      return { ok: false, error: UNPAY_RACE };
+    }
+    console.error("unpayInstallments error:", e);
+    return { ok: false, error: UNPAY_ERROR };
+  }
+}
+
 export async function unpayInstallments(installmentIds: string[]): Promise<ActionResult> {
   if (installmentIds.length === 0) return { ok: false, error: "Selecione ao menos uma parcela." };
 
-  const { db } = await getScopedDb();
+  const { db, workspaceId } = await getScopedDb();
   const blocked = await writeBlocked();
   if (blocked) return blocked;
 
-  const paid = await db.saleInstallment.findMany({
-    where: { id: { in: installmentIds }, paidAt: { not: null } },
-    select: { id: true, saleId: true },
-  });
-  if (paid.length === 0) return { ok: false, error: "Não foi possível desfazer." };
-
-  await db.$transaction(async (tx) => {
-    await tx.saleInstallment.updateMany({
-      where: { id: { in: paid.map((i) => i.id) } },
-      data: { paidAt: null },
-    });
-    await syncSaleSummary(tx, [...new Set(paid.map((i) => i.saleId))]);
-  });
+  const res = await unpayLocked(db, workspaceId, installmentIds);
+  if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePayments();
   return { ok: true };
@@ -436,30 +509,40 @@ export async function payNextInstallment(
 
 export async function unpayLastInstallment(
   saleId: string,
-): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number }>> {
-  const { db } = await getScopedDb();
+): Promise<ActionResult<{ installmentId: string; number: number; installmentCount: number; hadPartial: boolean }>> {
+  const { db, workspaceId } = await getScopedDb();
   const blocked = await writeBlocked();
   if (blocked) return blocked;
 
   const last = await db.saleInstallment.findFirst({
     where: { saleId, paidAt: { not: null } },
     orderBy: { number: "desc" },
-    select: { id: true, number: true, sale: { select: { installmentCount: true } } },
+    select: { id: true },
   });
   if (!last) return { ok: false, error: "Esta venda não tem parcela paga." };
 
-  const res = await unpayInstallments([last.id]);
-  if (!res.ok) return { ok: false, error: res.error };
+  const res = await unpayLocked(db, workspaceId, [last.id], true);
+  if (!res.ok || !res.data) return { ok: false, error: res.error };
+
+  revalidatePayments();
+  const { after, restored, reopenedOnly } = res.data;
+  const reopened = after.find((i) => i.id === last.id);
+  if (!reopened) return { ok: false, error: UNPAY_RACE };
   return {
     ok: true,
-    data: { installmentId: last.id, number: last.number, installmentCount: last.sale.installmentCount },
+    data: {
+      installmentId: last.id,
+      number: reopened.number,
+      installmentCount: reopened.sale.installmentCount,
+      hadPartial: restored.length + reopenedOnly.length > 0,
+    },
   };
 }
 
 export async function unpayLastCollection(
   customerId: string,
-): Promise<ActionResult<{ installmentIds: string[]; count: number; totalCents: number }>> {
-  const { db } = await getScopedDb();
+): Promise<ActionResult<{ installmentIds: string[]; count: number; totalCents: number; hadPartial: boolean }>> {
+  const { db, workspaceId } = await getScopedDb();
   const blocked = await writeBlocked();
   if (blocked) return blocked;
 
@@ -472,17 +555,26 @@ export async function unpayLastCollection(
 
   const batch = await db.saleInstallment.findMany({
     where: { sale: { customerId }, paidAt: latest.paidAt },
-    select: { id: true, amountCents: true },
+    select: { id: true },
   });
 
-  const res = await unpayInstallments(batch.map((i) => i.id));
-  if (!res.ok) return { ok: false, error: res.error };
+  const res = await unpayLocked(
+    db,
+    workspaceId,
+    batch.map((i) => i.id),
+    true,
+  );
+  if (!res.ok || !res.data) return { ok: false, error: res.error };
+
+  revalidatePayments();
+  const { rows, restored, reopenedOnly } = res.data;
   return {
     ok: true,
     data: {
-      installmentIds: batch.map((i) => i.id),
-      count: batch.length,
-      totalCents: batch.reduce((sum, i) => sum + i.amountCents, 0),
+      installmentIds: rows.map((i) => i.id),
+      count: rows.length,
+      totalCents: rows.reduce((sum, i) => sum + i.amountCents, 0),
+      hadPartial: restored.length + reopenedOnly.length > 0,
     },
   };
 }

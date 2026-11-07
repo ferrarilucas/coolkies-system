@@ -3,6 +3,7 @@ import { endOfDay } from "date-fns";
 import type { Prisma } from "@prisma/client";
 import { getMcpWorkspaceContext, assertMcpCanWrite, mcpErrorResponse } from "@/server/tenant/mcp-context";
 import { dueByWhere, syncSaleSummary } from "@/server/sales/installments";
+import { lockSales } from "@/server/sales/partial-payment";
 
 function stringList(value: unknown): string[] | null {
   return Array.isArray(value) ? value.filter((id: unknown): id is string => typeof id === "string") : null;
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     await context.db.$transaction(async (tx) => {
+      await lockSales(tx, context.workspaceId, [...new Set(open.map((i) => i.saleId))]);
       await tx.saleInstallment.updateMany({
         where: { id: { in: open.map((i) => i.id) }, paidAt: null },
         data: { paidAt: new Date() },

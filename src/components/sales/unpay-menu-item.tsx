@@ -20,12 +20,12 @@ export function UnpaySaleMenuItem({ id, parceled }: { id: string; parceled: bool
         toast.error(res.error ?? "Erro ao atualizar.");
         return;
       }
-      const { installmentId, number, installmentCount } = res.data;
+      const { installmentId, number, installmentCount, hadPartial } = res.data;
       toast.success(
         installmentCount > 1
           ? `Parcela ${number}/${installmentCount} voltou para em aberto.`
           : "Venda voltou para pendente.",
-        { action: { label: "Desfazer", onClick: () => redo([installmentId]) } },
+        hadPartial ? undefined : { action: { label: "Desfazer", onClick: () => redo([installmentId]) } },
       );
     });
   }
@@ -45,10 +45,10 @@ export function UndoLastCollectionMenuItem({ customerId }: { customerId: string 
         toast.error(res.error ?? "Erro ao atualizar.");
         return;
       }
-      const { installmentIds, count, totalCents } = res.data;
+      const { installmentIds, count, totalCents, hadPartial } = res.data;
       toast.success(
         `${count} ${count === 1 ? "parcela voltou" : "parcelas voltaram"} para em aberto — ${formatBRL(totalCents)}.`,
-        { action: { label: "Desfazer", onClick: () => redo(installmentIds) } },
+        hadPartial ? undefined : { action: { label: "Desfazer", onClick: () => redo(installmentIds) } },
       );
     });
   }
