@@ -25,8 +25,7 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext> => 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Não autenticado");
 
-  const activeId = (session.session as { activeWorkspaceId?: string | null })
-    .activeWorkspaceId;
+  const activeId = session.session.activeWorkspaceId;
 
   const membership = activeId
     ? await db.member.findFirst({

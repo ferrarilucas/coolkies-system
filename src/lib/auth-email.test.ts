@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDb, testDb } from "@/test/db";
+import { createWorkspace, resetDb, testDb } from "@/test/db";
+
+let requestHeaders: Headers;
+vi.mock("next/headers", () => ({
+  headers: async () => requestHeaders,
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const sent = vi.hoisted(() => ({
   verification: [] as string[],
@@ -20,6 +26,8 @@ vi.mock("./email", () => ({
 }));
 
 const { auth } = await import("./auth");
+const { switchWorkspace } = await import("@/server/actions/workspaces");
+const { getWorkspaceContext } = await import("@/server/tenant/context");
 
 const email = "ana@example.com";
 const password = "senha-segura-1";
@@ -35,6 +43,42 @@ function tokenFromVerification(url: string): string {
 function tokenFromReset(url: string): string {
   return new URL(url).pathname.split("/").pop() as string;
 }
+
+it("lê o workspace selecionado na sessão autenticada e respeita os vínculos", async () => {
+  await resetDb();
+  await signUp();
+  const user = await testDb.user.update({ where: { email }, data: { emailVerified: true } });
+  const first = await createWorkspace("Primeiro");
+  const second = await createWorkspace("Segundo");
+  const outside = await createWorkspace("Sem acesso");
+  await testDb.member.createMany({
+    data: [
+      { userId: user.id, workspaceId: first.id, role: "OWNER", createdAt: new Date(0) },
+      { userId: user.id, workspaceId: second.id, role: "MEMBER" },
+    ],
+  });
+  const { headers } = await auth.api.signInEmail({
+    body: { email, password },
+    returnHeaders: true,
+  });
+  requestHeaders = new Headers({
+    cookie: headers.getSetCookie().map((value) => value.split(";")[0]).join("; "),
+  });
+
+  await expect(getWorkspaceContext()).resolves.toMatchObject({ workspaceId: first.id });
+  await expect(switchWorkspace(second.id)).resolves.toEqual({ ok: true });
+  await expect(getWorkspaceContext()).resolves.toMatchObject({ workspaceId: second.id, role: "MEMBER" });
+  await expect(switchWorkspace(outside.id)).resolves.toEqual({
+    ok: false,
+    error: "Você não participa deste workspace.",
+  });
+  await expect(getWorkspaceContext()).resolves.toMatchObject({ workspaceId: second.id });
+  await expect(switchWorkspace(first.id)).resolves.toEqual({ ok: true });
+  await expect(getWorkspaceContext()).resolves.toMatchObject({ workspaceId: first.id });
+  await expect(switchWorkspace(second.id)).resolves.toEqual({ ok: true });
+  await testDb.member.deleteMany({ where: { userId: user.id, workspaceId: second.id } });
+  await expect(getWorkspaceContext()).resolves.toMatchObject({ workspaceId: first.id });
+});
 
 describe("verificação de e-mail", () => {
   beforeEach(async () => {
