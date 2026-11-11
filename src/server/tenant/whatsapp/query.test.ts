@@ -5,8 +5,6 @@ const { db } = vi.hoisted(() => ({
   db: {
     user: { findUnique: vi.fn() },
     processedWebhookEvent: { createMany: vi.fn() },
-    whatsAppWorkspaceContext: { upsert: vi.fn(), updateMany: vi.fn() },
-    whatsAppCustomerChoice: { deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -15,59 +13,52 @@ vi.mock("@/server/tenant/account", () => ({ hasAcceptedCurrentTerms: async () =>
 vi.mock("@/server/tenant/subscription", () => ({ canWriteInWorkspace: async () => true }));
 
 const phone = "5551999892403";
-const menuId = "68d4961f-f1a0-45e5-8ef6-c7bdd99a7397";
 const members = [
   { workspaceId: "a", workspace: { name: "Loja A" } },
   { workspaceId: "b", workspace: { name: "Loja B" } },
 ];
-const now = Date.parse("2026-11-11T15:00:00Z");
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(now);
-  db.processedWebhookEvent.createMany.mockResolvedValue({ count: 1 });
+  vi.setSystemTime(new Date("2026-11-12T02:59:00Z"));
+  db.user.findUnique.mockResolvedValue({ id: "user", members, sessions: [{ activeWorkspaceId: "b" }] });
+  db.$transaction.mockImplementation((callback) => callback(db));
+  const receipts = new Set<string>();
+  db.processedWebhookEvent.createMany.mockImplementation(({ data }) => {
+    if (receipts.has(data.id)) return { count: 0 };
+    receipts.add(data.id);
+    return { count: 1 };
+  });
 });
-
 afterEach(() => vi.useRealTimers());
 
 describe("workspace do WhatsApp", () => {
-  it("mostra o menu após expirar ou quando o usuário pede para trocar", async () => {
-    for (const switchWorkspace of [false, true]) {
-      db.user.findUnique.mockResolvedValue({
-        id: "user", members, whatsappWorkspaceContext: {
-          workspaceId: "a",
-          expiresAt: new Date(Date.now() + (switchWorkspace ? 60_000 : -60_000)),
-        },
-      });
-      await expect(handleWhatsAppRequest({ action: "access", phone, messageId: "m1", switchWorkspace }))
-        .resolves.toMatchObject({ status: "done", workspaceMenu: { names: ["Loja A", "Loja B"] } });
-    }
+  it("anuncia o workspace da sessão uma vez por dia no horário de São Paulo", async () => {
+    const access = (messageId: string) => handleWhatsAppRequest({ action: "access", phone, messageId });
+    await expect(access("m1")).resolves.toMatchObject({
+      status: "allowed", workspaceId: "b", text: expect.stringContaining("Loja B"),
+    });
+    await expect(access("m2")).resolves.toEqual({ status: "allowed", workspaceId: "b", text: undefined });
+    await expect(access("m1")).resolves.toMatchObject({ status: "done", text: undefined });
+
+    vi.setSystemTime(new Date("2026-11-12T03:00:00Z"));
+    await expect(access("m3")).resolves.toMatchObject({ text: expect.stringContaining("Loja B") });
   });
 
-  it("registra a escolha por 24 horas e limpa a confirmação de cliente anterior", async () => {
-    db.user.findUnique.mockResolvedValue({
-      id: "user", members, whatsappWorkspaceContext: {
-        menuId, menuWorkspaceIds: ["a", "b"], menuExpiresAt: new Date("2099-01-01"),
-      },
-    });
-    db.$transaction.mockImplementation((callback) => callback(db));
-    db.whatsAppWorkspaceContext.updateMany.mockResolvedValue({ count: 1 });
-    await expect(handleWhatsAppRequest({ action: "select_workspace", phone, menuId, option: 2 }))
-      .resolves.toMatchObject({ text: expect.stringContaining("Loja B") });
-    const { expiresAt } = db.whatsAppWorkspaceContext.updateMany.mock.calls[0][0].data;
-    expect(expiresAt.getTime()).toBe(now + 86_400_000);
-    expect(db.whatsAppCustomerChoice.deleteMany).toHaveBeenCalledWith({ where: { phone } });
+  it("orienta a troca no app e usa a nova seleção na próxima consulta", async () => {
+    await expect(handleWhatsAppRequest({ action: "access", phone, messageId: "m1", switchWorkspace: true }))
+      .resolves.toMatchObject({ status: "done", text: expect.stringContaining("selecione outro espaço no app") });
+    db.user.findUnique.mockResolvedValue({ id: "user", members, sessions: [{ activeWorkspaceId: "a" }] });
+    await expect(handleWhatsAppRequest({ action: "access", phone, messageId: "m2" }))
+      .resolves.toMatchObject({ status: "allowed", workspaceId: "a" });
+    await expect(handleWhatsAppRequest({ action: "month_receivables", phone, workspaceId: "b" }))
+      .resolves.toMatchObject({ status: "done", text: expect.stringContaining("espaço da conversa mudou") });
   });
 
-  it("rejeita um workspace que deixou de pertencer à conta", async () => {
-    db.user.findUnique.mockResolvedValue({
-      id: "user", members: [members[0]], whatsappWorkspaceContext: {
-        menuId, menuWorkspaceIds: ["a", "b"], menuExpiresAt: new Date("2099-01-01"),
-      },
-    });
-    await expect(handleWhatsAppRequest({ action: "select_workspace", phone, menuId, option: 2 }))
-      .resolves.toMatchObject({ text: expect.stringContaining("trocar workspace") });
-    expect(db.$transaction).not.toHaveBeenCalled();
+  it("usa o primeiro vínculo válido quando a sessão aponta para um espaço indisponível", async () => {
+    db.user.findUnique.mockResolvedValue({ id: "user", members, sessions: [{ activeWorkspaceId: "removed" }] });
+    await expect(handleWhatsAppRequest({ action: "access", phone, messageId: "m1" }))
+      .resolves.toMatchObject({ status: "allowed", workspaceId: "a" });
   });
 });
