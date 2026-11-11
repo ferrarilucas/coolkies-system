@@ -29,6 +29,7 @@ model User {
   emailVerified   Boolean   @default(false)
   image           String?
   cpf             String?
+  whatsappPhone   String?   @unique
   termsVersion    String?
   termsAcceptedAt DateTime?
   appTourCompletedAt DateTime?
@@ -50,6 +51,25 @@ model User {
   pushSubscriptions   PushSubscription[]
 
   @@map("user")
+}
+
+model WhatsAppNotice {
+  phone      String   @id
+  day        String
+  tokenHash  String?  @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@map("whatsapp_notice")
+}
+
+model WhatsAppCustomerChoice {
+  phone       String   @id
+  workspaceId String
+  customerIds String[]
+  expiresAt   DateTime
+
+  @@map("whatsapp_customer_choice")
 }
 
 model PushSubscription {

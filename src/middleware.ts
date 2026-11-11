@@ -28,6 +28,9 @@ export function middleware(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
   if (!sessionCookie) {
     const url = new URL("/sign-in", request.url);
+    if (pathname === "/vincular-whatsapp") {
+      url.searchParams.set("next", pathname + request.nextUrl.search);
+    }
     return NextResponse.redirect(url);
   }
 
