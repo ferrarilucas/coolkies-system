@@ -8,6 +8,19 @@ export function hashLinkToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export async function getWhatsAppLinkState(userId: string, token: string | null) {
+  const [account, notice] = await Promise.all([
+    db.user.findUnique({ where: { id: userId }, select: { whatsappPhone: true } }),
+    token && linkTokenPattern.test(token)
+      ? db.whatsAppNotice.findUnique({
+          where: { tokenHash: hashLinkToken(token) },
+          select: { phone: true, consumedAt: true, expiresAt: true },
+        })
+      : null,
+  ]);
+  return { linked: account?.whatsappPhone, notice };
+}
+
 export async function redeemWhatsAppLink(userId: string, token: string): Promise<boolean> {
   if (!linkTokenPattern.test(token)) return false;
   const now = new Date();

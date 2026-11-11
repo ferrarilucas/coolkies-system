@@ -4,9 +4,8 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
-import { hashLinkToken, linkTokenPattern } from "@/server/whatsapp/link";
+import { getWhatsAppLinkState, linkTokenPattern } from "@/server/tenant/whatsapp/link";
 import { linkWhatsApp } from "./actions";
 
 export const metadata = {
@@ -27,11 +26,7 @@ export default async function LinkWhatsAppPage({
   if (!session) redirect(`/sign-in?next=${next}`);
   if (!(await hasAcceptedCurrentTerms(session.user.id))) redirect(`/accept-terms?next=${next}`);
 
-  const [account, notice] = await Promise.all([
-    db.user.findUnique({ where: { id: session.user.id }, select: { whatsappPhone: true } }),
-    validToken ? db.whatsAppNotice.findUnique({ where: { tokenHash: hashLinkToken(validToken) } }) : null,
-  ]);
-  const linked = account?.whatsappPhone;
+  const { linked, notice } = await getWhatsAppLinkState(session.user.id, validToken);
   const canLink = !linked && validToken && notice && !notice.consumedAt && notice.expiresAt > new Date();
 
   return (

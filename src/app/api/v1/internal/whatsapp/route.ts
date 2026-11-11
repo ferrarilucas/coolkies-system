@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { handleWhatsAppRequest } from "@/server/whatsapp/query";
+import { handleWhatsAppRequest } from "@/server/tenant/whatsapp/query";
 
 const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("access"), messageId: z.string().min(1).max(200) }),

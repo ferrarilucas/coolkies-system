@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
-import { linkTokenPattern, redeemWhatsAppLink } from "@/server/whatsapp/link";
+import { linkTokenPattern, redeemWhatsAppLink } from "@/server/tenant/whatsapp/link";
 
 export async function linkWhatsApp(form: FormData) {
   const token = form.get("token");

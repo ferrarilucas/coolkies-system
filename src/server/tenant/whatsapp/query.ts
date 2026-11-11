@@ -4,6 +4,7 @@ import type { WhatsAppRequest } from "@/app/api/v1/internal/whatsapp/route";
 import { db } from "@/lib/db";
 import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { canWriteInWorkspace } from "@/server/tenant/subscription";
+import { scopedDb } from "../extension";
 import { hashLinkToken } from "./link";
 
 const APP_TIME_ZONE = "America/Sao_Paulo";
@@ -11,7 +12,7 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const money = (cents: number) => currency.format(cents / 100);
 const done = (text?: string) => ({ status: "done" as const, text });
 const choiceExpired = "Envie novamente a pergunta com o nome do cliente para que eu possa conferir.";
-const appUrl = (path: string) => new URL(path, process.env.CIPRI_URL ?? "https://cipri.com.br").toString();
+const appUrl = (path: string) => new URL(path, process.env.CIPRI_URL ?? process.env.BETTER_AUTH_URL ?? "https://app.cipri.com.br").toString();
 const plans = () => appUrl("/workspaces/plan");
 
 async function dailyNotice(phone: string, messageId: string, linkPhone: boolean, now: Date) {
@@ -52,10 +53,11 @@ function receiptId(phone: string, messageId: string) {
 }
 
 async function customerBalance(workspaceId: string, id: string) {
-  const customer = await db.customer.findFirst({ where: { id, workspaceId }, select: { name: true } });
+  const workspaceDb = scopedDb(workspaceId);
+  const customer = await workspaceDb.customer.findFirst({ where: { id }, select: { name: true } });
   if (!customer) return done(choiceExpired);
-  const total = await db.saleInstallment.aggregate({
-    where: { workspaceId, paidAt: null, sale: { workspaceId, customerId: id } },
+  const total = await workspaceDb.saleInstallment.aggregate({
+    where: { paidAt: null, sale: { workspaceId, customerId: id } },
     _sum: { amountCents: true },
   });
   return done(`${customer.name} tem ${money(total._sum.amountCents ?? 0)} em aberto.`);
@@ -109,9 +111,8 @@ async function monthReceivables(workspaceId: string, now: Date) {
     gte: fromZonedTime(`${yearMonth}-01T00:00:00`, APP_TIME_ZONE),
     lt: fromZonedTime(`${nextMonth}-01T00:00:00`, APP_TIME_ZONE),
   };
-  const total = await db.saleInstallment.aggregate({
+  const total = await scopedDb(workspaceId).saleInstallment.aggregate({
     where: {
-      workspaceId,
       paidAt: null,
       sale: { workspaceId },
       dueDate: range,
