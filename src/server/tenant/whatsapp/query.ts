@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { WhatsAppRequest } from "@/app/api/v1/internal/whatsapp/route";
 import { db } from "@/lib/db";
@@ -123,6 +123,30 @@ async function monthReceivables(workspaceId: string, now: Date) {
   return done(`Você tem ${money(total._sum.amountCents ?? 0)} em aberto com vencimento neste mês (${total._count} pendências).`);
 }
 
+const chooseAgain = 'Envie “trocar workspace” para abrir a lista de espaços.';
+
+async function workspaceMenu(
+  userId: string,
+  members: { workspaceId: string; workspace: { name: string } }[],
+  now: Date,
+) {
+  const menuId = randomUUID();
+  const menu = {
+    menuId,
+    menuWorkspaceIds: members.map(({ workspaceId }) => workspaceId),
+    menuExpiresAt: new Date(now.getTime() + 15 * 60 * 1000),
+  };
+  await db.whatsAppWorkspaceContext.upsert({
+    where: { userId },
+    create: { userId, ...menu },
+    update: menu,
+  });
+  return {
+    status: "done" as const,
+    workspaceMenu: { id: menuId, names: members.map(({ workspace }) => workspace.name) },
+  };
+}
+
 export async function handleWhatsAppRequest(input: WhatsAppRequest) {
   const now = new Date();
   const { phone } = input;
@@ -130,7 +154,11 @@ export async function handleWhatsAppRequest(input: WhatsAppRequest) {
     where: { whatsappPhone: phone },
     select: {
       id: true,
-      members: { take: 2, select: { workspaceId: true } },
+      whatsappWorkspaceContext: true,
+      members: {
+        orderBy: [{ workspace: { name: "asc" } }, { workspaceId: "asc" }],
+        select: { workspaceId: true, workspace: { select: { name: true } } },
+      },
     },
   });
 
@@ -138,25 +166,65 @@ export async function handleWhatsAppRequest(input: WhatsAppRequest) {
   if (!(await hasAcceptedCurrentTerms(account.id))) {
     return done(input.action === "access" ? `Entre no Cipri e aceite os termos para continuar: ${appUrl("/accept-terms")}` : undefined);
   }
-  if (account.members.length !== 1) {
-    const message = account.members.length
-      ? "Sua conta tem mais de um espaço. Por enquanto, consulte seus valores pelo app do Cipri."
-      : "Crie um espaço no Cipri antes de fazer consultas pelo WhatsApp.";
-    return done(input.action === "access" ? message : undefined);
+  const { id: userId, members, whatsappWorkspaceContext: context } = account;
+  if (!members.length) {
+    return done(input.action === "access" ? "Crie um espaço no Cipri antes de fazer consultas pelo WhatsApp." : undefined);
   }
 
-  const { workspaceId } = account.members[0];
-  if (!(await canWriteInWorkspace(workspaceId))) {
-    return input.action === "access" ? dailyNotice(phone, input.messageId, false, now) : done();
-  }
-  switch (input.action) {
-    case "access": {
-      const receipt = await db.processedWebhookEvent.createMany({
-        data: { id: receiptId(phone, input.messageId), event: "cipri.whatsapp" },
-        skipDuplicates: true,
-      });
-      return receipt.count ? { status: "allowed" as const } : done();
+  if (input.action === "select_workspace") {
+    if (!context?.menuId || !context.menuExpiresAt || context.menuExpiresAt <= now ||
+      (input.menuId && input.menuId !== context.menuId)) return done(chooseAgain);
+    const workspace = members.find(({ workspaceId }) => workspaceId === context.menuWorkspaceIds[input.option - 1]);
+    if (!workspace) return done(chooseAgain);
+    if (!(await canWriteInWorkspace(workspace.workspaceId))) {
+      return done(`Esse espaço não tem acesso ativo. Veja os planos em ${plans()}`);
     }
+    const updated = await db.$transaction(async (tx) => {
+      const claimed = await tx.whatsAppWorkspaceContext.updateMany({
+        where: { userId, menuId: context.menuId, menuExpiresAt: { gt: now } },
+        data: {
+          workspaceId: workspace.workspaceId,
+          expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+          menuId: null,
+          menuExpiresAt: null,
+          menuWorkspaceIds: [],
+        },
+      });
+      if (claimed.count) await tx.whatsAppCustomerChoice.deleteMany({ where: { phone } });
+      return claimed.count;
+    });
+    return done(updated
+      ? `Espaço “${workspace.workspace.name}” selecionado por 24 horas. Pode mandar sua pergunta. Para trocar, envie “trocar workspace”.`
+      : chooseAgain);
+  }
+
+  const selected = members.length === 1 ? members[0] :
+    context?.expiresAt && context.expiresAt > now
+      ? members.find(({ workspaceId }) => workspaceId === context.workspaceId)
+      : undefined;
+
+  if (input.action === "access") {
+    if (selected && !input.switchWorkspace && !(await canWriteInWorkspace(selected.workspaceId))) {
+      return dailyNotice(phone, input.messageId, false, now);
+    }
+    const receipt = await db.processedWebhookEvent.createMany({
+      data: { id: receiptId(phone, input.messageId), event: "cipri.whatsapp" },
+      skipDuplicates: true,
+    });
+    if (!receipt.count) return done();
+    if (members.length === 1 && input.switchWorkspace) {
+      return done(`Você só tem um espaço no Cipri: ${members[0].workspace.name}.`);
+    }
+    if (!selected || input.switchWorkspace) return workspaceMenu(userId, members, now);
+    return { status: "allowed" as const, workspaceId: selected.workspaceId };
+  }
+
+  if (!selected || ((members.length > 1 || input.workspaceId) && input.workspaceId !== selected.workspaceId)) {
+    return done("O espaço da conversa mudou. Envie sua pergunta novamente.");
+  }
+  const { workspaceId } = selected;
+  if (!(await canWriteInWorkspace(workspaceId))) return done();
+  switch (input.action) {
     case "confirm":
       return confirmCustomer(workspaceId, phone, input.option, now);
     case "customer_balance":

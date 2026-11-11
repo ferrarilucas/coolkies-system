@@ -30,6 +30,7 @@ model User {
   image           String?
   cpf             String?
   whatsappPhone   String?   @unique
+  whatsappWorkspaceContext WhatsAppWorkspaceContext?
   termsVersion    String?
   termsAcceptedAt DateTime?
   appTourCompletedAt DateTime?
@@ -51,6 +52,18 @@ model User {
   pushSubscriptions   PushSubscription[]
 
   @@map("user")
+}
+
+model WhatsAppWorkspaceContext {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId      String?
+  expiresAt        DateTime?
+  menuId           String?
+  menuWorkspaceIds String[] @default([])
+  menuExpiresAt    DateTime?
+
+  @@map("whatsapp_workspace_context")
 }
 
 model WhatsAppNotice {
