@@ -12,6 +12,8 @@ vi.mock("@/lib/db", () => ({ db }));
 vi.mock("@/server/tenant/account", () => ({ hasAcceptedCurrentTerms: async () => true }));
 vi.mock("@/server/tenant/subscription", () => ({ canWriteInWorkspace: async () => true }));
 
+vi.mock("./sales", () => ({ hasSaleDraft: async () => false }));
+
 const phone = "5551999892403";
 const members = [
   { workspaceId: "a", workspace: { name: "Loja A" } },

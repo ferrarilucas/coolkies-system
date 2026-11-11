@@ -31,6 +31,7 @@ model User {
   cpf             String?
   whatsappPhone   String?   @unique
   whatsappWorkspaceContext WhatsAppWorkspaceContext?
+  whatsappSaleDrafts WhatsAppSaleDraft[]
   termsVersion    String?
   termsAcceptedAt DateTime?
   appTourCompletedAt DateTime?
@@ -64,6 +65,19 @@ model WhatsAppWorkspaceContext {
   menuExpiresAt    DateTime?
 
   @@map("whatsapp_workspace_context")
+}
+
+model WhatsAppSaleDraft {
+  userId      String
+  workspaceId String
+  revision    String
+  state       Json
+  expiresAt   DateTime
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workspaceId])
+  @@map("whatsapp_sale_draft")
 }
 
 model WhatsAppNotice {
@@ -355,6 +369,8 @@ model Workspace {
   stockMovements         StockMovement[]
   shoppingListItems      ShoppingListItem[]
   mcpWorkspaceContexts   McpWorkspaceContext[]
+
+  whatsappSaleDrafts WhatsAppSaleDraft[]
 
   @@map("workspace")
 }

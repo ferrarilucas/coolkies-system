@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { hasAcceptedCurrentTerms } from "@/server/tenant/account";
 import { canWriteInWorkspace } from "@/server/tenant/subscription";
 import { scopedDb } from "../extension";
+import { handleSale, hasSaleDraft } from "./sales";
 import { hashLinkToken } from "./link";
 
 const APP_TIME_ZONE = "America/Sao_Paulo";
@@ -54,16 +55,18 @@ function receiptId(phone: string, messageId: string) {
 
 async function customerBalance(workspaceId: string, id: string) {
   const workspaceDb = scopedDb(workspaceId);
-  const customer = await workspaceDb.customer.findFirst({ where: { id }, select: { name: true } });
+  const customer = await workspaceDb.customer.findFirst({ where: { id }, select: { name: true, sector: true } });
   if (!customer) return done(choiceExpired);
   const total = await workspaceDb.saleInstallment.aggregate({
     where: { paidAt: null, sale: { workspaceId, customerId: id } },
     _sum: { amountCents: true },
   });
-  return done(`${customer.name} tem ${money(total._sum.amountCents ?? 0)} em aberto.`);
+  const label = customer.sector ? `${customer.name} (${customer.sector})` : customer.name;
+  const balance = total._sum.amountCents ?? 0;
+  return done(balance ? `${label} tem ${money(balance)} em aberto.` : `${label} está com tudo em dia por aqui.`);
 }
 
-async function findCustomers(workspaceId: string, phone: string, name: string, now: Date) {
+async function findCustomers(workspaceId: string, phone: string, name: string, now: Date, identify = false) {
   const term = name.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
   if (!term.trim()) return done(choiceExpired);
   const customers = await db.$queryRaw<{ id: string; name: string; phone: string | null; sector: string | null }[]>`
@@ -75,7 +78,12 @@ async function findCustomers(workspaceId: string, phone: string, name: string, n
     LIMIT 7
   `;
   if (!customers.length) return done(`Não encontrei nenhum cliente com o nome “${name}”.`);
-  if (customers.length === 1) return customerBalance(workspaceId, customers[0].id);
+  if (customers.length === 1) {
+    const customer = customers[0];
+    return identify
+      ? done(`Encontrei ${customer.name} — ${customer.sector || "sem setor cadastrado"}.`)
+      : customerBalance(workspaceId, customer.id);
+  }
   if (customers.length > 6) return done("Encontrei vários clientes. Envie a pergunta com um nome mais completo.");
 
   const choice = {
@@ -177,7 +185,8 @@ export async function handleWhatsAppRequest(input: WhatsAppRequest) {
     });
     if (access === null) return done();
     if (input.switchWorkspace) return done(workspaceText);
-    return { status: "allowed" as const, workspaceId: selected.workspaceId, text: access ? workspaceText : undefined };
+    const saleDraft = await hasSaleDraft(account.id, selected.workspaceId, now);
+    return { status: "allowed" as const, workspaceId: selected.workspaceId, text: access ? workspaceText : undefined, ...(saleDraft ? { saleDraft } : {}) };
   }
 
   if ((account.members.length > 1 || input.workspaceId) && input.workspaceId !== selected.workspaceId) {
@@ -186,10 +195,14 @@ export async function handleWhatsAppRequest(input: WhatsAppRequest) {
   const { workspaceId } = selected;
   if (!(await canWriteInWorkspace(workspaceId))) return done();
   switch (input.action) {
+    case "sale_start":
+    case "sale_reply":
+      if (input.workspaceId !== workspaceId) return done("O espaço da conversa mudou. Envie a venda novamente.");
+      return handleSale(account.id, workspaceId, input, now);
     case "confirm":
       return confirmCustomer(workspaceId, phone, input.option, now);
     case "customer_balance":
-      return findCustomers(workspaceId, phone, input.name, now);
+      return findCustomers(workspaceId, phone, input.name, now, input.identify);
     case "month_receivables":
       return monthReceivables(workspaceId, now);
   }

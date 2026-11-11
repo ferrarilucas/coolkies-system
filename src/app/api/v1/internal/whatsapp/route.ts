@@ -1,11 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { handleWhatsAppRequest } from "@/server/tenant/whatsapp/query";
+import { saleInput } from "@/server/tenant/whatsapp/sale-input";
 
 const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("access"), messageId: z.string().min(1).max(200), switchWorkspace: z.boolean().optional() }),
   z.object({ action: z.literal("select_workspace"), option: z.number().int().min(1).max(9999), menuId: z.string().uuid().optional() }),
-  z.object({ action: z.literal("customer_balance"), name: z.string().trim().min(1).max(120) }),
+  z.object({ action: z.literal("customer_balance"), name: z.string().trim().min(1).max(120), identify: z.boolean().optional() }),
+  z.object({ action: z.literal("sale_start"), messageId: z.string().min(1).max(200), sale: saleInput }),
+  z.object({ action: z.literal("sale_reply"), messageId: z.string().min(1).max(200), text: z.string().trim().min(1).max(1500) }),
   z.object({ action: z.literal("month_receivables") }),
   z.object({ action: z.literal("confirm"), option: z.number().int().min(0).max(99) }),
 ]).and(z.object({ workspaceId: z.string().min(1).max(200).optional(), phone: z.string().regex(/^55[1-9][0-9]9[0-9]{8}$/) }));
